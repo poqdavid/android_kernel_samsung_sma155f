@@ -1,0 +1,87 @@
+#!/bin/bash
+
+# Configuration
+SCRIPTDIR=$(dirname "$_")
+PARENTDIR=$(realpath "${SCRIPTDIR}/..")
+MAGISKBOOT=$SCRIPTDIR/bin/magiskboot
+KSUD=$SCRIPTDIR/bin/ksud
+KERNELPATH=$PARENTDIR/out/target/product/a15/obj/KERNEL_OBJ/kernel-5.10/arch/arm64/boot/
+
+# Color Variables
+RED="\e[1;31m"
+GREEN="\e[1;32m"
+RESET="\e[0m"
+
+# Print message function
+print_msg() {
+    local COLOR=$1
+    shift
+    echo -e "${COLOR}$*${RESET}"
+}
+
+# Script header
+print_msg "$GREEN" "\n - KernelSU Installer for Samsung kernel image - "
+print_msg "$RED" "       by poqdavid \n"
+
+# Check requirements and environment
+checks() {
+    if [ ! -d "${KERNELPATH}" ]; then
+        print_msg "$RED" "Kernel path not found!"
+        print_msg "$RED" "${KERNELPATH}"
+        print_msg "$RED" "Aborting..."
+        exit 1
+    fi
+
+    if [ ! -f "${KSUD}" ]; then
+        print_msg "$RED" "${KSUD} not found!"
+        print_msg "$RED" "Aborting..."
+        exit 1
+    else
+        print_msg "$GREEN" "Found ${KSUD}."
+    fi
+
+    if [ ! -f "${MAGISKBOOT}" ]; then
+        print_msg "$RED" "${MAGISKBOOT} not found!"
+        print_msg "$RED" "Aborting..."
+        exit 1
+    else
+        print_msg "$GREEN" "Found ${MAGISKBOOT}."
+    fi
+
+    if ! command -v lz4 &> /dev/null; then
+        print_msg "$RED" "lz4 is not installed. Install it by running:"
+        print_msg "$RED" "sudo apt install lz4 -y"
+        print_msg "$RED" "Aborting..."
+        exit 1
+    else
+        print_msg "$GREEN" "lz4 is installed."
+    fi
+
+    # Uncompress if needed
+    if [ -f "${PARENTDIR}/boot.img.lz4" ]; then
+        lz4 -B6 --content-size -f boot.img.lz4 boot.img
+    fi    
+
+    # Check if boot image is available
+    if [ ! -e "{PARENTDIR}/boot.img" ]; then
+        print_msg "$RED" "Please put your boot.img inside ${PARENTDIR}!"
+        print_msg "$RED" "Aborting..."
+        exit 1
+    fi
+}
+
+# Perform KernelSU patching
+ksud_patch() {
+    if [ ! -f "${KERNELPATH}/Image" ]; then
+        print_msg "$RED" "No Kernel Image found!"
+        print_msg "$RED" "Aborting..."
+        exit 1
+    else
+        mv -f "${KERNELPATH}/Image" "${KERNELPATH}/kernel"
+        $KSUD boot-patch boot.img --magiskboot "$MAGISKBOOT" --kernel "${KERNELPATH}/kernel"
+    fi
+}
+
+# Execute the functions
+checks
+ksud_patch
