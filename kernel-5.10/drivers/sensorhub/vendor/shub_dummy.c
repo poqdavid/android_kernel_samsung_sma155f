@@ -32,7 +32,7 @@ void sensorhub_save_ram_dump(void)
 
 bool sensorhub_is_working(void)
 {
-	return 0;
+	return 1;
 }
 
 int sensorhub_refresh_func(void)

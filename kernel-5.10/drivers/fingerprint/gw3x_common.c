@@ -834,6 +834,10 @@ int gw3x_type_check(struct gf_device *gf_dev)
 		gf_dev->sensortype = SENSOR_OK;
 		pr_info("%s sensor type is GW39B\n", gf_dev->chipid);
 		retval = 0;
+	}  else if (mcuid32 == GF_GW39U_CHIP_ID) {
+		gf_dev->sensortype = SENSOR_OK;
+		pr_info("%s sensor type is GW39U\n", gf_dev->chipid);
+		retval = 0;
 	} else {
 		gf_dev->sensortype = SENSOR_FAILED;
 		pr_err("sensor type is FAILED 0x%x\n", mcuid32);

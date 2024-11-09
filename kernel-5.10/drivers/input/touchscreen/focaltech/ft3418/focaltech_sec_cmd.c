@@ -1450,7 +1450,7 @@ static void get_pram_test(void *device_data)
 		goto test_reset;
 	}
 	sec_delay(10);
-	ret = fts_write_reg(0xFC, 0x55);
+	ret = fts_write_reg(0xFC, 0x88);
 	if (ret < 0) {
 		FTS_ERROR("write FC 88 fails");
 		goto test_reset;
@@ -1477,6 +1477,19 @@ static void get_pram_test(void *device_data)
 		ret = -EINVAL;
 		goto test_reset;
 	}
+
+	cmd[0] = 0xD0;
+	cmd[1] = 0x00;
+	cmd[2] = 0x00;
+	cmd[3] = 0x00;
+	ret = fts_write(cmd, 4);
+	if (ret < 0) {
+		FTS_ERROR("write (09 0A) cmd fail");
+		goto test_reset;
+	}
+	sec_delay(10);
+
+	fts_read(NULL, 0, val, 1);
 
 	ecc_host = ft3418_pram_test_write_buf(pb_test_buf, pb_test_len);
 	if (ecc_host < 0) {
@@ -1662,7 +1675,6 @@ static int fts_fw_self_test_entry(int type, u8 cmd, u8 mode,
 	}
 
 out:
-	result = 1; // temp
 	if (result == 1) {
 		FTS_INFO("firmware self test PASS");
 		return 1;

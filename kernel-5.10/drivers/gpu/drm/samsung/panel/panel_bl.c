@@ -643,6 +643,21 @@ inline void panel_bl_inc_brightness_set_count(struct panel_bl_device *panel_bl)
 	atomic_inc(&panel_bl->props.brightness_set_count);
 }
 
+void panel_bl_clear_brightness_non_zero_set_count(struct panel_bl_device *panel_bl)
+{
+	atomic_set(&panel_bl->props.brightness_non_zero_set_count, 0);
+}
+
+int panel_bl_get_brightness_non_zero_set_count(struct panel_bl_device *panel_bl)
+{
+	return atomic_read(&panel_bl->props.brightness_non_zero_set_count);
+}
+
+inline void panel_bl_inc_brightness_non_zero_set_count(struct panel_bl_device *panel_bl)
+{
+	atomic_inc(&panel_bl->props.brightness_non_zero_set_count);
+}
+
 int panel_bl_set_subdev(struct panel_bl_device *panel_bl, int id)
 {
 	panel_bl->props.id = id;
@@ -949,6 +964,9 @@ int panel_bl_set_brightness(struct panel_bl_device *panel_bl, int id, u32 send_c
 		if (panel_get_cur_state(panel) == PANEL_STATE_NORMAL)
 			panel_disable_irq(panel, PANEL_IRQ_DISP_DET);
 	}
+
+	if (brightness > 0)
+		panel_bl_inc_brightness_non_zero_set_count(panel_bl);
 
 	if (!strcmp(seqname, PANEL_SET_BL_SEQ) && need_update_display_mode) {
 #if defined(CONFIG_USDM_PANEL_DISPLAY_MODE)

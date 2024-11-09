@@ -102,12 +102,11 @@ static void check_no_event(void)
 static void debug_work_func(struct work_struct *work)
 {
 	int type;
-	uint64_t en_state = 0;
+	uint64_t probe_state[2] = {0, };
+	uint64_t en_state[2] = {0, };
 	struct shub_data_t *data = get_shub_data();
 	struct rtc_time tm;
 	char time_temp[50] = {0, };
-
-	en_state = get_sensors_legacy_enable_state();
 
 	for (type = 0; type < SENSOR_TYPE_MAX; type++) {
 		if (get_sensor_enabled(type))
@@ -120,13 +119,15 @@ static void debug_work_func(struct work_struct *work)
 	snprintf(time_temp, sizeof(time_temp), "%04d/%02d/%02d %02d:%02d:%02d",
 		 tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
 
-	shub_infof(" (%s) FW(%d):%u, Sensor state: 0x%llx, En: 0x%llx, Reset cnt: %d[%d : C %u(%u, %u), N %u, %u, %u]"
-		   ", Cal result : [M:%c, P:%c]",
+	get_sensors_legacy_probe_state(probe_state);
+	get_sensors_legacy_enable_state(en_state);
+	shub_infof(" (%s) FW(%d):%u, Sensor state: 0x%llx, 0x%llx, En: 0x%llx, 0x%llx, "
+		   "Reset cnt: %d[%d : C %u(%u, %u), N %u, %u, %u], Cal result : [M:%c, P:%c]",
 		   time_temp, get_firmware_type(), get_firmware_rev(),
-		   get_sensors_legacy_probe_state(), en_state, data->cnt_reset, data->cnt_shub_reset[RESET_TYPE_MAX],
-		   data->cnt_shub_reset[RESET_TYPE_KERNEL_COM_FAIL], get_cnt_comm_fail(), get_cnt_timeout(),
-		   data->cnt_shub_reset[RESET_TYPE_KERNEL_NO_EVENT], data->cnt_shub_reset[RESET_TYPE_HUB_NO_EVENT],
-		   data->cnt_shub_reset[RESET_TYPE_HUB_REQ_TASK_FAILURE],
+		   probe_state[0], probe_state[1], en_state[0], en_state[1], data->cnt_reset,
+		   data->cnt_shub_reset[RESET_TYPE_MAX], data->cnt_shub_reset[RESET_TYPE_KERNEL_COM_FAIL],
+		   get_cnt_comm_fail(), get_cnt_timeout(), data->cnt_shub_reset[RESET_TYPE_KERNEL_NO_EVENT],
+		   data->cnt_shub_reset[RESET_TYPE_HUB_NO_EVENT], data->cnt_shub_reset[RESET_TYPE_HUB_REQ_TASK_FAILURE],
 		   open_cal_result[SENSOR_TYPE_GEOMAGNETIC_FIELD], open_cal_result[SENSOR_TYPE_PRESSURE]);
 
 	if (is_shub_working())
@@ -247,9 +248,13 @@ int print_mcu_debug(char *dataframe, int *index, int frame_len)
 {
 	u16 length = 0;
 	int cur = *index;
+	int len_size = 1;
 
-	memcpy(&length, dataframe + *index, 1);
-	*index += 1;
+	if (is_support_system_feature(SF_DEBUG_V2))
+		len_size = 2;
+
+	memcpy(&length, dataframe + *index, len_size);
+	*index += len_size;
 
 	if (length > frame_len - *index || length <= 0) {
 		shub_infof("[M] invalid debug length(%u/%d/%d)", length, frame_len, cur);

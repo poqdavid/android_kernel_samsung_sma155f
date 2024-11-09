@@ -52,15 +52,32 @@
 	};
 };
 #endif
+#if 0
+&${gpio_prox_ldo_en_parent} {
+	shub_prox_ldo_en: shub-prox-ldo-en {
+		samsung,pins = SEC_GPIO(${gpio_prox_ldo_en});
+		samsung,pin-function = <1>;
+		samsung,pin-pud = <0>;
+		samsung,pin-con-pdn = <3>;
+		samsung,pin-pud-pdn = <0>;
+	};
+};
+#endif
+
 / {
 	fragment@model {
 		target-path = "/";
 		__overlay__ {
 			shub {
-#if 0
-    			pinctrl-names = "default";
+				pinctrl-names = "default";
+#if 0 && 0
+				pinctrl-0 = <&shub_sensor_ldo_en &shub_prox_ldo_en>;
+#elif 0
 				pinctrl-0 = <&shub_sensor_ldo_en>;
+#elif 0
+				pinctrl-0 = <&shub_prox_ldo_en>;
 #endif
+
 #if 0
 				sensor-vdd-regulator = "VDD_SENSOR_1P8";
 #endif
@@ -75,6 +92,9 @@
 
 #if 0
 				sensor-ldo-en = <SEC_GPIO_REF(${gpio_sensor_ldo_en}) 0>;
+#endif
+#if 0
+				prox-ldo-en = <SEC_GPIO_REF(${gpio_prox_ldo_en}) 0>;
 #endif
 			};
 		};
@@ -898,7 +918,7 @@
 		battery3,temp_std = <25>;
 		battery3,tem_poff = <3450 50 3450 50>;
 		battery3,aux_ctrl = <0x322 0x5800>;
-		battery3,data_ver = <1>;
+		battery3,data_ver = <2>;
 		battery3,v_max_table = <0x229A 0x2271 0x2248 0x2220 0x21BF>;
 		battery3,q_max_table = <0x25FC 0x25CF 0x25A2 0x2575 0x2277>;
 
@@ -927,7 +947,7 @@
 		battery2,temp_std = <25>;
 		battery2,tem_poff = <3450 50 3450 50>;
 		battery2,aux_ctrl = <0x322 0x5800>;
-		battery2,data_ver = <2>;
+		battery2,data_ver = <3>;
 		battery2,v_max_table = <0x22A8 0x227F 0x2256 0x222D 0x21CF>;
 		battery2,q_max_table = <0x2581 0x2555 0x2529 0x24FC 0x2268>;
 
@@ -956,7 +976,7 @@
 		battery1,temp_std = <25>;
 		battery1,tem_poff = <3450 50 3450 50>;
 		battery1,aux_ctrl = <0x322 0x5800>;
-		battery1,data_ver = <2>;
+		battery1,data_ver = <3>;
 		battery1,v_max_table = <0x22A5 0x227C 0x2253 0x222A 0x21CE>;
 		battery1,q_max_table = <0x2525 0x24F9 0x24CD 0x24A1 0x21C1>;
 
@@ -2165,6 +2185,9 @@
 				status = "ok";
 				compatible = "sec_k250a_platform";
 				1p8_pvdd-supply = <&fixed_regulator4>;
+#if 0
+				i2c_node = <&i2c5>;
+#endif
 			};
 		};
 	};
@@ -3126,7 +3149,7 @@
 
 		battery,full_condition_type = <(SEC_BATTERY_FULL_CONDITION_NOTIMEFULL | SEC_BATTERY_FULL_CONDITION_VCELL)>;
 		battery,full_condition_soc = <93>;
-		battery,full_condition_vcell = <4250>;
+		/* battery,full_condition_vcell = FV - 50mV set when variable is parsed */
 
 		battery,recharge_check_count = <1>;
 		battery,recharge_condition_type = <SEC_BATTERY_RECHARGE_CONDITION_VCELL>;
@@ -3179,13 +3202,11 @@
 		battery,wireless_otg_input_current = <900>;
 
 		/* Calculate Based on Offsets from float voltage, full_condition_vcell and recharge_condition_vcell */
-		/* if you want to use age_data_by_offset concept add battery,age_data_by_offset; */
+		/* if you want to use age_data_by_common_offset concept add battery,age_data_by_common_offset; */
 
 		battery,age_data_cycle = <0 300 400 700 1000>;
 		battery,age_data_full_condition_soc = <93 92 91 90 89>;
-		battery,age_data_chg_float_voltage_offset = <0 20 40 60 110>;
-		battery,age_data_full_condition_vcell_offset = <0 20 40 60 110>;
-		battery,age_data_recharge_condition_vcell_offset = <0 20 40 60 110>;
+		battery,age_data_common_offset = <0 20 40 110>;
 		/* battery,age_data_max_charging_current_offset = <0 100 200 300 400>; */
 
 		/* cycle, chg_float_voltage, recharge_condition_vcell, full_condition_vcell, full_condition_soc, step charging condition */
@@ -3542,6 +3563,7 @@
 	battery,dchg_thermal_source = <SEC_BATTERY_THERMAL_SOURCE_ADC>;
 	battery,dctp_by_cgtp;
 
+	battery,temp_adc_rsense = <15>;
 	battery,temp_table_adc = <
 		101 113 139 165 194
 		225 270 321 397 484
@@ -3625,9 +3647,6 @@
 	battery,full_check_type = <SEC_BATTERY_FULLCHARGED_FG_CURRENT>;
 	battery,full_check_type_2nd = <SEC_BATTERY_FULLCHARGED_FG_CURRENT>;
 
-	battery,full_condition_vcell = <4330>;
-	/* battery,recharge_condition_vcell = <4310>; Default value is FV - 70mV */
-
 	battery,chg_float_voltage = <MAX_FV>;
 	battery,high_temp_float = <4150>;
 	battery,low_temp_float = <MAX_FV>;
@@ -3642,12 +3661,10 @@
 	battery,short_cable_current = <500>;
 	battery,rp_current_abnormal_rp3 = <500>;
 
-	battery,age_data_by_offset; /* Calculate Based on Offset */
+	battery,age_data_by_common_offset; /* Calculate Based on Common Offset */
 	battery,age_data_cycle = <0 200 250 300 1001>;
 	battery,age_data_full_condition_soc = <93 92 91 90 89>;
-	battery,age_data_chg_float_voltage_offset = <0 20 40 60 110>;
-	battery,age_data_full_condition_vcell_offset = <0 20 40 60 110>;
-	battery,age_data_recharge_condition_vcell_offset = <0 20 40 60 110>;
+	battery,age_data_common_offset = <0 20 40 60 110>;
 
 	/* step charging option */
 	battery,step_chg_type = <0>;

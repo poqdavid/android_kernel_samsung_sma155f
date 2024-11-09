@@ -129,7 +129,7 @@ static int _shub_file_rw(char type, bool wait)
 	return result;
 }
 
-static int _shub_file_write(char *path, char *buf, int buf_len, long long pos, bool wait)
+__visible_for_testing int __mockable _shub_file_write(char *path, char *buf, int buf_len, long long pos, bool wait)
 {
 	int ret;
 

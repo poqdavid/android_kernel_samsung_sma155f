@@ -370,6 +370,8 @@ struct freq_hop_param {
 #if defined(CONFIG_USDM_PANEL_VCOM_TRIM_TEST)
 #define PANEL_VCOM_TRIM_TEST_SEQ ("panel_vcom_trim_test_seq")
 #endif
+#define PANEL_AGING_ON_SEQ ("panel_aging_on_seq")
+#define PANEL_AGING_OFF_SEQ ("panel_aging_off_seq")
 
 /* structure of sequence table */
 struct brt_map {
@@ -509,6 +511,7 @@ struct ddi_ops {
 	int (*get_manufacture_code)(struct panel_device *panel, void *data);
 	int (*get_manufacture_date)(struct panel_device *panel, void *data);
 	int (*get_temperature_range)(struct panel_device *panel, void *data);
+	int (*check_mipi_read)(struct panel_device *panel, void *data);
 };
 
 struct rcd_region {
@@ -862,9 +865,11 @@ struct panel_properties {
 #ifdef CONFIG_USDM_FACTORY_VGLHIGHDOT_TEST
 	u32 vglhighdot;
 #endif
+	u32 panel_aging;
 	u32 dsi_freq;
 	u32 osc_freq;
 	u32 board_rev;
+	bool is_valid_mtp;
 };
 
 struct panel_info {
@@ -1035,6 +1040,7 @@ static inline int search_table(void *tbl, int itemsize, u32 sz_tbl, void *value)
 const char *cmd_type_to_string(u32 type);
 int string_to_cmd_type(const char *str);
 int register_common_panel(struct common_panel_info *info);
+int panel_vote_up_to_probe(struct panel_device *panel);
 int deregister_common_panel(struct common_panel_info *info);
 struct panel_dt_lut *find_panel_lut(struct panel_device *panel, u32 panel_id);
 struct maptbl *find_panel_maptbl_by_substr(struct panel_device *panel, char *substr);

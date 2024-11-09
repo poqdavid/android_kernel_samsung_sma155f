@@ -2026,6 +2026,10 @@ static u8 ts_upgrade_firmware(struct zt_ts_info *info,
 	bool ret = false;
 	u32 size = 0;
 
+#if IS_ENABLED(CONFIG_SEC_FACTORY) && IS_ENABLED(CONFIG_CPU_IDLE)
+	cpuidle_pause_and_lock();
+#endif
+
 retry_upgrade:
 	zt_power_control(info, false);
 	ret = info->plat_data->power(&client->dev, true);
@@ -2094,8 +2098,13 @@ retry_upgrade:
 	else
 		ret = upgrade_fw_partial_download(info, firmware_data, chip_code, size);
 
-	if (ret == true)
+
+	if (ret == true) {
+#if IS_ENABLED(CONFIG_SEC_FACTORY) && IS_ENABLED(CONFIG_CPU_IDLE)
+		cpuidle_resume_and_unlock();
+#endif
 		return true;
+	}
 
 fail_upgrade:
 	zt_power_control(info, false);
@@ -2104,6 +2113,10 @@ fail_upgrade:
 		input_err(true, &client->dev, "upgrade failed: so retry... (%d)\n", retry_cnt);
 		goto retry_upgrade;
 	}
+
+#if IS_ENABLED(CONFIG_SEC_FACTORY) && IS_ENABLED(CONFIG_CPU_IDLE)
+	cpuidle_resume_and_unlock();
+#endif
 
 	input_info(true, &client->dev, "%s: Failed to upgrade\n", __func__);
 

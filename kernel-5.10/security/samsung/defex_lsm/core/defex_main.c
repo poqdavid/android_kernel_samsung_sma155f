@@ -170,7 +170,7 @@ __visible_for_testing int task_defex_is_secured(struct defex_context *dc)
 
 	if (!get_dc_process_dpath(dc))
 		return is_secured;
-	is_secured = !rules_lookup(proc_name, feature_ped_exception, exe_file);
+	is_secured = !rules_lookup(proc_name, feature_ped_exception, exe_file, NULL);
 	return is_secured;
 }
 
@@ -383,7 +383,7 @@ __visible_for_testing int task_defex_integrity(struct defex_context *dc)
 		goto out;
 
 	new_file = get_dc_target_name(dc);
-	is_violation = rules_lookup(new_file, feature_integrity_check, dc->target_file);
+	is_violation = rules_lookup(new_file, feature_integrity_check, dc->target_file, NULL);
 
 	if (is_violation == DEFEX_INTEGRITY_FAIL) {
 		ret = -DEFEX_DENY;
@@ -415,7 +415,7 @@ __visible_for_testing int task_defex_safeplace(struct defex_context *dc)
 		goto out;
 
 	new_file = get_dc_target_name(dc);
-	is_violation = !rules_lookup(new_file, feature_safeplace_path, dc->target_file);
+	is_violation = !rules_lookup(new_file, feature_safeplace_path, dc->target_file, NULL);
 
 	if (is_violation) {
 		ret = -DEFEX_DENY;
@@ -488,14 +488,22 @@ out:
 __visible_for_testing int task_defex_src_exception(struct defex_context *dc)
 {
 	struct file *exe_file = get_dc_process_file(dc);
-	char *proc_name = get_dc_process_name(dc);
-	int allow = 1;
+	char *target_name, *proc_name = get_dc_process_name(dc);
+	int offset, allow = 1;
+	struct rule_item_struct *found_item = NULL;
 
 	if (!get_dc_process_dpath(dc))
 		return allow;
 
 	exe_file = get_dc_process_file(dc);
-	allow = rules_lookup(proc_name, feature_immutable_src_exception, exe_file);
+	allow = rules_lookup(proc_name, feature_immutable_src_exception, exe_file, &found_item);
+	if (allow && found_item &&
+			(found_item->feature_type & feature_is_file) &&
+			found_item->next_level) {
+		target_name = get_dc_target_name(dc);
+		offset = rules_lookup(target_name, feature_immutable_dst_exception, dc->target_file, NULL);
+		allow = (offset == found_item->next_level);
+	}
 	return allow;
 }
 
@@ -510,7 +518,7 @@ __visible_for_testing int task_defex_immutable(struct defex_context *dc, int att
 		goto out;
 
 	new_file = get_dc_target_name(dc);
-	is_violation = rules_lookup(new_file, attribute, dc->target_file);
+	is_violation = rules_lookup(new_file, attribute, dc->target_file, NULL);
 
 	if (is_violation) {
 		/* Check the Source exception and self-access */
@@ -707,7 +715,7 @@ int task_defex_user_exec(const char *new_file)
 		filp_close(fp, NULL);
 	}
 
-	is_violation = !rules_lookup(new_file, feature_umhbin_path, NULL);
+	is_violation = !rules_lookup(new_file, feature_umhbin_path, NULL, NULL);
 	if (is_violation) {
 		defex_log_warn("UMH Exec Denied: %s", new_file);
 		res = DEFEX_DENY;

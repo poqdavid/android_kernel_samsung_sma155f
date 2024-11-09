@@ -307,6 +307,8 @@ static struct panel_prop_list mdnie_property_array[] = {
 			0, 0, MAX_HBM_CE_LEVEL),
 	__PANEL_PROPERTY_RANGE_INITIALIZER(MDNIE_EXTRA_DIM_LEVEL_PROPERTY,
 			0, 0, MAX_EXTRA_DIM_LEVEL),
+	__PANEL_PROPERTY_RANGE_INITIALIZER(MDNIE_VIVIDNESS_LEVEL_PROPERTY,
+			0, 0, MAX_VIVIDNESS_LEVEL),
 };
 
 __visible_for_testing int mdnie_set_property_value(struct mdnie_info *mdnie,
@@ -372,7 +374,9 @@ __visible_for_testing int mdnie_set_property(struct mdnie_info *mdnie,
 		propname = MDNIE_TRANS_MODE_PROPERTY;
 	else if (property == &mdnie->props.extra_dim_level)
 		propname = MDNIE_EXTRA_DIM_LEVEL_PROPERTY;
-	
+	else if (property == &mdnie->props.vividness_level)
+		propname = MDNIE_VIVIDNESS_LEVEL_PROPERTY;
+
 	if (!propname) {
 		panel_err("unknown property\n");
 		return -EINVAL;
@@ -1448,6 +1452,37 @@ static ssize_t night_mode_store(struct device *dev,
 	return count;
 }
 
+static ssize_t vividness_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct mdnie_info *mdnie = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", mdnie->props.vividness_level);
+}
+
+static ssize_t vividness_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct mdnie_info *mdnie = dev_get_drvdata(dev);
+	int level, ret;
+
+	ret = sscanf(buf, "%d", &level);
+	if (ret != 1)
+		return -EINVAL;
+
+	if (level < 0 || level >= MAX_VIVIDNESS_LEVEL)
+		return -EINVAL;
+
+	panel_info("vividness_level %d\n", level);
+
+	panel_mutex_lock(&mdnie->lock);
+	mdnie_set_property(mdnie, &mdnie->props.vividness_level, level);
+	panel_mutex_unlock(&mdnie->lock);
+	mdnie_update(mdnie);
+
+	return count;
+}
+
 static ssize_t anti_glare_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
@@ -1772,6 +1807,7 @@ struct panel_device_attr mdnie_dev_attrs[] = {
 	__MDNIE_ATTR_RW(sensorRGB, 0664, PA_DEFAULT),
 	__MDNIE_ATTR_RW(whiteRGB, 0664, PA_DEFAULT),
 	__MDNIE_ATTR_RW(night_mode, 0664, PA_DEFAULT),
+	__MDNIE_ATTR_RW(vividness, 0664, PA_DEFAULT),
 	__MDNIE_ATTR_RW(anti_glare, 0664, PA_DEFAULT),
 	__MDNIE_ATTR_RW(extra_dim, 0664, PA_DEFAULT),
 	__MDNIE_ATTR_RW(color_lens, 0664, PA_DEFAULT),

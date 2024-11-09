@@ -362,7 +362,7 @@ static int sec_direct_chg_check_charging_source(struct sec_direct_charger_info *
 
 	/* check test mode */
 	if (charger->test_mode_source == SEC_CHARGING_SOURCE_SWITCHING) {
-		pr_info("%s:  S/C was selected! tese_mode_source(%d)\n", __func__, charger->test_mode_source);
+		pr_info("%s:  S/C was selected! test_mode_source(%d)\n", __func__, charger->test_mode_source);
 		goto end_chg_src;
 	}
 

@@ -45,9 +45,8 @@ static get_init_chipset_funcs_ptr *get_accel_init_chipset_funcs(int *len)
 static int init_accelerometer_variable(void)
 {
 	struct accelerometer_data *data = get_sensor(SENSOR_TYPE_ACCELEROMETER)->data;
-	struct shub_system_info *system_info = get_shub_system_info();
 
-	if (system_info->system_feature & SYSTEM_FEATURE_ACCEL_16G)
+	if (is_support_system_feature(SF_ACCEL_16G))
 		data->range = 16;
 	else
 		data->range = 8;

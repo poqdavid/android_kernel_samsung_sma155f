@@ -17,6 +17,8 @@
 #include <linux/workqueue.h>
 #include <linux/slab.h>
 #include <linux/sched.h>
+#include <linux/pm_wakeup.h>
+#include <linux/version.h>
 #if IS_ENABLED(CONFIG_BATTERY_NOTIFIER)
 #include <linux/battery/battery_notifier.h>
 #else
@@ -2405,6 +2407,8 @@ static int of_sm5714_usbpd_dt(struct sm5714_usbpd_manager_data *_data)
 	} else {
 		_data->support_vpdo = of_property_read_bool(np,
 						"battery,support_vpdo");
+		_data->support_15w_vpdo = of_property_read_bool(np,
+						"battery,support_15w_vpdo");
 		ret = of_property_read_u32(np, "battery,short_cable_current", &_data->short_cable_current);
 		if (ret) {
 			pr_info("%s : short_cable_current is Empty, set as 1800 mA\n", __func__);
@@ -2413,6 +2417,7 @@ static int of_sm5714_usbpd_dt(struct sm5714_usbpd_manager_data *_data)
 	}
 #else
 	_data->support_vpdo = false;
+	_data->support_15w_vpdo = false;
 #endif
 
 	return ret;
@@ -2439,10 +2444,17 @@ static void sm5714_usbpd_init_source_cap_data(struct sm5714_usbpd_manager_data *
 	data_obj->power_data_obj.usb_comm_capable = 1;
 	data_obj->power_data_obj.reserved = 0;
 
-	(data_obj + 1)->power_data_obj_variable.supply_type = POWER_TYPE_VARIABLE;
-	(data_obj + 1)->power_data_obj_variable.max_voltage = 9000/50;
-	(data_obj + 1)->power_data_obj_variable.min_voltage = 7000/50;
-	(data_obj + 1)->power_data_obj_variable.max_current = 1000/10;
+	if (_data->support_15w_vpdo) {
+		(data_obj + 1)->power_data_obj_variable.supply_type = POWER_TYPE_VARIABLE;
+		(data_obj + 1)->power_data_obj_variable.max_voltage = 9000/50;
+		(data_obj + 1)->power_data_obj_variable.min_voltage = 7000/50;
+		(data_obj + 1)->power_data_obj_variable.max_current = 1650/10;
+	} else {
+		(data_obj + 1)->power_data_obj_variable.supply_type = POWER_TYPE_VARIABLE;
+		(data_obj + 1)->power_data_obj_variable.max_voltage = 9000/50;
+		(data_obj + 1)->power_data_obj_variable.min_voltage = 7000/50;
+		(data_obj + 1)->power_data_obj_variable.max_current = 1000/10;
+	}
 }
 
 static int sm5714_usbpd_manager_init(struct sm5714_usbpd_data *pd_data)
@@ -2589,8 +2601,10 @@ void sm5714_usbpd_reinit(struct device *dev)
 	sm5714_usbpd_init_policy(pd_data);
 	reinit_completion(&pd_data->msg_arrived);
 	pd_data->wait_for_msg_arrived = 0;
-	pd_data->auth_type = AUTH_NONE;
-	sm5714_usbpd_change_source_cap(1, 500, 1);
+	if (!pdic_data->is_attached) {
+		pd_data->auth_type = AUTH_NONE;
+		sm5714_usbpd_change_source_cap(1, 500, 1);
+	}
 	if ((pdic_data->power_role == PDIC_SOURCE) && !pdic_data->is_otg_vboost)
 		sm5714_usbpd_turn_off_reverse_booster(pd_data);
 	sm5714_usbpd_start_discover_msg_cancel(pd_data->dev);
@@ -2636,7 +2650,16 @@ int sm5714_usbpd_init(struct device *dev, void *phy_driver_data)
 	sm5714_usbpd_init_policy(pd_data);
 	sm5714_usbpd_manager_init(pd_data);
 	sm5714_usbpd_change_source_cap(1, 500, 1);
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 188)
+	wakeup_source_init(pd_data->policy_engine_wake, "policy_engine_wake");	 // 4.19 R
+	if (!(pd_data->policy_engine_wake)) {
+		pd_data->policy_engine_wake = wakeup_source_create("policy_engine_wake"); // 4.19 Q
+		if (pd_data->policy_engine_wake)
+			wakeup_source_add(pd_data->policy_engine_wake);
+	}
+#else
+	pd_data->policy_engine_wake = wakeup_source_register(NULL, "policy_engine_wake"); // 5.4 R
+#endif
 	INIT_WORK(&pd_data->worker, sm5714_usbpd_policy_work);
 	init_completion(&pd_data->msg_arrived);
 	init_completion(&pd_data->pd_completion);

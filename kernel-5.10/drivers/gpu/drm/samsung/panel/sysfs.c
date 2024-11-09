@@ -4311,6 +4311,29 @@ static ssize_t vcom_trim_show(struct device *dev,
 }
 #endif
 
+static ssize_t check_mipi_read_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct panel_device *panel = dev_get_drvdata(dev);
+	int ret;
+
+	if (panel == NULL) {
+		panel_err("panel is null\n");
+		return -EINVAL;
+	}
+
+	if (!IS_PANEL_ACTIVE(panel))
+		return -EIO;
+
+	ret = panel_check_mipi_read_test(panel, buf);
+	if (ret == -ENOENT) {
+		panel_info("this panel doesn't supported. test pass.\n");
+	}
+
+	return strlen(buf);
+}
+
+
 static ssize_t display_on_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -4322,6 +4345,52 @@ static ssize_t display_on_show(struct device *dev,
 	}
 
 	return sprintf(buf, "%lld\n", ktime_to_ms(panel->ktime_first_frame));
+}
+
+static ssize_t panel_aging_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	struct panel_device *panel = dev_get_drvdata(dev);
+	struct panel_info *panel_data = &panel->panel_data;
+
+	snprintf(buf, PAGE_SIZE, "%u\n", panel_data->props.panel_aging);
+
+	return strlen(buf);
+}
+
+static ssize_t panel_aging_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	int rc, ret;
+	u32 value = 0;
+	struct panel_device *panel = dev_get_drvdata(dev);
+	struct panel_info *panel_data;
+
+	panel_data = &panel->panel_data;
+
+	if (panel == NULL) {
+		panel_err("panel is null\n");
+		return -EINVAL;
+	}
+
+	rc = kstrtouint(buf, 0, &value);
+	if (rc < 0)
+		return rc;
+
+	panel_mutex_lock(&panel->op_lock);
+	panel_data->props.panel_aging = value;
+	panel_mutex_unlock(&panel->op_lock);
+
+	ret = panel_do_seqtbl_by_name(panel,
+			value ? PANEL_AGING_ON_SEQ : PANEL_AGING_OFF_SEQ);
+	if (unlikely(ret < 0))
+		panel_err("failed to run %s\n",
+				value ? PANEL_AGING_ON_SEQ : PANEL_AGING_OFF_SEQ);
+
+	panel_info("panel_aging %s\n",
+			panel_data->props.panel_aging ? "on" : "off");
+
+	return size;
 }
 
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
@@ -4451,7 +4520,9 @@ struct panel_device_attr panel_attrs[] = {
 #if defined(CONFIG_USDM_PANEL_VCOM_TRIM_TEST)
 	__PANEL_ATTR_RO(vcom_trim, 0440, PA_DEFAULT),
 #endif
+	__PANEL_ATTR_RO(check_mipi_read, 0440, PA_FACTORY),
 	__PANEL_ATTR_RO(display_on, 0440, PA_DEFAULT),
+	__PANEL_ATTR_RW(panel_aging, 0664, PA_DEFAULT),
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 	/* DEBUG: enable ALL node */
 	__PANEL_ATTR_WO(_enable_node, 0220, PA_DEFAULT | PA_DEBUG_ONLY),

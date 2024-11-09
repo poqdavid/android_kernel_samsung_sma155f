@@ -223,7 +223,7 @@ static u16 fts_crc16_calc_host(u8 *pbuf, u32 length)
 
 	return ecc;
 }
-
+/*
 static u16 fts_pram_ecc_calc_host(u8 *pbuf, u32 length)
 {
 	return fts_crc16_calc_host(pbuf, length);
@@ -288,6 +288,7 @@ static int fts_pram_ecc_cal_algo(
 	ecc = ((u16)(val[0] << 8) + val[1]) & 0x0000FFFF;
 	return ecc;
 }
+*/
 
 static int fts_pram_ecc_cal_xor(void)
 {
@@ -312,12 +313,7 @@ static int fts_pram_ecc_cal(struct fts_upgrade *upg, u32 saddr, u32 len)
 		return -EINVAL;
 	}
 
-	if ((ECC_CHECK_MODE_CRC16 == upg->func->pram_ecc_check_mode) ||
-	    (upg->func->upgspec_version >= UPGRADE_SPEC_V_1_0)) {
-		return fts_pram_ecc_cal_algo(upg, saddr, len);
-	} else {
-		return fts_pram_ecc_cal_xor();
-	}
+	return fts_pram_ecc_cal_xor();
 }
 
 int ft3418_pram_test_ecc_cal(u32 saddr, u32 len)
@@ -364,25 +360,18 @@ static int fts_pram_write_buf(struct fts_upgrade *upg, u8 *buf, u32 len)
 		if ((i == (packet_number - 1)) && remainder)
 			packet_len = remainder;
 
-		packet_buf[0] = FTS_ROMBOOT_CMD_SET_PRAM_ADDR;
+		packet_buf[0] = FTS_ROMBOOT_CMD_WRITE;
 		packet_buf[1] = BYTE_OFF_16(offset);
 		packet_buf[2] = BYTE_OFF_8(offset);
 		packet_buf[3] = BYTE_OFF_0(offset);
 
-		ret = fts_write(packet_buf, FTS_ROMBOOT_CMD_SET_PRAM_ADDR_LEN);
-		if (ret < 0) {
-			FTS_ERROR("pramboot set write address(%d) fail", i);
-			return ret;
-		}
-
-		packet_buf[0] = FTS_ROMBOOT_CMD_WRITE;
-		cmdlen = 1;
+		packet_buf[4] = BYTE_OFF_8(packet_len);
+		packet_buf[5] = BYTE_OFF_0(packet_len);
+		cmdlen = 6;
 
 		for (j = 0; j < packet_len; j++) {
 			packet_buf[cmdlen + j] = buf[offset + j];
-			if (ECC_CHECK_MODE_XOR == upg->func->pram_ecc_check_mode) {
-				ecc_tmp ^= packet_buf[cmdlen + j];
-			}
+			ecc_tmp ^= packet_buf[cmdlen + j];
 		}
 
 		ret = fts_write(packet_buf, packet_len + cmdlen);
@@ -392,12 +381,7 @@ static int fts_pram_write_buf(struct fts_upgrade *upg, u8 *buf, u32 len)
 		}
 	}
 
-	if ((ECC_CHECK_MODE_CRC16 == upg->func->pram_ecc_check_mode) ||
-	    (upg->func->upgspec_version >= UPGRADE_SPEC_V_1_0)) {
-		ecc_in_host = (int)fts_pram_ecc_calc_host(buf, len);
-	} else {
-		ecc_in_host = (int)ecc_tmp;
-	}
+	ecc_in_host = (int)ecc_tmp;
 
 	return ecc_in_host;
 }

@@ -2187,6 +2187,9 @@ void sm5714_src_transition_to_default(void *_data)
 	sm5714_usbpd_write_reg(i2c, SM5714_REG_PD_CNTL2, val); /* BIST Off */
 
 	sm5714_set_vconn_source(data, USBPD_VCONN_OFF);
+	if (pdic_data->vbus_noti_status == STATUS_VBUS_HIGH && !pdic_data->is_otg_vboost)
+		sm5714_usbpd_turn_off_reverse_booster(data);
+
 	sm5714_vbus_turn_on_ctrl(pdic_data, 0);
 	if (manager->dp_is_connect == 1) {
 		pdic_data->detach_done_wait = 1;
@@ -4477,6 +4480,7 @@ static int sm5714_usbpd_remove(struct i2c_client *i2c)
 #endif
 		kfree(_data);
 	}
+	wakeup_source_unregister(pd_data->policy_engine_wake);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
 	return 0;
 #endif

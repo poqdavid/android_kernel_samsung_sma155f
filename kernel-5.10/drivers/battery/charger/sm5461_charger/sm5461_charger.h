@@ -15,7 +15,7 @@
 
 #define SM5461_TA_MIN_CURRENT   1000
 #define SM5461_CV_OFFSET        0
-#define SM5461_CI_OFFSET        300
+#define SM5461_CI_OFFSET        400
 #define SM5461_SIOP_LEV1        1100
 #define SM5461_SIOP_LEV2        1700
 
@@ -194,6 +194,7 @@ struct sm5461_platform_data {
 	u32 topoff;
 	u32 x2bat_mode;
 	u32 en_vbatreg;
+	u32 vbus_ctrl_mode;
 	u32 snsr;
 	u32 single_mode;
 	u32 fpdo_topoff;

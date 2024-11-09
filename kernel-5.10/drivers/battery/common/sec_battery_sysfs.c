@@ -120,6 +120,7 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(hmt_ta_charge),
 #if defined(CONFIG_SEC_FACTORY)
 	SEC_BATTERY_ATTR(afc_test_fg_mode),
+	SEC_BATTERY_ATTR(nozx_ctrl),
 #endif
 	SEC_BATTERY_ATTR(fg_cycle),
 	SEC_BATTERY_ATTR(fg_full_voltage),
@@ -259,6 +260,8 @@ static struct device_attribute sec_battery_attrs[] = {
 #else
 	SEC_BATTERY_ATTR(batt_main_shipmode),
 	SEC_BATTERY_ATTR(batt_sub_shipmode),
+	SEC_BATTERY_ATTR(batt_main_vbat),
+	SEC_BATTERY_ATTR(batt_sub_vbat),
 #endif
 #if IS_ENABLED(CONFIG_DUAL_FUELGAUGE)
 	SEC_BATTERY_ATTR(batt_main_soc),
@@ -313,6 +316,7 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(state_of_health),
 #endif
 	SEC_BATTERY_ATTR(adc_rsense), /* for tuning adc_rsense of bat_thm only now */
+	SEC_BATTERY_ATTR(support_functions),
 };
 
 static struct device_attribute sec_pogo_attrs[] = {
@@ -419,7 +423,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 					&battery->pdata->sub_bat_thm_info, 0,
 					battery->pdata->charger_name, battery->pdata->fuelgauge_name,
 					battery->pdata->adc_read_type);
-			value.intval = adjust_bat_temp(battery, value.intval, sub_bat_temp);
+			value.intval = lr_predict_bat_temp(battery, value.intval, sub_bat_temp);
 		}
 #endif
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
@@ -497,6 +501,9 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 				case SEC_BATTERY_THERMAL_SOURCE_CHG_ADC:
 					psy_do_property(battery->pdata->charger_name, get,
 						POWER_SUPPLY_PROP_TEMP, value);
+					break;
+				case SEC_BATTERY_THERMAL_SOURCE_ADC:
+					value.intval = battery->pdata->dchg_thm_info.adc;
 					break;
 				default:
 					value.intval = -1;
@@ -807,6 +814,8 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 #if defined(CONFIG_SEC_FACTORY)
 	case AFC_TEST_FG_MODE:
 		break;
+	case NOZX_CTRL:
+		break;
 #endif
 	case FG_CYCLE:
 		value.intval = SEC_BATTERY_CAPACITY_CYCLE;
@@ -919,16 +928,19 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
 	case WC_VOUT:
+		/* wc_vout and wc_vrect are supposed to be read with wireless connection or uno on because of so much i2c fails.
+		   But wired + wireless charging case makes ldo toggle which only have vrect turning on, in this case needs this node for test app. */
 		psy_do_property(battery->pdata->wireless_charger_name, get,
 			POWER_SUPPLY_PROP_ENERGY_NOW, value);
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
 	case WC_VRECT:
+		/* wc_vout and wc_vrect are supposed to be read with wireless connection or uno on because of so much i2c fails.
+		   But wired + wireless charging case makes ldo toggle which only have vrect turning on, in this case needs this node for test app. */
 		psy_do_property(battery->pdata->wireless_charger_name, get,
 			POWER_SUPPLY_PROP_ENERGY_AVG, value);
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
-
 	case WC_TX_EN:
 		pr_info("%s wc tx enable(%d)",__func__, battery->wc_tx_enable);
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
@@ -939,7 +951,6 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 				battery->wc_tx_vout);
 		break;
-
 	case BATT_HV_WIRELESS_STATUS:
 		psy_do_property(battery->pdata->wireless_charger_name, get,
 			POWER_SUPPLY_EXT_PROP_INPUT_VOLTAGE_REGULATION, value);
@@ -948,15 +959,18 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 	case BATT_HV_WIRELESS_PAD_CTRL:
 		break;
 	case WC_TX_ID:
-		psy_do_property(battery->pdata->wireless_charger_name, get,
-			POWER_SUPPLY_EXT_PROP_WIRELESS_TX_ID, value);
-
-		pr_info("%s TX ID (%d)",__func__, value.intval);
+		if (battery->wc_tx_enable || is_wireless_all_type(battery->cable_type)) {
+			psy_do_property(battery->pdata->wireless_charger_name, get,
+				POWER_SUPPLY_EXT_PROP_WIRELESS_TX_ID, value);
+			pr_info("%s TX ID (0x%x)",__func__, value.intval);
+		}
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
 	case WC_OP_FREQ:
-		psy_do_property(battery->pdata->wireless_charger_name, get,
-			POWER_SUPPLY_EXT_PROP_WIRELESS_OP_FREQ, value);
+		if (battery->wc_tx_enable || is_wireless_all_type(battery->cable_type)) {
+			psy_do_property(battery->pdata->wireless_charger_name, get,
+				POWER_SUPPLY_EXT_PROP_WIRELESS_OP_FREQ, value);
+		}
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
 	case WC_CMD_INFO:
@@ -979,14 +993,18 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->wc_rx_type);
 		break;
 	case WC_TX_MFC_VIN_FROM_UNO:
-		psy_do_property(battery->pdata->wireless_charger_name, get,
-			POWER_SUPPLY_EXT_PROP_WIRELESS_TX_UNO_VIN, value);
+		if (battery->wc_tx_enable || is_wireless_all_type(battery->cable_type)) {
+			psy_do_property(battery->pdata->wireless_charger_name, get,
+				POWER_SUPPLY_EXT_PROP_WIRELESS_TX_UNO_VIN, value);
+		}
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 			value.intval);
 		break;
 	case WC_TX_MFC_IIN_FROM_UNO:
-		psy_do_property(battery->pdata->wireless_charger_name, get,
-			POWER_SUPPLY_EXT_PROP_WIRELESS_TX_UNO_IIN, value);
+		if (battery->wc_tx_enable || is_wireless_all_type(battery->cable_type)) {
+			psy_do_property(battery->pdata->wireless_charger_name, get,
+				POWER_SUPPLY_EXT_PROP_WIRELESS_TX_UNO_IIN, value);
+		}
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 			value.intval);
 		break;
@@ -1680,11 +1698,12 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		break;
 #if IS_ENABLED(CONFIG_DUAL_BATTERY)
 	case BATT_TEMP_TEST:
-		i += scnprintf(buf + i, PAGE_SIZE - i, "%d %d %d %d %d\n",
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d %d %d %d %d %d\n",
 			battery->pdata->bat_thm_info.test,
 			battery->pdata->usb_thm_info.test,
 			battery->pdata->wpc_thm_info.test,
 			battery->pdata->chg_thm_info.test,
+			battery->pdata->dchg_thm_info.test,
 			battery->pdata->sub_bat_thm_info.test);
 		break;
 #else
@@ -1902,18 +1921,33 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 				value.intval);
 		}
 		break;
+	case BATT_MAIN_VBAT:
+		{
+			ret = sec_bat_dual_battery_vbat(battery, SEC_DUAL_BATTERY_MAIN);
+			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+				ret);
+		}
+		break;
+	case BATT_SUB_VBAT:
+		{
+			ret = sec_bat_dual_battery_vbat(battery, SEC_DUAL_BATTERY_SUB);
+			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+				ret);
+		}
+		break;
+	
 #endif
 #if IS_ENABLED(CONFIG_DUAL_FUELGAUGE)
 	case BATT_MAIN_SOC:
 		{
-			value.intval = battery->main_capacity;
+			value.intval = battery->main_capacity/10;
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 				value.intval);
 		}
 		break;
 	case BATT_SUB_SOC:
 		{
-			value.intval = battery->sub_capacity;
+			value.intval = battery->sub_capacity/10;
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 				value.intval);
 		}
@@ -2160,6 +2194,25 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 			battery->pdata->bat_thm_info.adc_rsense);
 		break;
+	case SUPPORT_FUNCTIONS:
+		{
+			char temp_buf[1024] = {0,};
+			int size = 0;
+
+			value.strval = "SB";
+			snprintf(temp_buf, sizeof(temp_buf), "%s", value.strval);
+			size = sizeof(temp_buf) - strlen(temp_buf);
+
+			if (battery->pdata->en_batt_full_status_usage) {
+				value.strval = "BFSU";
+				snprintf(temp_buf+strlen(temp_buf), size, " %s", value.strval);
+				size = sizeof(temp_buf) - strlen(temp_buf);
+			}
+
+			pr_info("%s: SUPPORT_FUNCTIONS = %s\n", __func__, temp_buf);
+			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", temp_buf);
+		}
+		break;
 	default:
 		i = -EINVAL;
 		break;
@@ -2187,6 +2240,31 @@ ssize_t sec_bat_store_attrs(
 
 	switch (offset) {
 	case BATT_RESET_SOC:
+#if IS_ENABLED(CONFIG_DUAL_FUELGAUGE)
+		if (sscanf(buf, "%10d\n", &x) == 1) {
+		/* Do NOT reset fuel gauge in charging mode */
+#if IS_ENABLED(CONFIG_USB_FACTORY_MODE)
+			if (battery->is_jig_on || battery->batt_f_mode != NO_MODE) {
+#else
+			if (battery->is_jig_on) {
+#endif
+				sec_bat_set_misc_event(battery, BATT_MISC_EVENT_BATT_RESET_SOC,
+					BATT_MISC_EVENT_BATT_RESET_SOC);
+				if (x == 2)
+					value.intval =
+						SEC_FUELGAUGE_CAPACITY_TYPE_RESET_SUB;
+				else
+					value.intval =
+						SEC_FUELGAUGE_CAPACITY_TYPE_RESET;
+				psy_do_property(battery->pdata->fuelgauge_name, set,
+						POWER_SUPPLY_PROP_CAPACITY, value);
+				dev_info(battery->dev, "do reset SOC\n");
+				/* update battery info */
+				sec_bat_get_battery_info(battery);
+			}
+		ret = count;
+		}
+#else
 		/* Do NOT reset fuel gauge in charging mode */
 #if IS_ENABLED(CONFIG_USB_FACTORY_MODE)
 		if (battery->is_jig_on || battery->batt_f_mode != NO_MODE) {
@@ -2204,6 +2282,7 @@ ssize_t sec_bat_store_attrs(
 			sec_bat_get_battery_info(battery);
 		}
 		ret = count;
+#endif
 		break;
 	case BATT_READ_RAW_SOC:
 		break;
@@ -2904,6 +2983,16 @@ ssize_t sec_bat_store_attrs(
 			ret = count;
 		}
 	break;
+	case NOZX_CTRL:
+		if (sscanf(buf, "%10d\n", &x) == 1) {
+			pr_info("%s: NOZX set to %s\n", __func__,
+				(!x) ? "Enable" : "Disable");	// 0: NOZX enable, 1: NOZX disable
+			value.intval = x;
+			psy_do_property(battery->pdata->charger_name, set,
+				POWER_SUPPLY_EXT_PROP_NOZX_CTRL, value);
+			ret = count;
+		}
+		break;
 #endif
 	case FG_CYCLE:
 		break;
@@ -4434,6 +4523,10 @@ ssize_t sec_bat_store_attrs(
 			value.intval = x;
 			psy_do_property(battery->pdata->charger_name, set,
 				POWER_SUPPLY_EXT_PROP_ARI_CNT, value);
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+			psy_do_property(battery->pdata->dual_battery_name, set,
+				POWER_SUPPLY_EXT_PROP_ARI_CNT, value);
+#endif
 		}
 		ret = count;
 		break;

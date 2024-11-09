@@ -21,7 +21,12 @@
 
 #define LIGHT_COEF_SIZE 7
 
+#ifdef CONFIG_SHUB_TEST_FOR_ONLY_UML
+#define LIGHT_CALIBRATION_FILE_PATH "calibration_data.txt"
+#else
 #define LIGHT_CALIBRATION_FILE_PATH "/efs/FactoryApp/light_cal_data"
+#endif
+
 #define PANEL_TYPE_FILE_PATH "sys/class/lcd/panel/lcd_type"
 #define LIGHT_DEBIG_EVENT_SIZE_4BYTE_VERSION	2000
 #define LIGHT_CAL_CH0_SIZE_4BYTE_VERSION		3000

@@ -795,7 +795,7 @@ panel_create_debugfs_dir(struct panel_device *panel,
 	INIT_LIST_HEAD(&debugfs->dirs);
 	if (dir)
 		list_add_tail(&debugfs->list, &dir->dirs);
-	panel_info("dir:%s\n", name);
+	panel_dbg("dir:%s\n", name);
 
 	return debugfs;
 }
@@ -828,7 +828,7 @@ panel_create_debugfs_file(struct panel_device *panel,
 	}
 	INIT_LIST_HEAD(&debugfs->dirs);
 	list_add_tail(&debugfs->list, &dir->dirs);
-	panel_info("file:%s\n", name);
+	panel_dbg("file:%s\n", name);
 
 	return debugfs;
 }

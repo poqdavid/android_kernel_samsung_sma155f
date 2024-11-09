@@ -53,21 +53,19 @@ const char *sec_usb_conn_str(int usb_conn_sts)
 }
 
 #if IS_ENABLED(CONFIG_DUAL_BATTERY)
+#define STANDARD_TEMP 250
 int sec_bat_get_high_priority_temp(struct sec_battery_info *battery)
 {
 	int priority_temp = battery->temperature;
-	int standard_temp = 250;
 
 	if (battery->pdata->sub_bat_thm_info.check_type == SEC_BATTERY_TEMP_CHECK_NONE)
 		return battery->temperature;
 
-	if ((battery->temperature > standard_temp) && (battery->sub_bat_temp > standard_temp)) {
-		if (battery->temperature < battery->sub_bat_temp)
-			priority_temp = battery->sub_bat_temp;
-	} else {
-		if (battery->temperature > battery->sub_bat_temp)
-			priority_temp = battery->sub_bat_temp;
-	}
+	/* take a higher temperature when main/sub temperature both have over 25'C, otherwise take a lower temperature */
+	if ((battery->temperature > STANDARD_TEMP) && (battery->sub_bat_temp > STANDARD_TEMP))
+		priority_temp = max(battery->temperature, battery->sub_bat_temp);
+	else
+		priority_temp = min(battery->temperature, battery->sub_bat_temp);
 
 	pr_info("%s priority_temp = %d\n", __func__, priority_temp);
 	return priority_temp;
@@ -476,6 +474,10 @@ void sec_bat_check_wpc_temp_v2(struct sec_battery_info *battery)
 				temp_trigger = battery->pdata->wpc_lrp_high_temp_12w;
 				temp_recovery = battery->pdata->wpc_lrp_high_temp_recovery_12w;
 				temp_reset_condition = battery->pdata->wpc_lrp_temp_v2_cond_12w;
+			} else {
+				temp_trigger = battery->pdata->wpc_lrp_high_temp;
+				temp_recovery = battery->pdata->wpc_lrp_high_temp_recovery;
+				temp_reset_condition = battery->pdata->wpc_lrp_temp_v2_cond;
 			}
 		} else {
 			temp_trigger = battery->pdata->wpc_lrp_high_temp;
@@ -1321,6 +1323,11 @@ void sec_bat_thermal_charging_status(struct sec_battery_info *battery)
 		return;
 	}
 
+	if ((battery->status == POWER_SUPPLY_STATUS_NOT_CHARGING) &&
+		((battery->health == POWER_SUPPLY_EXT_HEALTH_UNDERVOLTAGE) || \
+		(battery->health == POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE)))
+		return;
+
 #if defined(CONFIG_ENABLE_FULL_BY_SOC)
 	if ((battery->capacity >= 100) || (battery->status == POWER_SUPPLY_STATUS_FULL))
 		sec_bat_set_charging_status(battery, POWER_SUPPLY_STATUS_FULL);
@@ -1330,6 +1337,16 @@ void sec_bat_thermal_charging_status(struct sec_battery_info *battery)
 	if (battery->status != POWER_SUPPLY_STATUS_FULL)
 		sec_bat_set_charging_status(battery, POWER_SUPPLY_STATUS_CHARGING);
 #endif
+}
+
+void sec_bat_thermal_charging_health(struct sec_battery_info *battery)
+{
+	if ((battery->status == POWER_SUPPLY_STATUS_NOT_CHARGING) &&
+		((battery->health == POWER_SUPPLY_EXT_HEALTH_UNDERVOLTAGE) || \
+		(battery->health == POWER_SUPPLY_HEALTH_SAFETY_TIMER_EXPIRE)))
+		return;
+
+	sec_bat_set_health(battery, POWER_SUPPLY_HEALTH_GOOD);
 }
 
 int sec_usb_temp_gap_check(struct sec_battery_info *battery,
@@ -1690,7 +1707,7 @@ void sec_bat_thermal_check(struct sec_battery_info *battery)
 			sec_vote(battery->topoff_vote, VOTER_SWELLING, true, battery->pdata->full_check_current_2nd);
 			sec_vote(battery->iv_vote, VOTER_CHANGE_CHGMODE, false, 0);
 
-			sec_bat_set_health(battery, POWER_SUPPLY_HEALTH_GOOD);
+			sec_bat_thermal_charging_health(battery);
 			store_battery_log(
 				"THM_W:%d%%,%dmV,tbat(%d),ct(%s)",
 				battery->capacity, battery->voltage_now,
@@ -1713,7 +1730,7 @@ void sec_bat_thermal_check(struct sec_battery_info *battery)
 			sec_vote(battery->topoff_vote, VOTER_SWELLING, false, 0);
 			sec_vote(battery->chgen_vote, VOTER_SWELLING, true, SEC_BAT_CHG_MODE_CHARGING);
 			sec_vote(battery->iv_vote, VOTER_CHANGE_CHGMODE, false, 0);
-			sec_bat_set_health(battery, POWER_SUPPLY_HEALTH_GOOD);
+			sec_bat_thermal_charging_health(battery);
 			store_battery_log(
 				"THM_C1:%d%%,%dmV,tbat(%d),ct(%s)",
 				battery->capacity, battery->voltage_now,
@@ -1736,7 +1753,7 @@ void sec_bat_thermal_check(struct sec_battery_info *battery)
 			sec_vote(battery->topoff_vote, VOTER_SWELLING, false, 0);
 			sec_vote(battery->chgen_vote, VOTER_SWELLING, true, SEC_BAT_CHG_MODE_CHARGING);
 			sec_vote(battery->iv_vote, VOTER_CHANGE_CHGMODE, false, 0);
-			sec_bat_set_health(battery, POWER_SUPPLY_HEALTH_GOOD);
+			sec_bat_thermal_charging_health(battery);
 			store_battery_log(
 				"THM_C2:%d%%,%dmV,tbat(%d),ct(%s)",
 				battery->capacity, battery->voltage_now,
@@ -1760,7 +1777,7 @@ void sec_bat_thermal_check(struct sec_battery_info *battery)
 			sec_vote(battery->topoff_vote, VOTER_SWELLING, true, battery->pdata->full_check_current_2nd);
 			sec_vote(battery->chgen_vote, VOTER_SWELLING, true, SEC_BAT_CHG_MODE_CHARGING);
 			sec_vote(battery->iv_vote, VOTER_CHANGE_CHGMODE, false, 0);
-			sec_bat_set_health(battery, POWER_SUPPLY_HEALTH_GOOD);
+			sec_bat_thermal_charging_health(battery);
 			store_battery_log(
 				"THM_C3:%d%%,%dmV,tbat(%d),ct(%s)",
 				battery->capacity, battery->voltage_now,
@@ -1794,7 +1811,7 @@ void sec_bat_thermal_check(struct sec_battery_info *battery)
 			sec_vote(battery->chgen_vote, VOTER_SWELLING, false, 0);
 			sec_vote(battery->input_vote, VOTER_SWELLING, false, 0);
 			sec_vote(battery->iv_vote, VOTER_CHANGE_CHGMODE, false, 0);
-			sec_bat_set_health(battery, POWER_SUPPLY_HEALTH_GOOD);
+			sec_bat_thermal_charging_health(battery);
 			store_battery_log(
 				"THM_N:%d%%,%dmV,tbat(%d),ct(%s)",
 				battery->capacity, battery->voltage_now,
@@ -1880,3 +1897,4 @@ void sec_bat_thermal_check(struct sec_battery_info *battery)
 
 	return;
 }
+EXPORT_SYMBOL_KUNIT(sec_bat_thermal_check);

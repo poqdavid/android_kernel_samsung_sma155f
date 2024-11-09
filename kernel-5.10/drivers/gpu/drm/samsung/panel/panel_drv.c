@@ -106,6 +106,11 @@ static char *panel_state_names[] = {
 	"LPM",		/* LPM */
 };
 
+static char *panel_uevent_recovery_state_names[] = {
+	"PANEL_UEVENT_RECOVERY_IDLE",
+	"PANEL_UEVENT_RECOVERY_RUNNING",
+};
+
 /* panel workqueue */
 static char *panel_work_names[] = {
 	[PANEL_WORK_DISP_DET] = "disp-det",
@@ -118,8 +123,10 @@ static char *panel_work_names[] = {
 	[PANEL_WORK_CHECK_CONDITION] = "panel-condition-check",
 	[PANEL_WORK_UPDATE] = "panel-update",
 	[PANEL_WORK_EVASION_DISP_DET] = "evasion-disp-det",
+	[PANEL_WORK_LATE_PROBE] = "late_probe",
 };
 
+static void panel_late_probe_handler(struct work_struct *work);
 static void disp_det_handler(struct work_struct *data);
 static void conn_det_handler(struct work_struct *data);
 static void err_fg_handler(struct work_struct *data);
@@ -134,6 +141,7 @@ static void pcd_handler(struct work_struct *data);
 int panel_disp_det_state(struct panel_device *panel);
 int panel_conn_det_state(struct panel_device *panel);
 int panel_pcd_state(struct panel_device *panel);
+static int panel_parse_regulator(struct panel_device *panel);
 int panel_drv_set_regulators(struct panel_device *panel);
 static int panel_parse_power_ctrl(struct panel_device *panel);
 #if IS_ENABLED(CONFIG_SEC_PANEL_NOTIFIER_V2)
@@ -153,6 +161,7 @@ static panel_wq_handler panel_wq_handlers[] = {
 	[PANEL_WORK_CHECK_CONDITION] = panel_condition_handler,
 	[PANEL_WORK_UPDATE] = panel_update_handler,
 	[PANEL_WORK_EVASION_DISP_DET] = evasion_disp_det_handler,
+	[PANEL_WORK_LATE_PROBE] = panel_late_probe_handler,
 };
 
 static char *panel_thread_names[PANEL_THREAD_MAX] = {
@@ -1119,6 +1128,30 @@ enum panel_active_state panel_get_cur_state(struct panel_device *panel)
 }
 EXPORT_SYMBOL(panel_get_cur_state);
 
+int panel_set_uevent_recovery_state(struct panel_device *panel,
+		void *arg)
+{
+	enum panel_uevent_recovery_state state = (enum panel_uevent_recovery_state)arg;
+
+	if (!panel)
+		return -EINVAL;
+
+	if (panel->state.uevent_recovery == state)
+		return 0;
+
+	panel_info("%s -> %s\n",
+		panel_uevent_recovery_state_names[panel->state.uevent_recovery],
+		panel_uevent_recovery_state_names[state]);
+	panel->state.uevent_recovery = state;
+
+	return 0;
+}
+
+enum panel_uevent_recovery_state panel_get_uevent_recovery_state(struct panel_device *panel)
+{
+	return panel->state.uevent_recovery;
+}
+
 #if IS_ENABLED(CONFIG_SEC_PANEL_NOTIFIER_V2)
 static void panel_notify_panel_state(u32 state)
 {
@@ -1272,6 +1305,10 @@ int __set_panel_elvxx_power_off(struct panel_device *panel)
 int __set_panel_power(struct panel_device *panel, int power)
 {
 	int ret = 0;
+	enum panel_uevent_recovery_state recovery_state;
+	char *power_ctrl_name;
+
+	recovery_state = panel_get_uevent_recovery_state(panel);
 
 	if (panel->state.power == power) {
 		panel_warn("same status.. skip..\n");
@@ -1279,15 +1316,23 @@ int __set_panel_power(struct panel_device *panel, int power)
 	}
 
 	if (power == PANEL_POWER_ON) {
-		ret = panel_drv_power_ctrl_execute(panel, "panel_power_on");
-		if (ret < 0)
-			panel_warn("failed to execute panel_power_on, ret:%d\n", ret);
+		if (recovery_state == PANEL_UEVENT_RECOVERY_RUNNING &&
+			panel_drv_power_ctrl_exists(panel, "panel_recovery_power_on"))
+			power_ctrl_name = "panel_recovery_power_on";
+		else
+			power_ctrl_name = "panel_power_on";
 	} else {
-		ret = panel_drv_power_ctrl_execute(panel, "panel_power_off");
-		if (ret < 0)
-			panel_warn("failed to execute panel_power_off, ret:%d\n", ret);
+		if (recovery_state == PANEL_UEVENT_RECOVERY_RUNNING &&
+			panel_drv_power_ctrl_exists(panel, "panel_recovery_power_off"))
+			power_ctrl_name = "panel_recovery_power_off";
+		else
+			power_ctrl_name = "panel_power_off";
 	}
-	panel_info("power(%s)\n", power == PANEL_POWER_ON ? "on" : "off");
+	ret = panel_drv_power_ctrl_execute(panel, power_ctrl_name);
+	if (ret < 0)
+			panel_warn("failed to execute %s, ret:%d\n", power_ctrl_name, ret);
+
+	panel_info("power ctrl(%s) done\n", power_ctrl_name);
 
 	panel->state.power = power;
 
@@ -1478,6 +1523,7 @@ static int __panel_seq_init(struct panel_device *panel)
 	if (ret)
 		panel_err("failed to aod init_panel\n");
 #endif
+	panel_bl_clear_brightness_non_zero_set_count(panel_bl);
 	panel_bl_set_saved_flag(panel_bl, false);
 	panel_mutex_unlock(&panel_bl->lock);
 
@@ -2935,14 +2981,14 @@ static int panel_replace_pnobj_list(struct panel_device *panel, struct list_head
 			panel_property_destroy(prop);
 			continue;
 		}
-		
+
 		/* set maptbl pdata */
 		if (IS_CMD_TYPE_MAP(type))
 			pnobj_container_of(pos,
 					struct maptbl)->pdata = panel;
 		list_move_tail(get_pnobj_list(pos), list);
 
-		panel_info("pnobj:%s\n", get_pnobj_name(pos));
+		panel_dbg("pnobj:%s\n", get_pnobj_name(pos));
 	}
 
 	return 0;
@@ -3158,8 +3204,19 @@ static int panel_resource_init(struct panel_device *panel)
 
 static int panel_boot_on(struct panel_device *panel)
 {
+	struct panel_bl_device *panel_bl;
+
 	if (!panel)
 		return -EINVAL;
+
+	panel_bl = &panel->panel_bl;
+
+	/*
+	 * Assume that Bootloader step have finished
+	 * doing "first non-zero brightness routine" already.
+	 * Add count to prevent duplicated routine running.
+	 */
+	atomic_set(&panel_bl->props.brightness_non_zero_set_count, 2);
 
 	__panel_seq_boot(panel);
 
@@ -3426,6 +3483,17 @@ int panel_vcom_trim_test(struct panel_device *panel, u8 *buf, int len)
 	return ops->vcom_trim_test(panel, buf, len);
 }
 #endif
+
+int panel_check_mipi_read_test(struct panel_device *panel, char *buf)
+{
+	struct ddi_ops *ops = &panel->panel_data.ddi_ops;
+
+	if (!ops->check_mipi_read) {
+		panel_warn("not supported");
+		return -ENOENT;
+	}
+	return ops->check_mipi_read(panel, buf);
+}
 
 int panel_ddi_init(struct panel_device *panel)
 {
@@ -4024,6 +4092,7 @@ static int panel_init_property(struct panel_device *panel)
 	panel_data->props.lpm_opr = 250;		/* default LPM OPR 2.5 */
 	panel_data->props.cur_lpm_opr = 250;	/* default LPM OPR 2.5 */
 	panel_data->props.panel_partial_disp = 0;
+	panel_data->props.is_valid_mtp = 0;		// default
 	panel_set_property(panel, &panel_data->props.dia_mode, 1);
 	panel_set_property(panel, &panel_data->props.irc_mode, IRC_MODE_MODERATO);
 
@@ -4216,6 +4285,12 @@ int panel_probe(struct panel_device *panel)
 	int ret = 0;
 	struct panel_info *panel_data;
 	struct common_panel_info *info;
+	static bool panel_probe_done;
+
+	if (panel_probe_done) {
+		panel_info("already done.\n");
+		return 0;
+	}
 
 	panel_info("+\n");
 
@@ -4232,6 +4307,7 @@ int panel_probe(struct panel_device *panel)
 		return -ENODEV;
 	}
 
+#if !defined(CONFIG_USDM_PANEL_LATE_PROBE)
 	ret = panel_parse_power_ctrl(panel);
 	if (ret < 0) {
 		panel_err("panel-%d:failed to parse power_ctrl\n", panel->id);
@@ -4249,7 +4325,7 @@ int panel_probe(struct panel_device *panel)
 		panel_err("failed to set regulators\n");
 		return ret;
 	}
-
+#endif
 	panel_init_v4l2_subdev(panel);
 
 #ifdef CONFIG_USDM_COPR_SPI
@@ -4448,11 +4524,120 @@ int panel_probe(struct panel_device *panel)
 #endif
 
 	panel->cpi = info;
+	panel_probe_done = true;
 
 	panel_info("-\n");
 
 	return 0;
 }
+
+static void panel_late_probe_handler(struct work_struct *work)
+{
+	struct panel_work *w = container_of(to_delayed_work(work),
+			struct panel_work, dwork);
+	struct panel_device *panel = container_of(w,
+			struct panel_device, work[PANEL_WORK_LATE_PROBE]);
+	int ret;
+
+	panel_info("++\n");
+
+	ret = panel_parse_regulator(panel);
+	if (ret < 0) {
+		panel_err("panel-%d:failed to parse regulator\n", panel->id);
+		return;
+	}
+
+	ret = panel_parse_power_ctrl(panel);
+	if (ret < 0) {
+		panel_err("panel-%d:failed to parse power_ctrl\n", panel->id);
+		return;
+	}
+
+	ret = panel_initialize_regulator(panel);
+	if (ret < 0) {
+		panel_warn("error occurred during initialize regulator\n");
+		return;
+	}
+
+	ret = panel_drv_set_regulators(panel);
+	if (ret < 0) {
+		panel_err("failed to set regulators\n");
+		return;
+	}
+
+	panel_info("--\n");
+}
+
+/*
+ * Return num of ddi modules (n) + num of adpater (1)
+ */
+static int panel_get_need_vote_up_count(struct panel_device *panel)
+{
+	struct device *dev = panel->dev;
+	struct device_node *lookup_np, *panel_np;
+	int num = 0;
+	struct property *pp;
+
+	/* Count how many panel module probe */
+	lookup_np = of_get_child_by_name(dev->of_node, "panel-lut");
+
+	for_each_property_of_node(lookup_np, pp) {
+		if (!strcmp(pp->name, "name") || !strcmp(pp->name, "phandle"))
+			continue;
+
+		panel_np = of_parse_phandle(lookup_np, pp->name, 0);
+		if (!panel_np)
+			continue;
+
+		num++;
+		panel_info("%s (num:%d)\n", panel_np->name, num);
+	}
+
+	/* Add one for adpater */
+	num++;
+
+	panel_info("target cnt(%d)\n", num);
+
+	of_node_put(lookup_np);
+
+	return num;
+}
+
+/*
+ * int panel_vote_up_to_probe(struct panel_device *panel)
+ * If all ddi modules and adapter module is ready,
+ * This func calls panel_probe().
+ */
+
+int panel_vote_up_to_probe(struct panel_device *panel)
+{
+	static struct panel_device *reserved_panel;
+	static int vote_up_count;
+	static int need_vote_up_count;
+
+	vote_up_count++;
+
+	panel_info("vote_up_count(%d)\n", vote_up_count);
+
+	if (panel)
+		reserved_panel = panel;
+
+	if (!reserved_panel)
+		return -EAGAIN;
+
+	if (!need_vote_up_count)
+		need_vote_up_count = panel_get_need_vote_up_count(reserved_panel);
+
+	if (vote_up_count >= need_vote_up_count) {
+		panel_info("probe start! vote_up_count(%d) need_vote_up_count(%d)\n",
+				vote_up_count, need_vote_up_count);
+		panel_probe(reserved_panel);
+		return 0;
+	}
+
+	return -EAGAIN;
+}
+EXPORT_SYMBOL(panel_vote_up_to_probe);
 
 int panel_remove(struct panel_device *panel)
 {
@@ -5041,6 +5226,25 @@ int panel_get_rcd_info(struct panel_device *panel, void *arg)
 	return 0;
 }
 #endif
+
+int panel_set_brightness(struct panel_device *panel, unsigned int level)
+{
+	if (!panel) {
+		panel_err("invalid argument\n");
+		return -EINVAL;
+	}
+
+	if (level > panel->panel_bl.bd->props.max_brightness) {
+		panel_err("level(%d) is over max(%d)!\n",
+			level, panel->panel_bl.bd->props.max_brightness);
+		return -EINVAL;
+	}
+
+	panel->panel_bl.bd->props.brightness = level;
+	panel_update_brightness(panel);
+
+	return 0;
+}
 
 #if defined(CONFIG_USDM_PANEL_DISPLAY_MODE)
 int panel_get_display_mode(struct panel_device *panel, void *arg)
@@ -6522,11 +6726,13 @@ int panel_parse_dt(struct panel_device *panel)
 		return ret;
 	}
 
+#if !defined(CONFIG_USDM_PANEL_LATE_PROBE)
 	ret = panel_parse_regulator(panel);
 	if (ret < 0) {
 		panel_err("panel-%d:failed to parse regulator\n", panel->id);
 		return ret;
 	}
+#endif
 
 	ret = panel_parse_panel_lookup(panel);
 	if (ret < 0) {
@@ -7161,6 +7367,9 @@ struct panel_drv_funcs panel_drv_funcs = {
 	.get_ddi_props = panel_get_ddi_props,
 	.get_rcd_info = panel_get_rcd_info,
 	.first_frame = panel_first_frame,
+
+	.set_brightness = panel_set_brightness,
+	.set_uevent_recovery_state = panel_set_uevent_recovery_state,
 };
 
 int panel_device_init(struct panel_device *panel)
@@ -7319,6 +7528,11 @@ int panel_device_init(struct panel_device *panel)
 #endif
 
 	list_add_tail(&panel->list, &panel_device_list);
+
+#if defined(CONFIG_USDM_PANEL_LATE_PROBE)
+	queue_delayed_work(panel->work[PANEL_WORK_LATE_PROBE].wq,
+			&panel->work[PANEL_WORK_LATE_PROBE].dwork, msecs_to_jiffies(5000));
+#endif
 
 	panel_info("done\n");
 

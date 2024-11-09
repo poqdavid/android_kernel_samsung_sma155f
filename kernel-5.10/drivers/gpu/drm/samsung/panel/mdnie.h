@@ -43,7 +43,7 @@ typedef u8 mdnie_t;
 #define IS_HMD_MODE(_mdnie_)			(((_mdnie_)->props.hmd > HMD_MDNIE_OFF) && ((_mdnie_)->props.hmd < HMD_MDNIE_MAX))
 #define IS_NIGHT_MODE(_mdnie_)			(((_mdnie_)->props.night >= NIGHT_MODE_ON) && ((_mdnie_)->props.night < NIGHT_MODE_MAX))
 #define IS_COLOR_LENS_MODE(_mdnie_)		(((_mdnie_)->props.color_lens >= COLOR_LENS_ON) && ((_mdnie_)->props.color_lens < COLOR_LENS_MAX))
-#define IS_HBM_CE_MODE(_mdnie_)			((_mdnie_)->props.hbm_ce_level > 0)
+#define IS_HBM_CE_MODE(_mdnie_)			(((_mdnie_)->props.extra_dim_level == 0) && ((_mdnie_)->props.hbm_ce_level > 0))
 #define IS_SCENARIO_MODE(_mdnie_)		(((_mdnie_)->props.scenario >= UI_MODE && (_mdnie_)->props.scenario <= VIDEO_NORMAL_MODE) || \
 		((_mdnie_)->props.scenario >= CAMERA_MODE && (_mdnie_)->props.scenario < SCENARIO_MAX))
 #define IS_LDU_MODE(_mdnie_)			(((_mdnie_)->props.ldu > LDU_MODE_OFF) && ((_mdnie_)->props.ldu < MAX_LDU_MODE))
@@ -309,6 +309,8 @@ enum TRANS_MODE {
 
 #define MDNIE_TRANS_MODE_PROPERTY ("mdnie_trans_mode")
 
+#define MDNIE_VIVIDNESS_LEVEL_PROPERTY ("mdnie_vividness_level")
+
 #define MDNIE_ENABLE_PROPERTY ("mdnie_enable")
 
 #define MDNIE_PRE_SEQ ("mdnie_pre_seq")
@@ -388,6 +390,7 @@ struct cal_coef {
 #define MAX_HBM_CE_LEVEL (64)
 #define MAX_ANTI_GLARE_LEVEL (6)
 #define MAX_EXTRA_DIM_LEVEL (100)
+#define MAX_VIVIDNESS_LEVEL (3)
 
 struct mdnie_tune {
 	struct seqinfo *seqtbl;
@@ -439,6 +442,7 @@ struct mdnie_properties {
 	u32 hbm_ce_level;
 	u32 anti_glare_level;
 	u32 extra_dim_level;
+	u32 vividness_level;
 
 	/* for color adjustment */
 	u8 scr[MAX_MDNIE_SCR_LEN];

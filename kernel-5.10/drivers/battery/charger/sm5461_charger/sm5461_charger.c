@@ -24,7 +24,7 @@
 #endif
 #include "sm5461_charger.h"
 
-#define SM5461_DC_VERSION  "WJ1"
+#define SM5461_DC_VERSION  "XA3"
 
 static u32 SM5461_freq_val[] = {
 	200, 375, 500, 750, 1000, 1250, 1500
@@ -745,7 +745,7 @@ static int psy_chg_get_health(struct sm5461_charger *sm5461)
 	struct sm_dc_info *sm_dc = select_sm_dc_info(sm5461);
 	int state = sm_dc_get_current_state(sm_dc);
 	int health = POWER_SUPPLY_HEALTH_GOOD;
-	u8 flag, chg_on;
+	u8 flag1, flag2, flag3, flag4, chg_on;
 
 	if (state == SM_DC_ERR) {
 		health = POWER_SUPPLY_EXT_HEALTH_DC_ERR;
@@ -753,15 +753,18 @@ static int psy_chg_get_health(struct sm5461_charger *sm5461)
 			__func__, state, health);
 	} else if (state >= SM_DC_PRE_CC && state <= SM_DC_CV) {
 		chg_on = sm5461_check_charging_enable(sm5461);
-		flag = sm5461_get_flag_status(sm5461, SM5461_REG_FLAG3);
+		sm5461_read_reg(sm5461, SM5461_REG_FLAG1, &flag1);
+		sm5461_read_reg(sm5461, SM5461_REG_FLAG2, &flag2);
+		sm5461_read_reg(sm5461, SM5461_REG_FLAG3, &flag3);
+		sm5461_read_reg(sm5461, SM5461_REG_FLAG4, &flag4);
 		if (chg_on == false) {
 			health = POWER_SUPPLY_EXT_HEALTH_DC_ERR;
-		} else if (((flag >> 7) & 0x1) == 0x0) {    /* VBUS_POK status is disabled */
+		} else if (((flag3 >> 7) & 0x1) == 0x0) {    /* VBUS_POK status is disabled */
 			health = POWER_SUPPLY_EXT_HEALTH_DC_ERR;
 		}
 
-		dev_info(sm5461->dev, "%s: chg_on=%d, flag3=0x%x, health=%d\n",
-			__func__, chg_on, flag, health);
+		dev_info(sm5461->dev, "%s: chg_on=%d, FLAG:0x%x:0x%x:0x%x:0x%x, health=%d\n",
+			__func__, chg_on, flag1, flag2, flag3, flag4, health);
 	}
 
 	return health;
@@ -1239,7 +1242,7 @@ static int sm5461_dc_set_charging_config(struct i2c_client *i2c, u32 cv_gl, u32 
 
 	vbatreg = cv_gl + SM5461_CV_OFFSET;
 	if (ci_gl <= SM5461_TA_MIN_CURRENT)
-		ibuslim = ci_gl + (SM5461_CI_OFFSET * 2);
+		ibuslim = ci_gl + (SM5461_CI_OFFSET * 3 / 2);
 	else
 		ibuslim = ci_gl + SM5461_CI_OFFSET;
 
@@ -1700,6 +1703,13 @@ static int sm5461_charger_parse_dt(struct device *dev,
 	}
 	dev_info(dev, "parse_dt: single_mode=%d\n", pdata->single_mode);
 
+	ret = of_property_read_u32(np_sm5461, "sm5461,vbus_ctrl_mode", &pdata->vbus_ctrl_mode);
+	if (ret) {
+		dev_info(dev, "%s: sm5461,vbus_ctrl_mode is Empty\n", __func__);
+		pdata->vbus_ctrl_mode = 0;
+	}
+	dev_info(dev, "parse_dt: vbus_ctrl_mode=%d\n", pdata->vbus_ctrl_mode);
+
 	ret = of_property_read_u32(np_sm5461, "sm5461,fpdo_topoff", &pdata->fpdo_topoff);
 	if (ret) {
 		pr_info("%s: sm5461,fpdo_topoff is Empty\n", __func__);
@@ -2044,6 +2054,7 @@ static int sm5461_charger_probe(struct i2c_client *i2c,
 	pps_dc->config.dc_vbus_ovp_th = 11000;
 	pps_dc->config.r_ttl = pdata->r_ttl;
 	pps_dc->config.topoff_current = pdata->topoff;
+	pps_dc->config.vbus_ctrl_mode = pdata->vbus_ctrl_mode;
 	pps_dc->config.fpdo_topoff = pdata->fpdo_topoff;
 	pps_dc->config.fpdo_mainvbat_reg = pdata->fpdo_mainvbat_reg;
 	pps_dc->config.fpdo_subvbat_reg = pdata->fpdo_subvbat_reg;

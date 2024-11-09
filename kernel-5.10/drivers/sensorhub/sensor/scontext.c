@@ -145,7 +145,7 @@ void shub_report_scontext_notice_data(char notice)
 
 }
 
-int convert_ap_status(int command)
+int convert_ap_status(unsigned char command)
 {
 	int ret = -1;
 
@@ -176,7 +176,7 @@ int convert_ap_status(int command)
 	return ret;
 }
 
-int shub_scontext_send_cmd(const char *buf, int count)
+int shub_scontext_send_cmd(const unsigned char *buf, int count)
 {
 	int ret = 0;
 	int convert_status = 0;
@@ -297,10 +297,10 @@ void get_ss_sensor_name(int type, char *buf, int buf_size)
 	}
 }
 
-int shub_scontext_send_instruction(const char *buf, int count)
+int shub_scontext_send_instruction(const unsigned char *buf, int count)
 {
 	char cmd, type, sub_cmd = 0;
-	char *buffer = (char *)(buf + 2);
+	unsigned char *buffer = (unsigned char *)(buf + 2);
 	int length = count - 2;
 	char name[SCONTEXT_NAME_MAX] = "";
 

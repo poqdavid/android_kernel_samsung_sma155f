@@ -202,7 +202,9 @@ struct sm_dc_info {
 		u32 ci_gl_m;
 		u32 ci_gl_s;
 		u32 cc_gl;
+		u32 target_pps_v;
 		int retry_cnt;
+		int vbatreg_cnt;
 	} wq;
 
 	struct {
@@ -220,6 +222,7 @@ struct sm_dc_info {
 		bool support_pd_remain;
 		/* sec_battery info */
 		u32 chg_float_voltage;
+		u32 vbus_ctrl_mode;
 		u32 fpdo_topoff;
 		u32 fpdo_mainvbat_reg;
 		u32 fpdo_subvbat_reg;

@@ -53,6 +53,12 @@ config SENSORS_COMMON_VDD_SUB
 	  This option enables function to control irq gpio of sub grip sensor
 	  in main grip sensor driver.
 
+config SENSORS_FOLDABLE_SMD
+	bool "SX9385 foldable smd"
+	default n
+	help
+	  Enable foldable smd mode
+	  This option enables foldable smd mode.
 
 config SENSORS_DUMP_DATA
 	tristate "Grip sensor dump log"
@@ -61,3 +67,14 @@ config SENSORS_DUMP_DATA
 	  Enable grip dump log data
 	  This option activates log output of grip error data using sensordump_notifier.
 
+config SENSORS_IRQ_PROCESSING_DELAY
+	depends on I2C
+	tristate "Grip IRQ processing delay"
+	default n
+	help
+	  Say Y here, Make irq thread is called after resume.
+
+config SENSORS_GRIP_FAILURE_DEBUG
+	bool "Grip failure debug"
+	help
+	  Say Y here, Enable Grip Failure debug flag.

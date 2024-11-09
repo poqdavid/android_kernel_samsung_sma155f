@@ -212,8 +212,10 @@ static int setup_direct_charging_work_config(struct sm_dc_info *sm_dc)
 	sm_dc->wq.ci_gl = MIN(sm_dc->ta.c_max, ((sm_dc->target_ibus * 100) / 100));
 	sm_dc->wq.cc_gl = sm_dc->wq.ci_gl * 2;
 	sm_dc->wq.retry_cnt = 0;
+	sm_dc->wq.vbatreg_cnt = 0;
 	sm_dc->wq.cc_cnt = 0;
 	sm_dc->wq.pps_vcm = 0;
+	sm_dc->wq.target_pps_v = sm_dc->ta.v;
 
 	pr_info("%s %s: CV_GL=%dmV, CI_GL=%dmA, CC_GL=%dmA\n", sm_dc->name, __func__,
 			sm_dc->wq.cv_gl, sm_dc->wq.ci_gl, sm_dc->wq.cc_gl);
@@ -419,7 +421,16 @@ static inline int _pd_pre_cc_check_limitation(struct sm_dc_info *sm_dc, int adc_
 						0 : ((sm_dc->ta.p_max / sm_dc->wq.ci_gl) - PPS_V_STEP);
 			}
 		}
-		sm_dc->ta.v = pps_v(MIN(calc_pps_v, sm_dc->config.dc_vbus_ovp_th - 350));
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+		sm_dc->wq.target_pps_v = pps_v(MIN(calc_pps_v, sm_dc->config.dc_vbus_ovp_th - 1020));
+#else
+		sm_dc->wq.target_pps_v = pps_v(MIN(calc_pps_v, sm_dc->config.dc_vbus_ovp_th - 350));
+#endif
+		if (sm_dc->ta.v > sm_dc->wq.target_pps_v)
+			sm_dc->ta.v = sm_dc->wq.target_pps_v;
+#if defined(CONFIG_SEC_FACTORY)
+		sm_dc->ta.v = sm_dc->wq.target_pps_v;
+#endif
 		pr_info("%s %s: R_TTL=%d, calc_reg_v=%dmV, calc_pps_v=%dmV\n",
 			sm_dc->name, __func__, sm_dc->config.r_ttl, calc_reg_v, calc_pps_v);
 		sm_dc->ta.c = sm_dc->ta.c;
@@ -434,8 +445,8 @@ static inline int _try_to_adjust_cc_up(struct sm_dc_info *sm_dc)
 	sm_dc->wq.cc_cnt += 1;
 
 	if ((sm_dc->wq.cc_cnt % 2) && (sm_dc->ta.c <= sm_dc->wq.ci_gl + (PPS_C_STEP * 4))
-		&& (sm_dc->ta.c != sm_dc->ta.c_max)) {
-		if ((sm_dc->ta.v * (sm_dc->ta.c + PPS_C_STEP) <= (sm_dc->ta.p_max / 100) * 107)) {
+		&& (sm_dc->config.vbus_ctrl_mode == 0) && (sm_dc->ta.c != sm_dc->ta.c_max)) {
+		if (sm_dc->ta.v * (sm_dc->ta.c + PPS_C_STEP) <= (sm_dc->ta.p_max / 100) * 107) {
 			sm_dc->ta.c += PPS_C_STEP;
 			if (sm_dc->ta.c > sm_dc->ta.c_max)
 				sm_dc->ta.c = sm_dc->ta.c_max;
@@ -461,7 +472,8 @@ static inline void _try_to_adjust_cc_down(struct sm_dc_info *sm_dc)
 {
 	sm_dc->wq.cc_cnt += 1;
 
-	if ((sm_dc->wq.cc_cnt % 2) && (sm_dc->ta.c >= sm_dc->wq.ci_gl - (PPS_C_STEP * 4))) {
+	if ((sm_dc->wq.cc_cnt % 2) && (sm_dc->ta.c >= sm_dc->wq.ci_gl - (PPS_C_STEP * 4))
+		&& (sm_dc->config.vbus_ctrl_mode == 0)) {
 		if (sm_dc->ta.c - PPS_C_STEP >= sm_dc->config.ta_min_current)
 			sm_dc->ta.c -= PPS_C_STEP;
 	} else {
@@ -565,6 +577,10 @@ static void pd_preset_dc_work(struct work_struct *work)
 		sm_dc->ta.v = (2 * adc_vbat) + _calc_pps_v_init_offset(sm_dc);
 		sm_dc->ta.v = pps_v(MAX(sm_dc->ta.v, sm_dc->config.ta_min_voltage));
 	}
+
+	if (sm_dc->config.vbus_ctrl_mode)
+		sm_dc->ta.c = pps_c(MIN(sm_dc->ta.c_max, sm_dc->target_ibus + (PPS_C_STEP * 3)));
+
 	ret = send_power_source_msg(sm_dc);
 	if (ret < 0)
 		return;
@@ -617,6 +633,20 @@ static void pd_pre_cc_work(struct work_struct *work)
 
 	switch (loop_status) {
 	case LOOP_VBATREG:
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+		if (sm_dc->wq.vbatreg_cnt < 4) { /* Wait 1sec for sub_chg*/
+			sm_dc->wq.vbatreg_cnt++;
+			pr_info("%s %s: VBATREG check cnt:(%d of 4)\n",
+					sm_dc->name, __func__, sm_dc->wq.vbatreg_cnt);
+			if (sm_dc->config.support_pd_remain) {
+				ret = send_power_source_msg(sm_dc);
+				if (ret < 0)
+					return;
+			}
+			request_state_work(sm_dc, SM_DC_PRE_CC, DELAY_PPS_UPDATE);
+			return;
+		}
+#endif
 		sm_dc->wq.cv_cnt = 0;
 		pr_info("%s %s: [request] pre-cc -> cv\n", sm_dc->name, __func__);
 		sm_dc->ops->set_adc_mode(sm_dc->i2c, SM_DC_ADC_MODE_CONTINUOUS);
@@ -660,7 +690,8 @@ static void pd_pre_cc_work(struct work_struct *work)
 		return;
 	}
 
-	_pd_pre_cc_check_limitation(sm_dc, adc_ibus, adc_vbus);
+	if (sm_dc->config.vbus_ctrl_mode == 0)
+		_pd_pre_cc_check_limitation(sm_dc, adc_ibus, adc_vbus);
 
 	if (adc_ibus > sm_dc->wq.ci_gl) {
 		sm_dc->wq.cc_limit = 0;
@@ -696,36 +727,55 @@ static void pd_pre_cc_work(struct work_struct *work)
 	}
 
 	if (sm_dc->wq.pps_cl) {
-		if ((adc_ibus < sm_dc->wq.ci_gl - (PPS_C_STEP * 6)) &&
-				(sm_dc->ta.c < ((sm_dc->wq.ci_gl * 85)/100)))
-			sm_dc->ta.c += (PPS_C_STEP * 3);
-		else
-			sm_dc->ta.c += PPS_C_STEP;
+		if (sm_dc->ta.v < sm_dc->wq.target_pps_v) {
+			sm_dc->ta.v += PPS_V_STEP * 5;
+			if (sm_dc->ta.v > sm_dc->wq.target_pps_v)
+				sm_dc->ta.v = sm_dc->wq.target_pps_v;
+			sm_dc->wq.v_up = 1;
+			sm_dc->wq.v_down = 0;
+		} else {
+			if ((adc_ibus < sm_dc->wq.ci_gl - (PPS_C_STEP * 6)) &&
+					(sm_dc->ta.c < ((sm_dc->wq.ci_gl * 85)/100)))
+				sm_dc->ta.c += (PPS_C_STEP * 3);
+			else
+				sm_dc->ta.c += PPS_C_STEP;
 
-		if (sm_dc->ta.c > sm_dc->ta.c_max)
-			sm_dc->ta.c = sm_dc->ta.c_max;
-		ret = send_power_source_msg(sm_dc);
-		if (ret < 0)
-			return;
-
-		sm_dc->wq.c_up = 1;
-		sm_dc->wq.c_down = 0;
-	} else {
-		sm_dc->ta.v += PPS_V_STEP;
-		if (sm_dc->ta.v > MIN(sm_dc->ta.v_max, sm_dc->config.dc_vbus_ovp_th - 350)) {
-			pr_info("%s %s: can't increase voltage(v:%d, v_max:%d)\n",
-				sm_dc->name, __func__, sm_dc->ta.v, sm_dc->ta.v_max);
-			sm_dc->ta.v = pps_v(MIN(sm_dc->ta.v_max, sm_dc->config.dc_vbus_ovp_th - 350));
-			sm_dc->wq.pps_cl = 1;
+			if (sm_dc->ta.c > sm_dc->ta.c_max)
+				sm_dc->ta.c = sm_dc->ta.c_max;
+			sm_dc->wq.c_up = 1;
+			sm_dc->wq.c_down = 0;
 		}
-
-		ret = send_power_source_msg(sm_dc);
-		if (ret < 0)
-			return;
-
+	} else {
+		if (sm_dc->config.vbus_ctrl_mode) {
+			sm_dc->ta.v += PPS_V_STEP * 2;
+#if defined(CONFIG_SEC_FACTORY)
+			sm_dc->ta.v += PPS_V_STEP * 2;
+#endif
+			if (sm_dc->ta.v > MIN(sm_dc->ta.v_max, sm_dc->config.dc_vbus_ovp_th - 350)) {
+				pr_info("%s %s: can't increase voltage(v:%d, v_max:%d)\n",
+					sm_dc->name, __func__, sm_dc->ta.v, sm_dc->ta.v_max);
+				sm_dc->ta.v = pps_v(MIN(sm_dc->ta.v_max, sm_dc->config.dc_vbus_ovp_th - 350));
+				sm_dc->wq.c_offset = 0;
+				sm_dc->wq.cc_limit = 0;
+				pr_info("%s %s: [request] pre_cc -> cc\n", sm_dc->name, __func__);
+				request_state_work(sm_dc, SM_DC_CC, DELAY_ADC_UPDATE);
+				return;
+			}
+		} else {
+			sm_dc->ta.v += PPS_V_STEP;
+			if (sm_dc->ta.v > MIN(sm_dc->ta.v_max, sm_dc->config.dc_vbus_ovp_th - 350)) {
+				pr_info("%s %s: can't increase voltage(v:%d, v_max:%d)\n",
+					sm_dc->name, __func__, sm_dc->ta.v, sm_dc->ta.v_max);
+				sm_dc->ta.v = pps_v(MIN(sm_dc->ta.v_max, sm_dc->config.dc_vbus_ovp_th - 350));
+				sm_dc->wq.pps_cl = 1;
+			}
+		}
 		sm_dc->wq.v_up = 1;
 		sm_dc->wq.v_down = 0;
 	}
+	ret = send_power_source_msg(sm_dc);
+	if (ret < 0)
+		return;
 
 	sm_dc->wq.prev_adc_vbus = adc_vbus;
 	sm_dc->wq.prev_adc_ibus = adc_ibus;
@@ -882,8 +932,13 @@ static void pd_cv_work(struct work_struct *work)
 		break;
 	}
 
+
 	/* occurred abnormal CV status */
+#if IS_ENABLED(CONFIG_DUAL_BATTERY)
+	if (adc_vbat < sm_dc->target_vbat - 200) {
+#else
 	if (adc_vbat < sm_dc->target_vbat - 100) {
+#endif
 		pr_info("%s %s: adnormal cv, [request] cv -> pre_cc\n", sm_dc->name, __func__);
 		sm_dc->ops->set_adc_mode(sm_dc->i2c, SM_DC_ADC_MODE_ONESHOT);
 		if (sm_dc->i2c_sub)
@@ -1077,7 +1132,12 @@ static void pd_update_bat_work(struct work_struct *work)
 		request_state_work(sm_dc, SM_DC_PRESET, DELAY_NONE);
 	} else {
 		setup_direct_charging_work_config(sm_dc);
-		sm_dc->ta.c = pps_c(sm_dc->wq.ci_gl - 200 - sm_dc->wq.c_offset);
+		if (sm_dc->config.vbus_ctrl_mode) {
+			sm_dc->ta.c = pps_c(MIN(sm_dc->ta.c_max, sm_dc->target_ibus + (PPS_C_STEP * 3)));
+		} else {
+			sm_dc->ta.c = pps_c(MAX(sm_dc->wq.ci_gl - 200 - sm_dc->wq.c_offset,
+						sm_dc->config.ta_min_current));
+		}
 		ret = send_power_source_msg(sm_dc);
 		if (ret < 0)
 			return;
@@ -1107,7 +1167,7 @@ static void sec_done_event_work(struct work_struct *work)
 	struct sm_dc_info *sm_dc = container_of(work, struct sm_dc_info, done_event_work.work);
 	union power_supply_propval value = {0, };
 
-	pr_info("%s called\n", __func__);
+	pr_info("%s %s called\n", sm_dc->name, __func__);
 
 	value.intval = 1;
 	psy_do_property(sm_dc->config.sec_dc_name, set, POWER_SUPPLY_EXT_PROP_DIRECT_DONE, value);
@@ -1246,6 +1306,7 @@ static int x2bat_setup_direct_charging_work_config(struct sm_dc_info *sm_dc)
 	sm_dc->wq.ci_gl = MIN(sm_dc->ta.c_max, sm_dc->target_ibus + target_ibus_sub);
 	sm_dc->wq.cc_gl = sm_dc->wq.ci_gl * 2;
 	sm_dc->wq.retry_cnt = 0;
+	sm_dc->wq.vbatreg_cnt = 0;
 	sm_dc->wq.cc_cnt = 0;
 	sm_dc->wq.topoff_m = 0;
 	sm_dc->wq.topoff_s = 0;

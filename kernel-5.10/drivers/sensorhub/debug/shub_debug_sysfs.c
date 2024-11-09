@@ -299,7 +299,8 @@ static ssize_t sensor_axis_store(struct device *dev, struct device_attribute *at
 		return -EINVAL;
 	}
 
-	sensor->funcs->set_position(position);
+	if (sensor->funcs && sensor->funcs->set_position)
+		sensor->funcs->set_position(position);
 
 	return size;
 }

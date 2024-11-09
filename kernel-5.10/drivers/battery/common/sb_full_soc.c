@@ -29,7 +29,8 @@ struct sb_full_soc {
 	bool eu_eco_rechg_state;
 	sec_battery_recharge_condition_t old_recharge_condition_type;
 	unsigned int old_recharge_condition_soc;
-	unsigned int old_swelling_low_rechg_soc;
+
+	bool eu_eco_chg_done;
 
 	struct mutex lock;
 	struct wakeup_source *ws;
@@ -147,11 +148,40 @@ bool is_eu_eco_rechg(struct sb_full_soc *fs)
 }
 EXPORT_SYMBOL(is_eu_eco_rechg);
 
+bool check_eu_eco_full_status(struct sec_battery_info *battery)
+{
+	struct sb_full_soc *fs = battery->fs;
+
+	if (fs == NULL)
+		return false;
+
+	if ((!fs->is_eu_eco_rechg) ||
+		(battery->status != POWER_SUPPLY_STATUS_FULL)) {
+		fs->eu_eco_chg_done = false;
+		return false;
+	}
+
+	if (battery->capacity >= 100) {
+		fs->eu_eco_chg_done = true;
+	} else if (fs->eu_eco_chg_done) {
+		fs->eu_eco_chg_done = false;
+
+		if ((battery->is_recharging) ||
+			(battery->charging_mode == SEC_BATTERY_CHARGING_2ND)) {
+			pr_info("%s: fixed the 2nd fullcharged!!!(%d, %d)\n",
+				__func__, battery->is_recharging, battery->charging_mode);
+			return true;
+		}
+	}
+
+	return false;
+}
+EXPORT_SYMBOL(check_eu_eco_full_status);
+
 static void enable_eu_eco_rechg(struct sec_battery_info *battery)
 {
 	battery->pdata->recharge_condition_type = SEC_BATTERY_RECHARGE_CONDITION_SOC;
 	battery->pdata->recharge_condition_soc = 100 - DEF_ECO_RECHG_DIF;
-	battery->pdata->swelling_low_rechg_soc = 90;
 }
 
 static void disable_eu_eco_rechg(struct sec_battery_info *battery)
@@ -160,8 +190,16 @@ static void disable_eu_eco_rechg(struct sec_battery_info *battery)
 
 	battery->pdata->recharge_condition_type = fs->old_recharge_condition_type;
 	battery->pdata->recharge_condition_soc = fs->old_recharge_condition_soc;
-	battery->pdata->swelling_low_rechg_soc = fs->old_swelling_low_rechg_soc;
 }
+
+bool check_eu_eco_rechg_ui_condition(struct sec_battery_info *battery)
+{
+	if (battery->pdata->recharge_condition_type & SEC_BATTERY_RECHARGE_CONDITION_SOC)
+		return (battery->capacity <= battery->pdata->recharge_condition_soc);
+
+	return false;
+}
+EXPORT_SYMBOL(check_eu_eco_rechg_ui_condition);
 
 static void eu_eco_work(struct work_struct *work)
 {
@@ -271,11 +309,10 @@ static ssize_t sb_full_soc_show_attrs(struct device *dev,
 			conv_full_cap_str(get_full_cap_event(battery->fs)));
 		break;
 	case BATT_FULL_SOC_TEST:
-		i += scnprintf(buf, PAGE_SIZE, "%d, 0x%x, %d, %d\n",
+		i += scnprintf(buf, PAGE_SIZE, "%d, 0x%x, %d\n",
 			is_eu_eco_rechg(battery->fs),
 			battery->pdata->recharge_condition_type,
-			battery->pdata->recharge_condition_soc,
-			battery->pdata->swelling_low_rechg_soc);
+			battery->pdata->recharge_condition_soc);
 		break;
 #endif
 	default:
@@ -321,7 +358,7 @@ static ssize_t sb_full_soc_store_attrs(struct device *dev,
 
 			store_battery_log("FCAP:%d%%->%d%%,%s->%s",
 				get_full_capacity(battery->fs), x,
-				conv_full_cap_str(get_full_cap_event(battery->fs)), full_cap_event);
+				conv_full_cap_str(get_full_cap_event(battery->fs)), conv_full_cap_str(full_cap_event));
 
 			set_full_capacity(battery->fs, x);
 			set_full_cap_event(battery->fs, full_cap_event);
@@ -366,15 +403,14 @@ static ssize_t sb_full_soc_store_attrs(struct device *dev,
 		break;
 	case BATT_FULL_SOC_TEST:
 	{
-		int x, y;
+		int x;
 
-		if (sscanf(buf, "%10d, %10d\n", &x, &y) != 2) {
+		if (sscanf(buf, "%10d\n", &x) != 1) {
 			pr_info("%s: invalid arguments\n", __func__);
 			return -EINVAL;
 		}
 
 		battery->pdata->recharge_condition_soc = x;
-		battery->pdata->swelling_low_rechg_soc = y;
 	}
 		break;
 #endif
@@ -436,6 +472,13 @@ void sec_bat_check_full_capacity(struct sec_battery_info *battery)
 {
 	int now_full_capacity = get_full_capacity(battery->fs);
 	int rechg_capacity = now_full_capacity - DEF_RECHG_SOC_DIF;
+
+	if (is_full_cap_event_highsoc(battery->fs) &&
+		(battery->capacity <= now_full_capacity)) {
+		set_full_cap_event(battery->fs, SB_FULL_CAP_EVENT_NONE);
+		sec_vote(battery->chgen_vote, VOTER_FULL_CAPACITY,
+			(battery->misc_event & BATT_MISC_EVENT_FULL_CAPACITY), SEC_BAT_CHG_MODE_CHARGING_OFF);
+	}
 
 	if (!is_full_capacity(battery->fs) ||
 		battery->status == POWER_SUPPLY_STATUS_DISCHARGING) {
@@ -510,7 +553,6 @@ int sb_full_soc_init(struct sec_battery_info *battery)
 	fs->eu_eco_rechg_state = false;
 	fs->old_recharge_condition_type = battery->pdata->recharge_condition_type;
 	fs->old_recharge_condition_soc = battery->pdata->recharge_condition_soc;
-	fs->old_swelling_low_rechg_soc = battery->pdata->swelling_low_rechg_soc;
 
 	battery->fs = fs;
 	return 0;

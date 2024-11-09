@@ -101,6 +101,8 @@
 
 #define MAX_I2C_FAIL_COUNT 3
 
+#define MAX_VDD_RETRY_CNT 100
+
 enum grip_error_state {
 	FAIL_UPDATE_PREV_STATE = 1,
 	FAIL_SETUP_REGISTER,
@@ -211,11 +213,41 @@ struct sx9385_p {
 	bool check_abnormal_working;
 };
 
+static int vdd_rerty_cnt;
+
 static int sx9385_set_mode(struct sx9385_p *data, unsigned char mode);
 
 static int sx9385_get_nirq_state(struct sx9385_p *data)
 {
 	return gpio_get_value_cansleep(data->gpio_nirq);
+}
+
+static void sx9385_send_event(struct sx9385_p *data, u8 state, struct channel *ch)
+{
+	if (state == ACTIVE) {
+		ch->state = ACTIVE;
+		data->prev_status |= ch->prox_mask;
+		GRIP_INFO("ch[%d] touched\n", ch->num);
+	} else if (state == IDLE) {
+		ch->state = IDLE;
+		data->prev_status &= ~(ch->prox_mask);
+		GRIP_INFO("ch[%d] released\n", ch->num);
+	} else {
+		ch->state = HAS_ERROR;
+		data->prev_status &= ~(ch->prox_mask);
+		GRIP_INFO("ch[%d] fail_safe!\n", ch->num);
+	}
+
+	if (data->skip_data == true) {
+		GRIP_INFO("skip grip event\n");
+		return;
+	}
+
+	input_report_rel(data->input, ch->grip_code, ch->state);
+
+	if (ch->unknown_sel)
+		input_report_rel(data->input, ch->unknown_code, ch->is_unknown_mode);
+	input_sync(data->input);
 }
 
 static void enter_unknown_mode(struct sx9385_p *data, int type, struct channel *ch)
@@ -248,12 +280,21 @@ static void enter_error_mode(struct sx9385_p *data, enum grip_error_state err_st
 		data->is_irq_active = false;
 	}
 
+	if (data->check_abnormal_working == false)
+		sx9385_set_mode(data, SX9385_MODE_SLEEP);
+
 	data->check_abnormal_working = true;
 	data->err_state |= 0x1 << err_state;
-	sx9385_set_mode(data, SX9385_MODE_SLEEP);
 
-	for (i = 0; i < data->num_of_channels; i++)
+	for (i = 0; i < data->num_of_channels; i++) {
+		if (atomic_read(&data->enable) == ON)
+			sx9385_send_event(data, HAS_ERROR, data->ch[i]);
 		enter_unknown_mode(data, TYPE_FORCE + err_state, data->ch[i]);
+	}
+
+#if IS_ENABLED(CONFIG_SENSORS_GRIP_FAILURE_DEBUG)
+	update_grip_error(0, data->err_state);
+#endif
 
 	GRIP_ERR("%d\n", data->err_state);
 }
@@ -300,12 +341,12 @@ static int sx9385_i2c_write(struct sx9385_p *data, u8 reg_addr, u8 buf)
 
 	if (ret < 0) {
 		data->fail_status_code |= SX9385_I2C_ERROR;
-		if (data->i2c_fail_count < MAX_I2C_FAIL_COUNT)
+		if (data->i2c_fail_count < MAX_I2C_FAIL_COUNT) {
 			data->i2c_fail_count++;
+			GRIP_ERR("err %d, %u\n", ret, data->i2c_fail_count);
+		}
 		if (data->i2c_fail_count >= MAX_I2C_FAIL_COUNT)
 			enter_error_mode(data, FAIL_I2C_READ_3_TIMES);
-
-		GRIP_ERR("err %d, %u", ret, data->i2c_fail_count);
 	} else {
 		data->i2c_fail_count = 0;
 	}
@@ -344,7 +385,7 @@ static int sx9385_i2c_read(struct sx9385_p *data, u8 reg_addr, u8 *buf)
 	if (data->i2c_fail_count < MAX_I2C_FAIL_COUNT) {
 			ret = i2c_transfer(data->client->adapter, msg, 2);
 			if (ret < 0) {
-				GRIP_ERR("err %d, %u", ret, msg[0].addr);
+				GRIP_ERR("err %d, %u\n", ret, msg[0].addr);
 		}
 	}
 
@@ -355,7 +396,7 @@ static int sx9385_i2c_read(struct sx9385_p *data, u8 reg_addr, u8 *buf)
 		if (data->i2c_fail_count >= MAX_I2C_FAIL_COUNT)
 			enter_error_mode(data, FAIL_I2C_READ_3_TIMES);
 
-		GRIP_ERR("err %d, %u", ret, data->i2c_fail_count);
+		GRIP_ERR("err %d, %u\n", ret, data->i2c_fail_count);
 	} else {
 		data->i2c_fail_count = 0;
 	}
@@ -409,18 +450,18 @@ static void sx9385_initialize_register(struct sx9385_p *data)
 
 		ret = sx9385_i2c_write_retry(data, reg_addr, reg_val);
 		if (ret < 0) {
-			GRIP_ERR("Failed to write reg=0x%x value=0x%X", reg_addr, reg_val);
+			GRIP_ERR("Failed to write reg=0x%x value=0x%X\n", reg_addr, reg_val);
 			data->fail_status_code |= SX9385_REG_ERROR;
 			enter_error_mode(data, FAIL_SETUP_REGISTER);
 			return;
 		}
 
-		{
+		if (reg_addr != REG_COMPENSATION) {
 			u8 buf = 0;
 
 			sx9385_i2c_read_retry(data, reg_addr, &buf);
 			if (reg_val != buf) {
-				GRIP_ERR("addr[0x%x] : write =0x%x read=0x%X", reg_addr, reg_val, buf);
+				GRIP_ERR("addr[0x%x] : write =0x%x read=0x%X\n", reg_addr, reg_val, buf);
 				data->fail_status_code = SX9385_REG_ERROR;
 				enter_error_mode(data, FAIL_SETUP_REGISTER);
 			}
@@ -467,7 +508,7 @@ static int sx9385_hardware_check(struct sx9385_p *data)
 	//Check th IRQ Status
 	while (sx9385_get_nirq_state(data) == INTERRUPT_LOW) {
 		sx9385_read_reg_stat(data);
-		GRIP_INFO("irq state : %d", sx9385_get_nirq_state(data));
+		GRIP_INFO("irq state : %d\n", sx9385_get_nirq_state(data));
 		if (++loop > 10) {
 			data->fail_status_code |= SX9385_NIRQ_ERROR;
 			return -ENXIO;
@@ -476,16 +517,14 @@ static int sx9385_hardware_check(struct sx9385_p *data)
 	}
 
 	ret = sx9385_i2c_read_retry(data, REG_DEV_INFO, &whoami);
-	if (ret < 0) {
+	if (ret < 0)
 		data->fail_status_code |= SX9385_ID_ERROR;
-		return data->fail_status_code;
-	}
 
 	GRIP_INFO("whoami 0x%x\n", whoami);
 
 	if (whoami != SX9385_WHOAMI_VALUE) {
 		data->fail_status_code |= SX9385_ID_ERROR;
-		return data->fail_status_code;
+		return -ENODEV;
 	}
 
 	return ret;
@@ -513,6 +552,8 @@ static int sx9385_set_phase_enable(struct sx9385_p *data, u8 ph)
 			return ret;
 		}
 
+		usleep_range(1000, 1100);
+
 		ret = sx9385_i2c_read_retry(data, REG_PHEN, &temp);
 		if (ret < 0) {
 			GRIP_ERR("ph en err\n");
@@ -527,6 +568,8 @@ static int sx9385_set_phase_enable(struct sx9385_p *data, u8 ph)
 			data->fail_status_code |= SX9385_SCAN_ERROR;
 			GRIP_ERR("ph en err\n");
 		}
+
+		usleep_range(5000, 5100);
 	}
 
 	return ret;
@@ -548,6 +591,17 @@ static int wait_for_convstat_clear(struct sx9385_p *data)
 		usleep_range(10000, 11000);
 	}
 	return convstat;
+}
+
+static void sx9385_print_registers(struct sx9385_p *data)
+{
+	u8 buf = 0;
+	int i = 0;
+
+	for (i = 0; i < data->num_regs; i++) {
+		sx9385_i2c_read(data, data->regs_addr_val[i].addr, &buf);
+		GRIP_INFO("reg=0x%x value=0x%X\n", data->regs_addr_val[i].addr, buf);
+	}
 }
 
 static int sx9385_set_phase_disable(struct sx9385_p *data, u8 ph)
@@ -578,6 +632,8 @@ static int sx9385_set_phase_disable(struct sx9385_p *data, u8 ph)
 			GRIP_ERR("ph disalbe err\n");
 			return ret;
 		}
+
+		usleep_range(5000, 5100);
 	}
 
 	return ret;
@@ -603,38 +659,9 @@ static int sx9385_manual_offset_calibration(struct sx9385_p *data)
 	}
 
 	if (ret < 0)
-		GRIP_ERR("Failed to calibrate. ret=%d", ret);
+		GRIP_ERR("Failed to calibrate. ret=%d\n", ret);
 
 	return ret;
-}
-
-
-static void sx9385_send_event(struct sx9385_p *data, u8 state, struct channel *ch)
-{
-	if (state == ACTIVE) {
-		ch->state = ACTIVE;
-		data->prev_status |= ch->prox_mask;
-		GRIP_INFO("ch[%d] touched\n", ch->num);
-	} else if (state == IDLE) {
-		ch->state = IDLE;
-		data->prev_status &= ~(ch->prox_mask);
-		GRIP_INFO("ch[%d] released\n", ch->num);
-	} else {
-		ch->state = HAS_ERROR;
-		data->prev_status &= ~(ch->prox_mask);
-		GRIP_INFO("ch[%d] released\n", ch->num);
-	}
-
-	if (data->skip_data == true) {
-		GRIP_INFO("skip grip event\n");
-		return;
-	}
-
-	input_report_rel(data->input, ch->grip_code, ch->state);
-
-	if (ch->unknown_sel)
-		input_report_rel(data->input, ch->unknown_code, ch->is_unknown_mode);
-	input_sync(data->input);
 }
 
 static void sx9385_get_gain(struct sx9385_p *data)
@@ -816,7 +843,7 @@ static int sx9385_set_mode(struct sx9385_p *data, unsigned char mode)
 	int ret = -EINVAL;
 	int ph;
 
-	if (data->check_abnormal_working) {
+	if (data->check_abnormal_working || data->i2c_fail_count >= MAX_I2C_FAIL_COUNT) {
 		GRIP_INFO("abnormal working\n");
 		return -1;
 	}
@@ -1013,10 +1040,9 @@ static ssize_t sx9385_sw_reset_show(struct device *dev,
 
 	GRIP_INFO("\n");
 	sx9385_manual_offset_calibration(data);
-	msleep(450);
-	sx9385_get_data(data);
+	msleep(400);
 
-	while (retry++ <= 10) {
+	while (retry++ <= 15) {
 		sx9385_i2c_read(data, REG_COMPENSATION, &compstat);
 		GRIP_INFO("compstat 0x%x\n", compstat);
 		if (data->num_of_channels == 2)
@@ -1030,8 +1056,12 @@ static ssize_t sx9385_sw_reset_show(struct device *dev,
 		msleep(50);
 	}
 
+	sx9385_get_data(data);
+
 	if (compstat == 0)
 		return snprintf(buf, PAGE_SIZE, "%d\n", 0);
+
+	sx9385_print_registers(data);
 	return snprintf(buf, PAGE_SIZE, "%d\n", -1);
 }
 
@@ -1108,7 +1138,7 @@ static ssize_t sx9385_avgnegfilt_show(struct device *dev,
 
 	sx9385_i2c_read(data, REG_PROX_CTRL3_PH2, &avgnegfilt);
 
-	avgnegfilt = (avgnegfilt & 0x70) >> 3;
+	avgnegfilt = (avgnegfilt & 0x70) >> 4;
 
 	if (avgnegfilt == 7)
 		return snprintf(buf, PAGE_SIZE, "1\n");
@@ -1800,7 +1830,7 @@ static ssize_t sx9385_avgnegfilt_b_show(struct device *dev,
 
 	sx9385_i2c_read(data, REG_PROX_CTRL3_PH4, &avgnegfilt);
 
-	avgnegfilt = (avgnegfilt & 0x70) >> 3;
+	avgnegfilt = (avgnegfilt & 0x70) >> 4;
 
 	if (avgnegfilt == 7)
 		return snprintf(buf, PAGE_SIZE, "1\n");
@@ -2371,7 +2401,7 @@ static void sx9385_debug_work_func(struct work_struct *work)
 	}
 
 	if (data->fail_status_code != 0)
-		GRIP_ERR("last err %d", data->fail_status_code);
+		GRIP_ERR("last err %d\n", data->fail_status_code);
 
 	if (atomic_read(&data->enable) == ON) {
 		u8 buf = 0;
@@ -2541,6 +2571,50 @@ static void sx9385_initialize_variable(struct sx9385_p *data)
 	atomic_set(&data->enable, OFF);
 }
 
+static int sx9385_check_dependency(struct device *dev, int ic_num)
+{
+	struct device_node *dNode = dev->of_node;
+	struct regulator *dvdd_vreg = NULL;	/* regulator */
+	char *dvdd_vreg_name = NULL;	/* regulator name */
+#ifdef CONFIG_SENSORS_FOLDABLE_SMD
+	int upper_c2c_det = -1;
+	int gpio_level = 0;	// low:Set, high:SMD
+
+	upper_c2c_det = of_get_named_gpio(dev->of_node, "upper-c2c-det-gpio", 0);
+
+	if (gpio_is_valid(upper_c2c_det)) {
+		gpio_level = gpio_get_value(upper_c2c_det);
+		pr_info("[GRIP_%s] %s need wait vdd(%d):%s\n", grip_name[ic_num], __func__, upper_c2c_det, gpio_level ? "No(SMD)":"Yes(SET)");
+
+		if (gpio_level)
+			return 0;
+	}
+#endif
+	if (vdd_rerty_cnt++ > MAX_VDD_RETRY_CNT)
+		return 0;
+
+	if (of_property_read_string_index(dNode, "sx9385,dvdd_vreg_name", 0,
+		(const char **)&dvdd_vreg_name)) {
+		dvdd_vreg_name = NULL;
+	}
+
+	pr_info("[GRIP_%s] %s dvdd_vreg_name %s (%d)\n", grip_name[ic_num], __func__, dvdd_vreg_name, vdd_rerty_cnt);
+
+	if (dvdd_vreg_name) {
+		if (dvdd_vreg == NULL) {
+			dvdd_vreg = regulator_get_optional(NULL, dvdd_vreg_name);
+			if (IS_ERR(dvdd_vreg)) {
+				pr_info("[GRIP_%s] %s\n", grip_name[ic_num], __func__);
+				return -EPROBE_DEFER;
+			}
+
+			pr_info("[GRIP_%s] %s regulator_is_enabled %d\n", grip_name[ic_num], __func__, regulator_is_enabled(dvdd_vreg));
+		}
+	}
+
+	return 0;
+}
+
 static int sx9385_parse_dt(struct sx9385_p *data, struct device *dev)
 {
 	struct device_node *dNode = dev->of_node;
@@ -2577,27 +2651,27 @@ static int sx9385_parse_dt(struct sx9385_p *data, struct device *dev)
 		data->num_of_refs = 1;
 	}
 
-	GRIP_INFO("number of channel= %d", data->num_of_channels);
+	GRIP_INFO("number of channel= %d\n", data->num_of_channels);
 
 	//load register settings
 	of_property_read_u32(dNode, "sx9385,reg-num", &data->num_regs);
-	GRIP_INFO("number of registers= %d", data->num_regs);
+	GRIP_INFO("number of registers= %d\n", data->num_regs);
 
 	if (unlikely(data->num_regs <= 0)) {
-		GRIP_ERR("Invalid reg_num= %d", data->num_regs);
+		GRIP_ERR("Invalid reg_num= %d\n", data->num_regs);
 		return -EINVAL;
 	} else {
 		// initialize platform reg data array
 		data->regs_addr_val = kzalloc(sizeof(struct reg_addr_val_s) * data->num_regs, GFP_KERNEL);
 		if (unlikely(!data->regs_addr_val)) {
-			GRIP_ERR("Failed to alloc memory, num_reg= %d", data->num_regs);
+			GRIP_ERR("Failed to alloc memory, num_reg= %d\n", data->num_regs);
 			return -ENOMEM;
 		}
 
 		if (of_property_read_u8_array(dNode, "sx9385,reg-init",
 								(u8 *)data->regs_addr_val,
 								data->num_regs * 2)) {
-			GRIP_ERR("Failed to load registers from the dts");
+			GRIP_ERR("Failed to load registers from the dts\n");
 			return -EINVAL;
 		}
 	}
@@ -2669,6 +2743,10 @@ static int sx9385_probe(struct i2c_client *client, const struct i2c_device_id *i
 
 	ic_num = (enum ic_num) of_device_get_match_data(&client->dev);
 	pr_info("[GRIP_%s] %s start 0x%x\n", grip_name[ic_num], __func__, client->addr);
+
+	ret = sx9385_check_dependency(&client->dev, ic_num);
+	if (ret < 0)
+		return ret;
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		pr_info("[GRIP_%s] i2c func err\n", grip_name[ic_num]);
@@ -2871,7 +2949,10 @@ static int sx9385_suspend(struct device *dev)
 		GRIP_ERR("s/w reset fail(%d)\n", cnt);
 
 	sx9385_set_debug_work(data, OFF, 1000);
-
+#if IS_ENABLED(CONFIG_SENSORS_IRQ_PROCESSING_DELAY)
+	if (data->is_irq_active)
+		disable_irq(data->irq);
+#endif
 	return 0;
 }
 static int sx9385_resume(struct device *dev)
@@ -2880,7 +2961,10 @@ static int sx9385_resume(struct device *dev)
 
 	GRIP_INFO("\n");
 	sx9385_set_debug_work(data, ON, 1000);
-
+#if IS_ENABLED(CONFIG_SENSORS_IRQ_PROCESSING_DELAY)
+	if (data->is_irq_active)
+		enable_irq(data->irq);
+#endif
 	return 0;
 }
 

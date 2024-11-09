@@ -54,6 +54,9 @@
 				status = "ok";
 				compatible = "sec_k250a_platform";
 				1p8_pvdd-supply = <&fixed_regulator4>;
+#if 0
+				i2c_node = <&i2c5>;
+#endif
 			};
 		};
 	};

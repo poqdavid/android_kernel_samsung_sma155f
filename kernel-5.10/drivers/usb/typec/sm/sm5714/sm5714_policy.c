@@ -634,7 +634,7 @@ static policy_state sm5714_usbpd_policy_src_give_sink_cap(
 		policy->tx_msg_header.msg_type = USBPD_Sink_Capabilities;
 		policy->tx_msg_header.port_data_role = data_role;
 		policy->tx_msg_header.port_power_role = power_role;
-		policy->tx_msg_header.num_data_objs = 1;
+		policy->tx_msg_header.num_data_objs = 2;
 
 		policy->tx_data_obj[0].power_data_obj_sink.op_current = 3000 / 10;
 		policy->tx_data_obj[0].power_data_obj_sink.voltage = 5000 / 50;
@@ -645,6 +645,17 @@ static policy_state sm5714_usbpd_policy_src_give_sink_cap(
 		policy->tx_data_obj[0].power_data_obj_sink.higher_capability = 0;
 		policy->tx_data_obj[0].power_data_obj_sink.dual_role_power = 1;
 		policy->tx_data_obj[0].power_data_obj_sink.supply_type =
+								POWER_TYPE_FIXED;
+
+		policy->tx_data_obj[1].power_data_obj_sink.op_current = 2000 / 10;
+		policy->tx_data_obj[1].power_data_obj_sink.voltage = 9000 / 50;
+		policy->tx_data_obj[1].power_data_obj_sink.reserved = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.data_role_swap = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.usb_comm_capable = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.externally_powered = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.higher_capability = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.dual_role_power = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.supply_type =
 								POWER_TYPE_FIXED;
 
 		sm5714_usbpd_send_msg(pd_data, &policy->tx_msg_header,
@@ -1081,7 +1092,7 @@ static policy_state sm5714_usbpd_policy_snk_give_sink_cap(
 		policy->tx_msg_header.msg_type = USBPD_Sink_Capabilities;
 		policy->tx_msg_header.port_data_role = USBPD_UFP;
 		policy->tx_msg_header.port_power_role = USBPD_SINK;
-		policy->tx_msg_header.num_data_objs = 1;
+		policy->tx_msg_header.num_data_objs = 2;
 
 		policy->tx_data_obj[0].power_data_obj_sink.op_current = 3000 / 10;
 		policy->tx_data_obj[0].power_data_obj_sink.voltage = 5000 / 50;
@@ -1093,6 +1104,17 @@ static policy_state sm5714_usbpd_policy_snk_give_sink_cap(
 		policy->tx_data_obj[0].power_data_obj_sink.dual_role_power = 1;
 		policy->tx_data_obj[0].power_data_obj_sink.supply_type =
 					POWER_TYPE_FIXED;
+
+		policy->tx_data_obj[1].power_data_obj_sink.op_current = 2000 / 10;
+		policy->tx_data_obj[1].power_data_obj_sink.voltage = 9000 / 50;
+		policy->tx_data_obj[1].power_data_obj_sink.reserved = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.data_role_swap = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.usb_comm_capable = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.externally_powered = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.higher_capability = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.dual_role_power = 0;
+		policy->tx_data_obj[1].power_data_obj_sink.supply_type =
+								POWER_TYPE_FIXED;
 
 		policy->sink_cap_received = 1;
 
@@ -3823,6 +3845,7 @@ void sm5714_usbpd_policy_work(struct work_struct *work)
 	dev_info(pd_data->dev, "%s Start, last_state = %x, state = %x\n",
 		__func__, policy->last_state, policy->state);
 
+	__pm_stay_awake(pd_data->policy_engine_wake);
 	do {
 		if (!policy->plug_valid) {
 			sm5714_info("%s : usbpd cable is empty\n", __func__);
@@ -4475,6 +4498,7 @@ void sm5714_usbpd_policy_work(struct work_struct *work)
 		policy->last_state = next_state;
 	} while (policy->state != next_state);
 
+	__pm_relax(pd_data->policy_engine_wake);
 	dev_info(pd_data->dev, "%s Finished, last_state = %x\n",
 			__func__, policy->last_state);
 }

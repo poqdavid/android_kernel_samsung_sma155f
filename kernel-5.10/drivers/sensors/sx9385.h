@@ -50,10 +50,10 @@ const char *module_name[GRIP_MAX_CNT] = {
 #define SX9385_STAT_COMPSTAT_ALL_FLAG (0x02 | 0x04)
 
 //Registers refered by the driver
-#define REG_IRQ_SRC         0x0 //smtc_read_and_clear_irq
-#define REG_PROX_STATUS     0x1 //smtc_i2c_read(self, REG_PROX_STATUS, &prox_state); if (prox_state & phase->prox_mask)
-#define REG_COMPENSATION    0x2 //    ret = smtc_i2c_write(self, REG_COMPENSATION, 0xF);
-#define REG_IRQ_MSK			0x4
+#define REG_IRQ_SRC         0x0
+#define REG_PROX_STATUS     0x1
+#define REG_COMPENSATION    0x2
+#define REG_IRQ_MSK         0x4
 #define REG_PHEN            0x9
 #define REG_GNRL_CTRL2      0xB
 #define REG_RESET           0x38
@@ -126,5 +126,9 @@ extern int sensors_register(struct device **dev, void *drvdata,
 			    struct device_attribute *attributes[], char *name);
 extern void sensors_unregister(struct device *dev,
 			       struct device_attribute *attributes[]);
+#endif
+
+#if IS_ENABLED(CONFIG_SENSORS_GRIP_FAILURE_DEBUG)
+extern void update_grip_error(u8 idx, u32 error_state);
 #endif
 #endif

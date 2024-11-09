@@ -336,8 +336,6 @@ int s2mpb03_recovery(struct s2mpb03_data *s2mpb03)
 			pr_info("%s: name(%s): max_uV(%d), min_uV(%d), always_on(%d), use_count(%d)\n",
 					__func__, rdev->constraints->name, rdev->constraints->max_uV,
 					rdev->desc->min_uV,	rdev->constraints->always_on, rdev->use_count);
-			// Make sure enabled registers are cleared
-			s2m_disable_regmap(rdev);
 
 			// Get and calculate voltage from regulator framework
 			vol = (rdev->constraints->min_uV - rdev->desc->min_uV) / rdev->desc->uV_step;

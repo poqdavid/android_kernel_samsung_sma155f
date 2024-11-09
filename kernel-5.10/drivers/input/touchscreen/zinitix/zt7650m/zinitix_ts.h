@@ -22,6 +22,9 @@
 
 #include <linux/miscdevice.h>
 #include <linux/timer.h>
+#if IS_ENABLED(CONFIG_CPU_IDLE)
+#include <linux/cpuidle.h>
+#endif
 #if IS_ENABLED(CONFIG_VBUS_NOTIFIER)
 #include <linux/muic/common/muic.h>
 #include <linux/muic/common/muic_notifier.h>

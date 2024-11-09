@@ -403,7 +403,7 @@ int sec_input_store_grip_data(struct device *dev, int *cmd_param)
 		if (cmd_param[1] == 0) {
 			pdata->grip_data.edgehandler_direction = 0;
 			input_info(true, dev, "%s: [edge handler] clear\n", __func__);
-		} else if (cmd_param[1] < 3) {
+		} else if (cmd_param[1] < 5) {
 			pdata->grip_data.edgehandler_direction = cmd_param[1];
 			pdata->grip_data.edgehandler_start_y = cmd_param[2];
 			pdata->grip_data.edgehandler_end_y = cmd_param[3];
@@ -879,7 +879,7 @@ static void sec_input_coord_log(struct device *dev, u8 t_id, int action)
 #if !IS_ENABLED(CONFIG_SAMSUNG_PRODUCT_SHIP)
 		input_info(true, dev,
 				"[P] tID:%d.%d x:%d y:%d z:%d major:%d minor:%d loc:%s tc:%d type:%X noise:(%x,%d%d), nlvl:%d, maxS:%d, hid:%d, fid:%d fod:%x\n",
-				t_id, (pdata->input_dev->mt->trkid - 1) & TRKID_MAX,
+				t_id, input_mt_get_value(&pdata->input_dev->mt->slots[t_id], ABS_MT_TRACKING_ID),
 				pdata->coord[t_id].x, pdata->coord[t_id].y, pdata->coord[t_id].z,
 				pdata->coord[t_id].major, pdata->coord[t_id].minor,
 				pdata->location, pdata->touch_count,
@@ -891,7 +891,7 @@ static void sec_input_coord_log(struct device *dev, u8 t_id, int action)
 #else
 		input_info(true, dev,
 				"[P] tID:%d.%d z:%d major:%d minor:%d loc:%s tc:%d type:%X noise:(%x,%d%d), nlvl:%d, maxS:%d, hid:%d, fid:%d fod:%x\n",
-				t_id, (pdata->input_dev->mt->trkid - 1) & TRKID_MAX,
+				t_id, input_mt_get_value(&pdata->input_dev->mt->slots[t_id], ABS_MT_TRACKING_ID),
 				pdata->coord[t_id].z, pdata->coord[t_id].major,
 				pdata->coord[t_id].minor, pdata->location, pdata->touch_count,
 				pdata->coord[t_id].ttype,
@@ -905,7 +905,7 @@ static void sec_input_coord_log(struct device *dev, u8 t_id, int action)
 #if !IS_ENABLED(CONFIG_SAMSUNG_PRODUCT_SHIP)
 		input_info(true, dev,
 				"[M] tID:%d.%d x:%d y:%d z:%d major:%d minor:%d loc:%s tc:%d type:%X noise:(%x,%d%d), nlvl:%d, maxS:%d, hid:%d, fid:%d fod:%x\n",
-				t_id, (pdata->input_dev->mt->trkid - 1) & TRKID_MAX,
+				t_id, input_mt_get_value(&pdata->input_dev->mt->slots[t_id], ABS_MT_TRACKING_ID),
 				pdata->coord[t_id].x, pdata->coord[t_id].y, pdata->coord[t_id].z,
 				pdata->coord[t_id].major, pdata->coord[t_id].minor,
 				pdata->location, pdata->touch_count,
@@ -916,7 +916,8 @@ static void sec_input_coord_log(struct device *dev, u8 t_id, int action)
 #else
 		input_info(true, dev,
 				"[M] tID:%d.%d z:%d major:%d minor:%d loc:%s tc:%d type:%X noise:(%x,%d%d), nlvl:%d, maxS:%d, hid:%d, fid:%d fod:%x\n",
-				t_id, (pdata->input_dev->mt->trkid - 1) & TRKID_MAX, pdata->coord[t_id].z,
+				t_id, input_mt_get_value(&pdata->input_dev->mt->slots[t_id], ABS_MT_TRACKING_ID),
+				pdata->coord[t_id].z,
 				pdata->coord[t_id].major, pdata->coord[t_id].minor,
 				pdata->location, pdata->touch_count,
 				pdata->coord[t_id].ttype, pdata->coord[t_id].noise_status,
