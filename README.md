@@ -11,6 +11,39 @@ Please unzip the toolchain file in the path where `build_kernel.sh` is located:
 - `kernel/prebuilts-master/`
 - `prebuilts/`
 
+### Patch the configs for KernelSU
+```bash
+./scripts/config --file kernel-5.10/arch/arm64/configs/a15_defconfig \
+  -d UH \
+  -d RKP \
+  -d KDP \
+  -d SECURITY_DEFEX \
+  -d INTEGRITY \
+  -d FIVE \
+  -d TRIM_UNUSED_KSYMS
+```
+
+```bash
+./scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
+  -d UH \
+  -d RKP \
+  -d KDP \
+  -d SECURITY_DEFEX \
+  -d INTEGRITY \
+  -d FIVE \
+  -d TRIM_UNUSED_KSYMS
+```
+
+```bash
+./scripts/config --file kernel-5.10/arch/arm64/configs/mgk_64_k510_defconfig \
+  -d UH \
+  -d RKP \
+  -d KDP \
+  -d INTEGRITY \
+  -d FIVE \
+  -d TRIM_UNUSED_KSYMS
+```
+
 ### Set Build Environment and Export Target Config
 ```bash
 cd kernel-5.10
@@ -40,3 +73,7 @@ cd ../kernel
 ```bash
 make clean
 ```
+
+## Acknowledgements
+
+This project includes code from the android_kernel_samsung_sm8550 project, licensed under the GPL-2.0.
