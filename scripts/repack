@@ -7,7 +7,9 @@ PARENTDIR=$(realpath "${SCRIPTDIR}/..")
 BINDIR=$(realpath "${SCRIPTDIR}/bin")
 MAGISKBOOT=$BINDIR/magiskboot
 KSUD=$BINDIR/ksud
+AVBTOOL=$BINDIR/avb/avbtool.py
 KERNELPATH=$PARENTDIR/out/target/product/a15/obj/KERNEL_OBJ/kernel-5.10/arch/arm64/boot/
+WORKSPACE=$BINDIR/workspace
 
 # Color Variables
 RED="\e[1;31m"
@@ -22,11 +24,18 @@ print_msg() {
 }
 
 # Script header
-print_msg "$GREEN" "\n - KernelSU Installer for Samsung kernel image - "
+print_msg "$GREEN" "\n - Boot image repack script for Samsung kernel image - "
 print_msg "$RED" "       by poqdavid \n"
 
 # Check requirements and environment
 checks() {
+    if [ ! -d "${WORKSPACE}" ]; then
+        cd $BINDIR
+        mkdir workspace > /dev/null 2>&1
+        cd $PARENTDIR
+    fi
+    rm -rf $WORKSPACE/*
+    
     if [ ! -d "${KERNELPATH}" ]; then
         print_msg "$RED" "Kernel path not found!"
         print_msg "$RED" "${KERNELPATH}"
@@ -59,6 +68,15 @@ checks() {
         print_msg "$GREEN" "lz4 is installed."
     fi
     
+    if ! command -v python3 &> /dev/null; then
+        print_msg "$RED" "python3 is not installed. Install it by running:"
+        print_msg "$RED" "sudo apt install python3 -y"
+        print_msg "$RED" "Aborting..."
+        exit 1
+    else
+        print_msg "$GREEN" "python3 is installed."
+    fi
+    
     # Uncompress if needed
     if [ -f "${PARENTDIR}/boot.img.lz4" ]; then
         lz4 -B6 --content-size -f boot.img.lz4 boot.img
@@ -72,18 +90,47 @@ checks() {
     fi
 }
 
-# Perform KernelSU patching
-ksud_patch() {
+# unpacking the boot.img
+unpack() {
+    cd $WORKSPACE
+    
+    print_msg "$GREEN" " "
+    print_msg "$GREEN" "Generating a signing key..."
+    
+    if [ ! -f sign.pem ];then
+        openssl genrsa -f4 -out sign.pem 4096 > /dev/null 2>&1
+    fi
+    
+    print_msg "$GREEN" "Unpacking boot image...\n"
+    $MAGISKBOOT unpack "${PARENTDIR}/boot.img"
+    
+    cd $PARENTDIR
+}
+
+# Repacking the Kernel image to boot.img
+repack() {
     if [ ! -f "${KERNELPATH}/Image" ]; then
         print_msg "$RED" "No Kernel Image found!"
         print_msg "$RED" "Aborting..."
         exit 1
     else
         cp -f "${KERNELPATH}/Image" "${KERNELPATH}/kernel"
-        $KSUD boot-patch -b "${PARENTDIR}/boot.img" --magiskboot "${MAGISKBOOT}" --kernel "${KERNELPATH}/kernel" --kmi android12-5.10
+        
+        # Repacking boot image
+        cd $WORKSPACE
+        print_msg "\n$GREEN" "Repacking boot image...\n"
+        $MAGISKBOOT repack "${PARENTDIR}/boot.img" "${WORKSPACE}/new-boot.img"
+        
+        #Signing boot image
+        python3 "${AVBTOOL}" extract_public_key --key sign.pem --output sign.pub.bin
+        python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $(wc -c $WORKSPACE/new-boot.img |cut -f 1 -d ' ') --image $WORKSPACE/new-boot.img --key sign.pem --algorithm SHA256_RSA4096
+        mv $WORKSPACE/new-boot.img $PARENTDIR/boot-repacked.img
+        
+        print_msg "\n$GREEN" "Done...\n"
     fi
 }
 
 # Execute the functions
 checks
-ksud_patch
+unpack
+repack

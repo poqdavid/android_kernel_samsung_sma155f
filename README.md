@@ -79,6 +79,11 @@ make clean
 - Place your boot.img here
 - Run ./scripts/kernelsu
 
+## Repack boot image
+
+- Place your boot.img here
+- Run ./scripts/repack
+
 ## Acknowledgements
 
 This project includes code from the https://github.com/fei-ke/android_kernel_samsung_sm8550/ project, licensed under the GPL-2.0.
@@ -86,3 +91,6 @@ This project includes code from the https://github.com/fei-ke/android_kernel_sam
 This project includes executable file/s from https://github.com/topjohnwu/Magisk/ project, licensed under the GPL-3.0.
 
 This project includes executable file/s from https://github.com/tiann/KernelSU/ project, licensed under the GPL-3.0.
+
+This project include file/s from https://android.googlesource.com/platform/external/avb project, licensed under the Apache License, Version 2.0.
+
