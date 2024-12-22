@@ -1058,8 +1058,8 @@ static int fts_read_parse_touchdata(struct fts_ts_data *data)
 		}
 	}
 
-	if ((buf[1] & 0x02) != atomic_read(&data->pdata->touch_noise_status)) {
-		atomic_set(&data->pdata->touch_noise_status, (buf[1] & 0x02));
+	if ((buf[1] & 0x08) != atomic_read(&data->pdata->touch_noise_status)) {
+		atomic_set(&data->pdata->touch_noise_status, (buf[1] & 0x08));
 
 		if (atomic_read(&data->pdata->touch_noise_status)) {
 			FTS_INFO("Noise mode on");
@@ -1128,6 +1128,13 @@ static int fts_read_parse_touchdata(struct fts_ts_data *data)
 		if (EVENT_DOWN(events[i].flag) && (data->point_num == 0)) {
 			FTS_INFO("abnormal touch data from fw");
 			return -EIO;
+		}
+
+		if ((events[i].flag == FTS_TOUCH_DOWN) || (events[i].flag == FTS_TOUCH_UP)
+			|| ((buf[1] & 0x80) == 0x80) || ((buf[1] & 0x10) == 0x10 )) {
+			FTS_INFO("water:%x, highSen:%x, palmF:%x, noiseF:%x, hoppingF:%x, freq_id:%x, baseline:%x",
+				(buf[1] & 0x01), (buf[1] & 0x02), (buf[1] & 0x04), (buf[1] & 0x08) ,
+				(buf[1] & 0x10), (buf[1] & 0x60), (buf[1] & 0x80));
 		}
 	}
 

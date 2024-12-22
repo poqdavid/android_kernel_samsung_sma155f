@@ -21,6 +21,10 @@
 #include "mtk_spm_resource_req.h"
 #endif
 
+#if IS_ENABLED(CONFIG_USB_NOTIFY_LAYER)
+#include <linux/usb_notify.h>
+#endif
+
 #define USB2_PORT 2
 
 enum mt_usb_vbus_id_state {
@@ -395,9 +399,17 @@ static ssize_t cmode_store(struct device *dev,
 			/* switch usb role to latest role */
 			break;
 		case MUSB_DR_OPERATION_HOST:
+#if IS_ENABLED(CONFIG_USB_NOTIFY_LAYER)
+			if (is_blocked(get_otg_notify(), NOTIFY_BLOCK_TYPE_HOST))
+				return -EINVAL;
+#endif
 			otg_sx->latest_role = USB_ROLE_HOST;
 			break;
 		case MUSB_DR_OPERATION_DEVICE:
+#if IS_ENABLED(CONFIG_USB_NOTIFY_LAYER)
+			if (is_blocked(get_otg_notify(), NOTIFY_BLOCK_TYPE_CLIENT))
+				return -EINVAL;
+#endif
 			otg_sx->latest_role = USB_ROLE_DEVICE;
 			break;
 		default:

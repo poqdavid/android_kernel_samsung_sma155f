@@ -2964,11 +2964,29 @@ void sm5714_mpsm_exit_mode_change(struct sm5714_phydrv_data *usbpd_data)
 {
 	struct sm5714_usbpd_data *pd_data = dev_get_drvdata(usbpd_data->dev);
 	int power_role = 0;
+#ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+	struct sm5714_usbpd_manager_data *manager = &pd_data->manager;
+	int data_role = 0;
+#endif
 
 	sm5714_get_power_role(pd_data, &power_role);
+#ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+	sm5714_get_data_role(pd_data, &data_role);
+	sm5714_info("%s : power_role : data_role : %d\n", __func__, data_role);
+#endif
 	switch (power_role) {
 	case PDIC_SINK: /* SNK */
-		sm5714_info("%s : do nothing for SNK\n", __func__);
+#ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+		if (data_role == USBPD_DFP) {
+			manager->alt_sended = 0;
+			manager->vdm_en = 0;
+			sm5714_info("%s : request vdm for SNK/DFP\n", __func__);
+			sm5714_usbpd_vdm_request_enabled(pd_data);
+		} else
+			sm5714_info("%s : do nothing for SNK/UFP\n", __func__);
+#else
+		sm5714_info("%s : do nothing for SNK/UFP\n", __func__);
+#endif
 		break;
 	case PDIC_SOURCE: /* SRC */
 		sm5714_info("%s : reattach to SRC\n", __func__);
@@ -3208,12 +3226,16 @@ void sm5714_vbus_turn_on_ctrl(struct sm5714_phydrv_data *usbpd_data,
 	struct sm5714_usbpd_data *pd_data = dev_get_drvdata(usbpd_data->dev);
 	struct sm5714_policy_data *policy = &pd_data->policy;
 	struct otg_notify *o_notify = get_otg_notify();
-	bool must_block_host = is_blocked(o_notify, NOTIFY_BLOCK_TYPE_HOST);
+	bool must_block_host = 0;
 	static int reserve_booster = 0;
 #ifdef CONFIG_USB_NOTIFY_PROC_LOG
 	int event;
 #endif
 
+#ifdef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+	if (o_notify)
+		must_block_host = is_blocked(o_notify, NOTIFY_BLOCK_TYPE_HOST);
+#endif
 	sm5714_info("%s : enable=%d, must_block_host=%d\n",
 		__func__, enable, must_block_host);
 	if (must_block_host) {
@@ -4005,7 +4027,9 @@ static int sm5714_handle_usb_external_notifier_notification(
 	case EXTERNAL_NOTIFY_HOSTBLOCK_PRE:
 		if (enable) {
 			sm5714_info("%s : EXTERNAL_NOTIFY_HOSTBLOCK_PRE\n", __func__);
-			/* sm5714_set_enable_alternate_mode(ALTERNATE_MODE_STOP); */
+#ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+			sm5714_set_enable_alternate_mode(ALTERNATE_MODE_STOP);
+#endif
 			sm5714_mpsm_enter_mode_change(pdic_data);
 			if (manager->dp_is_connect == 1)
 				sm5714_usbpd_dp_detach(pdic_data->dev);
@@ -4018,7 +4042,9 @@ static int sm5714_handle_usb_external_notifier_notification(
 		if (enable) {
 		} else {
 			sm5714_info("%s : EXTERNAL_NOTIFY_HOSTBLOCK_POST\n", __func__);
-			/* sm5714_set_enable_alternate_mode(ALTERNATE_MODE_START); */
+#ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+			sm5714_set_enable_alternate_mode(ALTERNATE_MODE_START);
+#endif
 			sm5714_mpsm_exit_mode_change(pdic_data);
 		}
 		break;
@@ -4272,6 +4298,9 @@ static int sm5714_usbpd_probe(struct i2c_client *i2c,
 	ppdic_data->pdic_sysfs_prop = ppdic_sysfs_prop;
 	ppdic_data->drv_data = pdic_data;
 	ppdic_data->name = "sm5714";
+#ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+	ppdic_data->set_enable_alternate_mode = sm5714_set_enable_alternate_mode;
+#endif
 	pdic_core_register_chip(ppdic_data);
 	ret = pdic_misc_init(ppdic_data);
 	if (ret) {

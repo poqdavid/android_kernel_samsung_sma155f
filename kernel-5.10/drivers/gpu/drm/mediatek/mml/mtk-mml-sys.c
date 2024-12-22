@@ -1227,10 +1227,14 @@ static int subcomp_init(struct platform_device *pdev, struct mml_sys *sys,
 			int subcomponent)
 {
 	struct device *dev = &pdev->dev;
-	struct mml_comp *comp = &sys->comps[subcomponent];
+	struct mml_comp *comp;
 	const struct mml_data *data = sys->data;
 	u32 comp_type = 0;
 	int ret;
+
+	if (subcomponent >= MML_MAX_SYS_COMPONENTS)
+		return -EINVAL;
+	comp = &sys->comps[subcomponent];
 
 	ret = mml_subcomp_init(pdev, subcomponent, comp);
 	if (ret)
@@ -1241,12 +1245,17 @@ static int subcomp_init(struct platform_device *pdev, struct mml_sys *sys,
 		dev_info(dev, "no comp-type of mmlsys comp-%d\n", subcomponent);
 		return 0;
 	}
-	if (comp_type < MML_COMP_TYPE_TOTAL)
-		if (data->comp_inits[comp_type]) {
-			ret = data->comp_inits[comp_type](dev, sys, comp);
-			if (ret)
-				return ret;
-		}
+	if (comp_type >= MML_COMP_TYPE_TOTAL) {
+		mml_err("%s comp_type %d >= TOTAL %d", __func__,
+			comp_type, MML_COMP_TYPE_TOTAL);
+		return -EINVAL;
+	}
+
+	if (data->comp_inits[comp_type]) {
+		ret = data->comp_inits[comp_type](dev, sys, comp);
+		if (ret)
+			return ret;
+	}
 
 	if (data->ddp_comp_funcs[comp_type]) {
 		ret = mml_ddp_comp_init(dev, &sys->ddp_comps[subcomponent],

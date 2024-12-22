@@ -1,6 +1,6 @@
 #
 # Automatically generated file; DO NOT EDIT.
-# Linux/arm64 5.10.198 Kernel Configuration
+# Linux/arm64 5.10.205 Kernel Configuration
 #
 CONFIG_CC_VERSION_TEXT="Android (7284624, based on r416183b) clang version 12.0.5 (https://android.googlesource.com/toolchain/llvm-project c935d99d7cf2016289302412d708641d52d2f7ee)"
 CONFIG_GCC_VERSION=0
@@ -5311,6 +5311,7 @@ CONFIG_USB_INTERFACE_LPM_LIST=y
 # CONFIG_USB_CCIC_NOTIFIER_USING_QC is not set
 CONFIG_USB_AUDIO_ENHANCED_DETECT_TIME=y
 CONFIG_USB_HOST_CERTI=y
+# CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION is not set
 CONFIG_USB_DWC3=y
 # CONFIG_USB_DWC3_HOST is not set
 # CONFIG_USB_DWC3_GADGET is not set
