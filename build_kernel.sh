@@ -11,5 +11,14 @@ export OUT_DIR="../out/target/product/a15/obj/KERNEL_OBJ"
 export DIST_DIR="../out/target/product/a15/obj/KERNEL_OBJ"
 export BUILD_CONFIG="../out/target/product/a15/obj/KERNEL_OBJ/build.config"
 
+./kernel-5.10/scripts/config --file ./out/target/product/a15/obj/KERNEL_OBJ/.config \
+  -d UH \
+  -d RKP \
+  -d KDP \
+  -d SECURITY_DEFEX \
+  -d INTEGRITY \
+  -d FIVE \
+  -d TRIM_UNUSED_KSYMS
+  
 cd ../kernel
 ./build/build.sh
