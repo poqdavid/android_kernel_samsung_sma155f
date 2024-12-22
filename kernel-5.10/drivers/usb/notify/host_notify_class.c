@@ -58,8 +58,10 @@ static ssize_t mode_store(
 		struct device *dev, struct device_attribute *attr,
 		const char *buf, size_t size)
 {
+#ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 	struct host_notify_dev *ndev = (struct host_notify_dev *)
 		dev_get_drvdata(dev);
+#endif
 
 	char *mode;
 	size_t ret = -ENOMEM;
@@ -75,6 +77,7 @@ static ssize_t mode_store(
 	if (sret != 1)
 		goto error1;
 
+#ifndef CONFIG_SAMSUNG_PRODUCT_SHIP
 	if (ndev->set_mode) {
 		pr_info("host_notify: set mode %s\n", mode);
 		if (!strncmp(mode, "HOST", 4))
@@ -82,6 +85,7 @@ static ssize_t mode_store(
 		else if (!strncmp(mode, "NONE", 4))
 			ndev->set_mode(NOTIFY_SET_OFF);
 	}
+#endif
 	ret = size;
 error1:
 	kfree(mode);
