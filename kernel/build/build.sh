@@ -797,6 +797,18 @@ elif [ -n "${LTO}" ]; then
   exit 1
 fi
 
+echo "========================================================"
+echo " Fixing configs for KernelSU"
+
+${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
+  -d UH \
+  -d RKP \
+  -d KDP \
+  -d SECURITY_DEFEX \
+  -d INTEGRITY \
+  -d FIVE \
+  -d TRIM_UNUSED_KSYMS
+
 if [ -n "${TAGS_CONFIG}" ]; then
   echo "========================================================"
   echo " Running tags command:"
