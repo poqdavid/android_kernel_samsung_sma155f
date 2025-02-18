@@ -6,7 +6,7 @@ SCRIPTDIR=$(dirname "$_")
 PARENTDIR=$(realpath "${SCRIPTDIR}/..")
 BINDIR=$(realpath "${SCRIPTDIR}/bin")
 MAGISKBOOT=$BINDIR/magiskboot
-KSUD=$BINDIR/ksud
+KSUD=$BINDIR/ksud-x86_64-unknown-linux-musl
 KERNELPATH=$PARENTDIR/out/target/product/a15/obj/KERNEL_OBJ/kernel-5.10/arch/arm64/boot/
 
 # Color Variables
@@ -59,14 +59,9 @@ checks() {
         print_msg "$GREEN" "lz4 is installed."
     fi
     
-    # Uncompress if needed
-    if [ -f "${PARENTDIR}/boot.img.lz4" ]; then
-        lz4 -B6 --content-size -f boot.img.lz4 boot.img
-    fi
-    
     # Check if boot image is available
-    if [ ! -f "${PARENTDIR}/boot.img" ]; then
-        print_msg "$RED" "Please put your boot.img inside ${PARENTDIR}!"
+    if [ ! -f "${PARENTDIR}/boot-repacked.img" ]; then
+        print_msg "$RED" "Please put your boot-repacked.img inside ${PARENTDIR}!"
         print_msg "$RED" "Aborting..."
         exit 1
     fi
@@ -80,7 +75,7 @@ ksud_patch() {
         exit 1
     else
         cp -f "${KERNELPATH}/Image" "${KERNELPATH}/kernel"
-        $KSUD boot-patch -b "${PARENTDIR}/boot.img" --magiskboot "${MAGISKBOOT}" --kernel "${KERNELPATH}/kernel" --kmi android12-5.10
+        $KSUD boot-patch -b "${PARENTDIR}/boot-repacked.img" --magiskboot "${MAGISKBOOT}" --kernel "${KERNELPATH}/kernel" --kmi android12-5.10
     fi
 }
 

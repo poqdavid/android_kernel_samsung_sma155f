@@ -807,7 +807,17 @@ ${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
   -d SECURITY_DEFEX \
   -d INTEGRITY \
   -d FIVE \
-  -d TRIM_UNUSED_KSYMS
+  -d TRIM_UNUSED_KSYMS \
+  -d PROCA \
+  -d PROCA_GKI_10 \
+  -d PROCA_S_OS \
+  -d PROCA_CERTIFICATES_XATTR \
+  -d PROCA_CERT_ENG \
+  -d PROCA_CERT_USER \
+  -d GAF_V6 \
+  -d FIVE \
+  -d FIVE_CERT_USER \
+  -d FIVE_DEFAULT_HASH
 
 if [ -n "${TAGS_CONFIG}" ]; then
   echo "========================================================"
