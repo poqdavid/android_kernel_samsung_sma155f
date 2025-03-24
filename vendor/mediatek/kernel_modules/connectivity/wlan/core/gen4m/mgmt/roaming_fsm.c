@@ -894,6 +894,12 @@ uint32_t roamingFsmProcessEvent(IN struct ADAPTER *prAdapter,
 	IN struct CMD_ROAMING_TRANSIT *prTransit)
 {
 	uint8_t ucBssIndex = prTransit->ucBssidx;
+	
+	if (ucBssIndex >= MAX_BSSID_NUM) {
+		DBGLOG(ROAMING, ERROR, "ucBssIndex [%d] out of range!\n",
+			ucBssIndex);
+		return WLAN_STATUS_FAILURE;
+	}
 
 	DBGLOG(ROAMING, LOUD,
 	       "[%d] ROAMING Process Events: Current Time = %d\n",
