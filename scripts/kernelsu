@@ -8,6 +8,8 @@ BINDIR=$(realpath "${SCRIPTDIR}/bin")
 MAGISKBOOT=$BINDIR/magiskboot
 KSUD=$BINDIR/ksud-x86_64-unknown-linux-musl
 KERNELPATH=$PARENTDIR/out/target/product/a15/obj/KERNEL_OBJ/kernel-5.10/arch/arm64/boot/
+AVBTOOL=$BINDIR/avb/avbtool.py
+WORKSPACE=$BINDIR/workspace
 
 # Color Variables
 RED="\e[1;31m"
@@ -27,31 +29,36 @@ print_msg "$RED" "       by poqdavid \n"
 
 # Check requirements and environment
 checks() {
-    if [ ! -d "${KERNELPATH}" ]; then
-        print_msg "$RED" "Kernel path not found!"
-        print_msg "$RED" "${KERNELPATH}"
-        print_msg "$RED" "Aborting..."
-        exit 1
-    fi
+    print_msg "$GREEN" "Starting environment checks..."
     
-    if [ ! -f "${KSUD}" ]; then
-        print_msg "$RED" "${KSUD} not found!"
+    if [ ! -d "${KERNELPATH}" ]; then
+        print_msg "$RED" "Kernel path not found: ${KERNELPATH}"
         print_msg "$RED" "Aborting..."
         exit 1
     else
-        print_msg "$GREEN" "Found ${KSUD}."
+        print_msg "$GREEN" "Kernel path exists."
+    fi
+    
+    print_msg "$GREEN" "Checking required binaries and dependencies..."
+    
+    if [ ! -f "${KSUD}" ]; then
+        print_msg "$RED" "KSUD not found: ${KSUD}"
+        print_msg "$RED" "Aborting..."
+        exit 1
+    else
+        print_msg "$GREEN" "Found KSUD at ${KSUD}."
     fi
     
     if [ ! -f "${MAGISKBOOT}" ]; then
-        print_msg "$RED" "${MAGISKBOOT} not found!"
+        print_msg "$RED" "Magiskboot not found: ${MAGISKBOOT}"
         print_msg "$RED" "Aborting..."
         exit 1
     else
-        print_msg "$GREEN" "Found ${MAGISKBOOT}."
+        print_msg "$GREEN" "Found MAGISKBOOT at ${MAGISKBOOT}."
     fi
     
     if ! command -v lz4 &> /dev/null; then
-        print_msg "$RED" "lz4 is not installed. Install it by running:"
+        print_msg "$RED" "lz4 is not installed. Please run:"
         print_msg "$RED" "sudo apt install lz4 -y"
         print_msg "$RED" "Aborting..."
         exit 1
@@ -59,26 +66,51 @@ checks() {
         print_msg "$GREEN" "lz4 is installed."
     fi
     
-    # Check if boot image is available
     if [ ! -f "${PARENTDIR}/boot-repacked.img" ]; then
-        print_msg "$RED" "Please put your boot-repacked.img inside ${PARENTDIR}!"
-        print_msg "$RED" "Aborting..."
+        print_msg "$RED" "Missing boot-repacked.img in ${PARENTDIR}!"
         exit 1
+    else
+        print_msg "$GREEN" "boot-repacked.img found."
     fi
+    
+    print_msg "$GREEN" "Environment checks completed successfully.\n"
 }
 
 # Perform KernelSU patching
 ksud_patch() {
+    print_msg "$GREEN" "Starting KernelSU patching process..."
+    
     if [ ! -f "${KERNELPATH}/Image" ]; then
-        print_msg "$RED" "No Kernel Image found!"
-        print_msg "$RED" "Aborting..."
+        print_msg "$RED" "Kernel image not found!"
         exit 1
     else
+        print_msg "$GREEN" "Kernel image detected, copying to workspace..."
         cp -f "${KERNELPATH}/Image" "${KERNELPATH}/kernel"
-        $KSUD boot-patch -b "${PARENTDIR}/boot-repacked.img" --magiskboot "${MAGISKBOOT}" --kernel "${KERNELPATH}/kernel" --kmi android12-5.10
     fi
+    
+    print_msg "$GREEN" "Applying KernelSU patch..."
+    $KSUD boot-patch -b "${PARENTDIR}/boot-repacked.img" --magiskboot "${MAGISKBOOT}" --kernel "${KERNELPATH}/kernel" --kmi android12-5.10
+    
+    print_msg "$GREEN" "KernelSU patch applied. Locating patched images..."
+    
+    patchedfiles=$(ls $PARENTDIR/kernelsu_patched_*.img)
+    
+    IFS=$'\n' sorted=($(sort -r <<<"${patchedfiles[*]}"))
+    unset IFS
+    
+    latest_kernesu_patched="${sorted[0]}"
+    
+    print_msg "$GREEN" "Latest patched KernelSU image: ${latest_kernesu_patched}"
+    
+    print_msg "$GREEN" "Extracting public key for signature verification..."
+    python3 "${AVBTOOL}" extract_public_key --key "${WORKSPACE}/sign.pem" --output "${WORKSPACE}/sign.pub.bin"
+    
+    print_msg "$GREEN" "Adding AVB hash footer and signing image..."
+    python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $(wc -c $latest_kernesu_patched |cut -f 1 -d ' ') --image $latest_kernesu_patched --key "${WORKSPACE}/sign.pem" --algorithm SHA256_RSA4096
+    
+    print_msg "$GREEN" "KernelSU patching completed successfully!\n"
 }
 
-# Execute the functions
+# Execute functions
 checks
 ksud_patch

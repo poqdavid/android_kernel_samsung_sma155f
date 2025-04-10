@@ -29,38 +29,48 @@ print_msg "$RED" "       by poqdavid \n"
 
 # Check requirements and environment
 checks() {
+    print_msg "$GREEN" "Starting environment checks..."
+    
     if [ ! -d "${WORKSPACE}" ]; then
+        print_msg "$GREEN" "WORKSPACE directory not found. Creating directory at ${WORKSPACE}..."
         cd $BINDIR
         mkdir workspace > /dev/null 2>&1
         cd $PARENTDIR
+        print_msg "$GREEN" "WORKSPACE directory created."
+    else
+        print_msg "$GREEN" "WORKSPACE directory exists."
     fi
+    
+    print_msg "$GREEN" "Cleaning up WORKSPACE directory..."
     rm -rf $WORKSPACE/*
+    print_msg "$GREEN" "WORKSPACE cleaned."
     
     if [ ! -d "${KERNELPATH}" ]; then
-        print_msg "$RED" "Kernel path not found!"
-        print_msg "$RED" "${KERNELPATH}"
-        print_msg "$RED" "Aborting..."
+        print_msg "$RED" "Kernel path not found: ${KERNELPATH}"
+        print_msg "$RED" "Aborting environment checks..."
         exit 1
+    else
+        print_msg "$GREEN" "Kernel path found: ${KERNELPATH}"
     fi
     
     if [ ! -f "${KSUD}" ]; then
-        print_msg "$RED" "${KSUD} not found!"
+        print_msg "$RED" "KSUD not found: ${KSUD}"
         print_msg "$RED" "Aborting..."
         exit 1
     else
-        print_msg "$GREEN" "Found ${KSUD}."
+        print_msg "$GREEN" "Found KSUD at ${KSUD}."
     fi
     
     if [ ! -f "${MAGISKBOOT}" ]; then
-        print_msg "$RED" "${MAGISKBOOT} not found!"
+        print_msg "$RED" "Magiskboot not found: ${MAGISKBOOT}"
         print_msg "$RED" "Aborting..."
         exit 1
     else
-        print_msg "$GREEN" "Found ${MAGISKBOOT}."
+        print_msg "$GREEN" "Found MAGISKBOOT at ${MAGISKBOOT}."
     fi
     
     if ! command -v lz4 &> /dev/null; then
-        print_msg "$RED" "lz4 is not installed. Install it by running:"
+        print_msg "$RED" "lz4 is not installed. Please run:"
         print_msg "$RED" "sudo apt install lz4 -y"
         print_msg "$RED" "Aborting..."
         exit 1
@@ -69,7 +79,7 @@ checks() {
     fi
     
     if ! command -v python3 &> /dev/null; then
-        print_msg "$RED" "python3 is not installed. Install it by running:"
+        print_msg "$RED" "python3 is not installed. Please run:"
         print_msg "$RED" "sudo apt install python3 -y"
         print_msg "$RED" "Aborting..."
         exit 1
@@ -79,58 +89,80 @@ checks() {
     
     # Uncompress if needed
     if [ -f "${PARENTDIR}/boot.img.lz4" ]; then
+        print_msg "$GREEN" "Found boot.img.lz4. Decompressing now..."
         lz4 -B6 --content-size -f boot.img.lz4 boot.img
+        print_msg "$GREEN" "Decompression complete."
+    else
+        print_msg "$GREEN" "No compressed boot image detected."
     fi
     
     # Check if boot image is available
     if [ ! -f "${PARENTDIR}/boot.img" ]; then
-        print_msg "$RED" "Please put your boot.img inside ${PARENTDIR}!"
+        print_msg "$RED" "boot.img not found in ${PARENTDIR}!"
+        print_msg "$RED" "Please place your boot.img in ${PARENTDIR}."
         print_msg "$RED" "Aborting..."
         exit 1
+    else
+        print_msg "$GREEN" "boot.img is available."
     fi
+    print_msg "$GREEN" "Environment checks completed successfully.\n"
 }
 
-# unpacking the boot.img
+# Unpacking the boot.img
 unpack() {
+    print_msg "$GREEN" "Switching to WORKSPACE directory..."
     cd $WORKSPACE
     
-    print_msg "$GREEN" " "
-    print_msg "$GREEN" "Generating a signing key..."
-    
-    if [ ! -f sign.pem ];then
+    print_msg "$GREEN" "Generating a signing key (if not already present)..."
+    if [ ! -f sign.pem ]; then
         openssl genrsa -f4 -out sign.pem 4096 > /dev/null 2>&1
+        print_msg "$GREEN" "Signing key generated successfully."
+    else
+        print_msg "$GREEN" "Signing key already exists. Skipping generation."
     fi
     
-    print_msg "$GREEN" "Unpacking boot image...\n"
+    print_msg "$GREEN" "Starting unpacking of boot.img..."
     $MAGISKBOOT unpack "${PARENTDIR}/boot.img"
+    print_msg "$GREEN" "Boot image unpacked successfully."
     
+    print_msg "$GREEN" "Returning to parent directory..."
     cd $PARENTDIR
 }
 
 # Repacking the Kernel image to boot.img
 repack() {
     if [ ! -f "${KERNELPATH}/Image" ]; then
-        print_msg "$RED" "No Kernel Image found!"
-        print_msg "$RED" "Aborting..."
+        print_msg "$RED" "No Kernel Image found in ${KERNELPATH}!"
+        print_msg "$RED" "Aborting repack process..."
         exit 1
     else
+        print_msg "$GREEN" "Kernel Image found. Copying to temporary file..."
         cp -f "${KERNELPATH}/Image" "${KERNELPATH}/kernel"
+        print_msg "$GREEN" "Kernel Image copied successfully."
         
         # Repacking boot image
         cd $WORKSPACE
-        print_msg "\n$GREEN" "Repacking boot image...\n"
+        print_msg "$GREEN" "Starting repacking of boot image..."
         $MAGISKBOOT repack "${PARENTDIR}/boot.img" "${WORKSPACE}/new-boot.img"
+        print_msg "$GREEN" "Boot image repacked into new-boot.img."
         
-        #Signing boot image
+        # Signing boot image
+        print_msg "$GREEN" "Extracting public key from the signing key..."
         python3 "${AVBTOOL}" extract_public_key --key sign.pem --output sign.pub.bin
-        python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $(wc -c $WORKSPACE/new-boot.img |cut -f 1 -d ' ') --image $WORKSPACE/new-boot.img --key sign.pem --algorithm SHA256_RSA4096
-        mv $WORKSPACE/new-boot.img $PARENTDIR/boot-repacked.img
+        print_msg "$GREEN" "Public key extracted successfully."
         
-        print_msg "\n$GREEN" "Done...\n"
+        print_msg "$GREEN" "Adding hash footer and signing boot image..."
+        python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $(wc -c $WORKSPACE/new-boot.img | cut -f 1 -d ' ') --image $WORKSPACE/new-boot.img --key sign.pem --algorithm SHA256_RSA4096
+        print_msg "$GREEN" "Hash footer added and boot image signed."
+        
+        mv $WORKSPACE/new-boot.img $PARENTDIR/boot-repacked.img
+        print_msg "$GREEN" "Repacked boot image moved to ${PARENTDIR}/boot-repacked.img."
+        
+        print_msg "$GREEN" "Repacking process completed successfully.\n"
     fi
 }
 
-# Execute the functions
+# Execute all functions
 checks
 unpack
 repack
