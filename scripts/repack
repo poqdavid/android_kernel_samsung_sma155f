@@ -10,6 +10,7 @@ KSUD=$BINDIR/ksud-x86_64-unknown-linux-musl
 AVBTOOL=$BINDIR/avb/avbtool.py
 KERNELPATH=$PARENTDIR/out/target/product/a15/obj/KERNEL_OBJ/kernel-5.10/arch/arm64/boot/
 WORKSPACE=$BINDIR/workspace
+CERTDIR=$BINDIR/certs
 
 # Color Variables
 RED="\e[1;31m"
@@ -44,6 +45,16 @@ checks() {
     print_msg "$GREEN" "Cleaning up WORKSPACE directory..."
     rm -rf $WORKSPACE/*
     print_msg "$GREEN" "WORKSPACE cleaned."
+
+    if [ ! -d "${CERTDIR}" ]; then
+        print_msg "$GREEN" "CERTS directory not found. Creating directory at ${CERTDIR}..."
+        cd $BINDIR
+        mkdir certs > /dev/null 2>&1
+        cd $PARENTDIR
+        print_msg "$GREEN" "CERTS directory created."
+    else
+        print_msg "$GREEN" "CERTS directory exists."
+    fi
     
     if [ ! -d "${KERNELPATH}" ]; then
         print_msg "$RED" "Kernel path not found: ${KERNELPATH}"
@@ -95,7 +106,7 @@ checks() {
     else
         print_msg "$GREEN" "No compressed boot image detected."
     fi
-    
+
     # Check if boot image is available
     if [ ! -f "${PARENTDIR}/boot.img" ]; then
         print_msg "$RED" "boot.img not found in ${PARENTDIR}!"
@@ -110,23 +121,25 @@ checks() {
 
 # Unpacking the boot.img
 unpack() {
-    print_msg "$GREEN" "Switching to WORKSPACE directory..."
-    cd $WORKSPACE
-    
     print_msg "$GREEN" "Generating a signing key (if not already present)..."
-    if [ ! -f sign.pem ]; then
-        openssl genrsa -f4 -out sign.pem 4096 > /dev/null 2>&1
+    if [ ! -f $CERTDIR/sign.pub.bin ]; then
+        openssl req -new -x509 -newkey rsa:4096 -keyout $CERTDIR/sign.pk8 -out $CERTDIR/sign.pem -days 824 -nodes -sha256 -config $BINDIR/samsung_cert.conf
         print_msg "$GREEN" "Signing key generated successfully."
     else
         print_msg "$GREEN" "Signing key already exists. Skipping generation."
     fi
     
+    print_msg "$GREEN" "Extracting public key from the signing key..."
+    python3 "${AVBTOOL}" extract_public_key --key $CERTDIR/sign.pk8 --output $CERTDIR/sign.pub.bin
+    print_msg "$GREEN" "Public key extracted successfully."
+    
     print_msg "$GREEN" "Starting unpacking of boot.img..."
-    $MAGISKBOOT unpack "${PARENTDIR}/boot.img"
+    cd $WORKSPACE
+    $MAGISKBOOT unpack -n "${PARENTDIR}/boot.img"
+    cd $PARENTDIR
     print_msg "$GREEN" "Boot image unpacked successfully."
     
     print_msg "$GREEN" "Returning to parent directory..."
-    cd $PARENTDIR
 }
 
 # Repacking the Kernel image to boot.img
@@ -141,22 +154,28 @@ repack() {
         print_msg "$GREEN" "Kernel Image copied successfully."
         
         # Repacking boot image
-        cd $WORKSPACE
         print_msg "$GREEN" "Starting repacking of boot image..."
+        cd $WORKSPACE
         $MAGISKBOOT repack "${PARENTDIR}/boot.img" "${WORKSPACE}/new-boot.img"
+        cd $PARENTDIR
         print_msg "$GREEN" "Boot image repacked into new-boot.img."
-        
-        # Signing boot image
-        print_msg "$GREEN" "Extracting public key from the signing key..."
-        python3 "${AVBTOOL}" extract_public_key --key sign.pem --output sign.pub.bin
-        print_msg "$GREEN" "Public key extracted successfully."
-        
-        print_msg "$GREEN" "Adding hash footer and signing boot image..."
-        python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $(wc -c $WORKSPACE/new-boot.img | cut -f 1 -d ' ') --image $WORKSPACE/new-boot.img --key sign.pem --algorithm SHA256_RSA4096
-        print_msg "$GREEN" "Hash footer added and boot image signed."
+
+        cp -f $WORKSPACE/new-boot.img $WORKSPACE/new-boot-signed.img
+        print_msg "$GREEN" "Boot image Copied to ${WORKSPACE}/new-boot-signed.img."
         
         mv $WORKSPACE/new-boot.img $PARENTDIR/boot-repacked.img
         print_msg "$GREEN" "Repacked boot image moved to ${PARENTDIR}/boot-repacked.img."
+        
+        print_msg "$GREEN" "Signing boot image..."
+        python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image $WORKSPACE/new-boot-signed.img --algorithm SHA256_RSA4096 --key $CERTDIR/sign.pk8
+        
+        ## Alternative options to sign the boot image
+        #python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $(wc -c $WORKSPACE/new-boot-signed.img | cut -f 1 -d ' ') --image $WORKSPACE/new-boot-signed.img --algorithm SHA256_RSA4096 --key $CERTDIR/sign.pk8
+        #$MAGISKBOOT sign $WORKSPACE/new-boot-signed.img $CERTDIR/sign.pem
+        print_msg "$GREEN" "Boot image signed successfully."
+        
+        mv $WORKSPACE/new-boot-signed.img $PARENTDIR/boot-repacked-signed.img
+        print_msg "$GREEN" "Repacked boot image moved to ${PARENTDIR}/boot-repacked-signed.img."
         
         print_msg "$GREEN" "Repacking process completed successfully.\n"
     fi

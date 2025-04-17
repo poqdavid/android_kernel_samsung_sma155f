@@ -22,7 +22,11 @@
   --set-val UH_LKMAUTH n \
   --set-val UH_LKM_BLOCK n \
   --set-val RKP_CFP_JOPP n \
-  --set-val RKP_CFP n
+  --set-val RKP_CFP n \
+  --set-val KDP_CRED n \
+  --set-val KDP_NS n \
+  --set-val KDP_TEST n \
+  --set-val RKP_CRED n
 
 ./kernel-5.10/scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
   --set-val UH n \
@@ -46,7 +50,11 @@
   --set-val UH_LKMAUTH n \
   --set-val UH_LKM_BLOCK n \
   --set-val RKP_CFP_JOPP n \
-  --set-val RKP_CFP n
+  --set-val RKP_CFP n \
+  --set-val KDP_CRED n \
+  --set-val KDP_NS n \
+  --set-val KDP_TEST n \
+  --set-val RKP_CRED n
 
 ./kernel-5.10/scripts/config --file kernel-5.10/arch/arm64/configs/mgk_64_k510_defconfig \
   --set-val UH n \
@@ -70,9 +78,16 @@
   --set-val UH_LKMAUTH n \
   --set-val UH_LKM_BLOCK n \
   --set-val RKP_CFP_JOPP n \
-  --set-val RKP_CFP n
+  --set-val RKP_CFP n \
+  --set-val KDP_CRED n \
+  --set-val KDP_NS n \
+  --set-val KDP_TEST n \
+  --set-val RKP_CRED n
 
 cd kernel-5.10
+
+curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+
 python scripts/gen_build_config.py --kernel-defconfig a15_00_defconfig --kernel-defconfig-overlays entry_level.config -m user -o ../out/target/product/a15/obj/KERNEL_OBJ/build.config
 
 export LTO=thin

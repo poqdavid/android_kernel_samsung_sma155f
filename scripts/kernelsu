@@ -102,11 +102,14 @@ ksud_patch() {
     
     print_msg "$GREEN" "Latest patched KernelSU image: ${latest_kernesu_patched}"
     
-    print_msg "$GREEN" "Extracting public key for signature verification..."
-    python3 "${AVBTOOL}" extract_public_key --key "${WORKSPACE}/sign.pem" --output "${WORKSPACE}/sign.pub.bin"
+    print_msg "$GREEN" "Signing boot image..."
     
-    print_msg "$GREEN" "Adding AVB hash footer and signing image..."
-    python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $(wc -c $latest_kernesu_patched |cut -f 1 -d ' ') --image $latest_kernesu_patched --key "${WORKSPACE}/sign.pem" --algorithm SHA256_RSA4096
+    python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image $latest_kernesu_patched --algorithm SHA256_RSA4096 --key "${WORKSPACE}/sign.pk8"
+    
+    ## Alternative options to sign the boot image
+    #python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $(wc -c $latest_kernesu_patched | cut -f 1 -d ' ') --image $latest_kernesu_patched --algorithm SHA256_RSA4096 --key "${WORKSPACE}/sign.pk8"
+    #$MAGISKBOOT sign $latest_kernesu_patched "${WORKSPACE}/sign.pem"
+    print_msg "$GREEN" "Boot image signed successfully."
     
     print_msg "$GREEN" "KernelSU patching completed successfully!\n"
 }
