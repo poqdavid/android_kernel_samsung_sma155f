@@ -136,6 +136,7 @@ unpack() {
     print_msg "$GREEN" "Starting unpacking of boot.img..."
     cd $WORKSPACE
     $MAGISKBOOT unpack -n "${PARENTDIR}/boot.img"
+    rm kernel
     cd $PARENTDIR
     print_msg "$GREEN" "Boot image unpacked successfully."
     
@@ -150,7 +151,7 @@ repack() {
         exit 1
     else
         print_msg "$GREEN" "Kernel Image found. Copying to temporary file..."
-        cp -f "${KERNELPATH}/Image" "${KERNELPATH}/kernel"
+        cp -f "${KERNELPATH}/Image" "${WORKSPACE}/kernel"
         print_msg "$GREEN" "Kernel Image copied successfully."
         
         # Repacking boot image

@@ -797,33 +797,6 @@ elif [ -n "${LTO}" ]; then
   exit 1
 fi
 
-echo "========================================================"
-echo " Fixing configs for KernelSU"
-
-${KERNEL_DIR}/scripts/config --file ${OUT_DIR}/.config \
-  --set-val UH n \
-  --set-val RKP n \
-  --set-val KDP n \
-  --set-val SECURITY_DEFEX n \
-  --set-val INTEGRITY n \
-  --set-val FIVE n \
-  --set-val TRIM_UNUSED_KSYMS n \
-  --set-val PROCA n \
-  --set-val PROCA_GKI_10 n \
-  --set-val PROCA_S_OS n \
-  --set-val PROCA_CERTIFICATES_XATTR n \
-  --set-val PROCA_CERT_ENG n \
-  --set-val PROCA_CERT_USER n \
-  --set-val GAF_V6 n \
-  --set-val FIVE n \
-  --set-val FIVE_CERT_USER n \
-  --set-val FIVE_DEFAULT_HASH n \
-  --set-val UH_RKP n \
-  --set-val UH_LKMAUTH n \
-  --set-val UH_LKM_BLOCK n \
-  --set-val RKP_CFP_JOPP n \
-  --set-val RKP_CFP n
-
 if [ -n "${TAGS_CONFIG}" ]; then
   echo "========================================================"
   echo " Running tags command:"

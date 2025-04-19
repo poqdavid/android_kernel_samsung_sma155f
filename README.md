@@ -13,35 +13,54 @@ Please unzip the toolchain file in the path where `build_kernel.sh` is located:
 
 ### Patch the configs for KernelSU
 ```bash
-./scripts/config --file kernel-5.10/arch/arm64/configs/a15_defconfig \
-  -d UH \
-  -d RKP \
-  -d KDP \
-  -d SECURITY_DEFEX \
-  -d INTEGRITY \
-  -d FIVE \
-  -d TRIM_UNUSED_KSYMS
-```
+# Samsung related configs like Kernel Protection
+./kernel-5.10/scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
+--set-val UH n \
+--set-val RKP n \
+--set-val KDP n \
+--set-val SECURITY_DEFEX n \
+--set-val INTEGRITY n \
+--set-val FIVE n \
+--set-val TRIM_UNUSED_KSYMS n \
+--set-val PROCA n \
+--set-val PROCA_GKI_10 n \
+--set-val PROCA_S_OS n \
+--set-val PROCA_CERTIFICATES_XATTR n \
+--set-val PROCA_CERT_ENG n \
+--set-val PROCA_CERT_USER n \
+--set-val GAF_V6 n \
+--set-val FIVE n \
+--set-val FIVE_CERT_USER n \
+--set-val FIVE_DEFAULT_HASH n \
+--set-val UH_RKP n \
+--set-val UH_LKMAUTH n \
+--set-val UH_LKM_BLOCK n \
+--set-val RKP_CFP_JOPP n \
+--set-val RKP_CFP n \
+--set-val KDP_CRED n \
+--set-val KDP_NS n \
+--set-val KDP_TEST n \
+--set-val RKP_CRED n
 
-```bash
-./scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
-  -d UH \
-  -d RKP \
-  -d KDP \
-  -d SECURITY_DEFEX \
-  -d INTEGRITY \
-  -d FIVE \
-  -d TRIM_UNUSED_KSYMS
-```
-
-```bash
-./scripts/config --file kernel-5.10/arch/arm64/configs/mgk_64_k510_defconfig \
-  -d UH \
-  -d RKP \
-  -d KDP \
-  -d INTEGRITY \
-  -d FIVE \
-  -d TRIM_UNUSED_KSYMS
+# Kernel optimizations
+./kernel-5.10/scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
+--set-val TMPFS_XATTR y \
+--set-val TMPFS_POSIX_ACL y \
+--set-val IP_NF_TARGET_TTL y \
+--set-val IP6_NF_TARGET_HL y \
+--set-val IP6_NF_MATCH_HL y \
+--set-val TCP_CONG_ADVANCED y \
+--set-val TCP_CONG_BBR y \
+--set-val NET_SCH_FQ y \
+--set-val TCP_CONG_BIC n \
+--set-val TCP_CONG_WESTWOOD n \
+--set-val TCP_CONG_HTCP n \
+--set-val DEFAULT_BBR y \
+--set-val DEFAULT_BIC n \
+--set-str DEFAULT_TCP_CONG "bbr" \
+--set-val DEFAULT_RENO n \
+--set-val DEFAULT_CUBIC n \
+--set-val KSU y
 ```
 
 ### Set Build Environment and Export Target Config
@@ -61,8 +80,9 @@ export BUILD_CONFIG="../out/target/product/a15/obj/KERNEL_OBJ/build.config"
 
 ### To Build
 ```bash
-cd ../kernel
-./build/build.sh
+- Place your boot image in the root
+- Run ./build_kernel.sh to build the Kernel
+- Run ./script/repack to repack the boot image with the new Kernel
 ```
 
 ## 2. Output Files
@@ -71,20 +91,12 @@ cd ../kernel
 
 ## 3. How to Clean
 ```bash
-make clean
+./clean_build.sh
 ```
 
-## Create KerenlSU boot image.
-
-- Place your boot.img here
-- Run ./scripts/kernelsu
-
-## Repack boot image
-
-- Place your boot.img here
-- Run ./scripts/repack
-
 ## Acknowledgements
+
+This project includes code from the https://github.com/ReeViiS69/sm155f/ project, licensed under the GPL-2.0. Also, a huge thanks to ReeViiS69 for helping me build the kernel.
 
 This project includes code from the https://github.com/fei-ke/android_kernel_samsung_sm8550/ project, licensed under the GPL-2.0.
 
