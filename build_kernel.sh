@@ -67,23 +67,65 @@ print_msg "$GREEN" "Modifying configs..."
 --set-str DEFAULT_TCP_CONG "bbr" \
 --set-val DEFAULT_RENO n \
 --set-val DEFAULT_CUBIC n \
+
+# KernelSU Next configs
+./kernel-5.10/scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
+--set-val KSU_WITH_KPROBES n \
+--set-val KSU_SUSFS y \
+--set-val KSU_SUSFS_HAS_MAGIC_MOUNT y \
+--set-val KSU_SUSFS_SUS_PATH y \
+--set-val KSU_SUSFS_SUS_MOUNT y \
+--set-val KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT y \
+--set-val KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT y \
+--set-val KSU_SUSFS_SUS_KSTAT y \
+--set-val KSU_SUSFS_SUS_OVERLAYFS n \
+--set-val KSU_SUSFS_TRY_UMOUNT y \
+--set-val KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT y \
+--set-val KSU_SUSFS_SPOOF_UNAME y \
+--set-val KSU_SUSFS_ENABLE_LOG y \
+--set-val KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y \
+--set-val KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y \
+--set-val KSU_SUSFS_OPEN_REDIRECT y \
+--set-val KSU_SUSFS_SUS_SU n \
 --set-val KSU y
 
 print_msg "$GREEN" "Modified configs ..."
 
 cd kernel-5.10
 
-print_msg "$GREEN" "Setting up KernelSU..."
+print_msg "$GREEN" "Setting up KernelSU Next SUSFS..."
 
-curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+#curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s next-susfs
+curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s v1.0.6
 
-print_msg "$GREEN" "Finished Setting up KernelSU..."
+print_msg "$GREEN" "Finished Setting up KernelSU Next SUSFS..."
 
-#print_msg "$GREEN" "Patching up Kernel..."
-#patch -p1 -F 3 < ../patches/syscall_hooks.patch
-#patch -p1 -F 3 < ../patches/new_hooks.patch
-#patch -p1 -F 3 < ../patches/ksu_hooks.patch
-#print_msg "$GREEN" "Finished Patching up Kernel..."
+print_msg "$GREEN" "Patching up..."
+
+print_msg "$GREEN" "Copying susfs4ksu Patchees to the Kernel..."
+cp ../patches/susfs4ksu/kernel_patches/fs/* ./fs/
+cp ../patches/susfs4ksu/kernel_patches/include/linux/* ./include/linux/
+print_msg "$GREEN" "Finished Copying SUSFS4KSU Patchees to the Kernel..."
+
+print_msg "$GREEN" "Patching SUSFS in Kernel..."
+patch -p1 < ../patches/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch
+
+print_msg "$GREEN" "Patching namespace fix in Kernel..."
+patch -p1 < ../patches/kernel_patches/next/hotfixsamsungnamespace.patch
+
+print_msg "$GREEN" "Patching syscall_hooks in Kernel..."
+patch -p1 -F 3 < ../patches/kernel_patches/next/syscall_hooks.patch
+
+cd ./KernelSU-Next/
+print_msg "$GREEN" "Patching SUSFS in KernelSU Next..."
+patch -p1 --forward < ../../patches/kernel_patches/next/0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch
+cd ..
+print_msg "$GREEN" "Finished Patching up..."
+
+print_msg "$GREEN" "Configuring Kernel metadata..."
+sed -i '$s|echo "\$res"|echo "-android12-9-28575149"|' ./scripts/setlocalversion
+perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 06 09:35:51 UTC 2025"}' ./scripts/mkcompile_h
+print_msg "$GREEN" "Finished Configuring Kernel metadata..."
 
 print_msg "$GREEN" "Generating configs..."
 

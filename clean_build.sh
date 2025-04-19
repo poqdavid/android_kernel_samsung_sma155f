@@ -21,6 +21,7 @@ print_msg "$GREEN" "Started cleaning up..."
 git restore kernel-5.10/
 git clean -fd kernel-5.10/
 rm -rf kernel-5.10/KernelSU
+rm -rf kernel-5.10/KernelSU-Next
 rm -rf out
 
 print_msg "$GREEN" "Finsished cleaning up..."

@@ -60,6 +60,26 @@ Please unzip the toolchain file in the path where `build_kernel.sh` is located:
 --set-str DEFAULT_TCP_CONG "bbr" \
 --set-val DEFAULT_RENO n \
 --set-val DEFAULT_CUBIC n \
+
+# KernelSU Next configs
+./kernel-5.10/scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
+--set-val KSU_WITH_KPROBES n \
+--set-val KSU_SUSFS y \
+--set-val KSU_SUSFS_HAS_MAGIC_MOUNT y \
+--set-val KSU_SUSFS_SUS_PATH y \
+--set-val KSU_SUSFS_SUS_MOUNT y \
+--set-val KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT y \
+--set-val KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT y \
+--set-val KSU_SUSFS_SUS_KSTAT y \
+--set-val KSU_SUSFS_SUS_OVERLAYFS n \
+--set-val KSU_SUSFS_TRY_UMOUNT y \
+--set-val KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT y \
+--set-val KSU_SUSFS_SPOOF_UNAME y \
+--set-val KSU_SUSFS_ENABLE_LOG y \
+--set-val KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y \
+--set-val KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y \
+--set-val KSU_SUSFS_OPEN_REDIRECT y \
+--set-val KSU_SUSFS_SUS_SU n \
 --set-val KSU y
 ```
 
@@ -98,6 +118,12 @@ export BUILD_CONFIG="../out/target/product/a15/obj/KERNEL_OBJ/build.config"
 
 This project includes code from the https://github.com/ReeViiS69/sm155f/ project, licensed under the GPL-2.0. Also, a huge thanks to ReeViiS69 for helping me build the kernel.
 
+This project includes code from the https://github.com/WildPlusKernel/GKI_KernelSU_SUSFS/ project, licensed under the GPL-2.0.
+
+This project includes code from the https://github.com/WildPlusKernel/kernel_patches/ project, licensed under the GPL-2.0.
+
+This project includes code from the https://gitlab.com/simonpunk/susfs4ksu/ project, licensed under the GPL-2.0.
+
 This project includes code from the https://github.com/fei-ke/android_kernel_samsung_sm8550/ project, licensed under the GPL-2.0.
 
 This project includes executable file/s from https://github.com/topjohnwu/Magisk/ project, licensed under the GPL-3.0.
@@ -106,3 +132,8 @@ This project includes executable file/s from https://github.com/tiann/KernelSU/ 
 
 This project include file/s from https://android.googlesource.com/platform/external/avb project, licensed under the Apache License, Version 2.0.
 
+**Donate:**
+<br/>**BTC Legacy:** 1Q2JQG3iCLZPT2iJfDLow1oQVGKmxheoAh
+<br/>**BTC Segwit:** bc1q8gurls0wjkfe43ygmrqmu2pzmyjetnrvgws9sr
+<br/>**BCH:** qrks52smlqw7d8700d77uqvmve03d4knzvd2vghaqz
+<br/>**ETH:** 0x7218779242a8425879B09969431c20F5eC1a192D
