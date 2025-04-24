@@ -2,7 +2,7 @@ diff --git a/fs/namespace.c b/fs/namespace.c
 index 5d5a426aa495..89c73e69b827 100644
 --- a/fs/namespace.c
 +++ b/fs/namespace.c
-@@ -36,7 +36,35 @@
+@@ -36,7 +36,34 @@
  #endif
  
 +#if defined(CONFIG_KSU_SUSFS_SUS_MOUNT) || defined(CONFIG_KSU_SUSFS_TRY_UMOUNT)
@@ -19,7 +19,6 @@ index 5d5a426aa495..89c73e69b827 100644
 +static DEFINE_IDA(susfs_mnt_id_ida);
 +static DEFINE_IDA(susfs_mnt_group_ida);
 +
-+#define CL_ZYGOTE_COPY_MNT_NS BIT(24) /* used by copy_mnt_ns() */
 +#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
 +#endif
 +
@@ -38,18 +37,14 @@ index 5d5a426aa495..89c73e69b827 100644
 +
  /* Maximum number of mounts in a mount namespace */
  unsigned int sysctl_mount_max __read_mostly = 100000;
-@@ -3879,10 +3879,20 @@
+@@ -3879,8 +3879,14 @@
 	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
 	if (user_ns != ns->user_ns)
 		copy_flags |= CL_SHARED_TO_SLAVE;
 +
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+// Always let clone_mnt() in copy_tree() know it is from copy_mnt_ns()
-+copy_flags |= CL_COPY_MNT_NS;
-+if (is_zygote_pid) {
-+	// Let clone_mnt() in copy_tree() know copy_mnt_ns() is run by zygote process
-+	copy_flags |= CL_ZYGOTE_COPY_MNT_NS;
-+}
++	// Always let clone_mnt() in copy_tree() know it is from copy_mnt_ns()
++	copy_flags |= CL_COPY_MNT_NS;
 +#endif
 +
  #ifdef CONFIG_KDP_NS
@@ -57,4 +52,3 @@ index 5d5a426aa495..89c73e69b827 100644
  #else
 	new = copy_tree(old, old->mnt.mnt_root, copy_flags);
  #endif
-	if (IS_ERR(new)) {
