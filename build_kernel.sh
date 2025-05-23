@@ -96,7 +96,7 @@ cd kernel-5.10
 print_msg "$GREEN" "Setting up KernelSU Next SUSFS..."
 
 #curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s next-susfs
-curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s v1.0.6
+curl -LSs "https://raw.githubusercontent.com/poqdavid/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.0.7
 
 print_msg "$GREEN" "Finished Setting up KernelSU Next SUSFS..."
 
@@ -118,7 +118,8 @@ patch -p1 -F 3 < ../patches/kernel_patches/next/syscall_hooks.patch
 
 cd ./KernelSU-Next/
 print_msg "$GREEN" "Patching SUSFS in KernelSU Next..."
-patch -p1 --forward < ../../patches/kernel_patches/next/0001-kernel-patch-susfs-v1.5.5-to-KernelSU-Next-v1.0.5.patch
+patch -p1 --forward < ../../patches/kernel_patches/next/0001_susfs_157_for_ksunext.patch
+patch -p1 --forward < ../../patches/hotfixcorehookc.patch
 cd ..
 print_msg "$GREEN" "Finished Patching up..."
 
