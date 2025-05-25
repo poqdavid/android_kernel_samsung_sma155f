@@ -67,6 +67,9 @@ print_msg "$GREEN" "Modifying configs..."
 --set-str DEFAULT_TCP_CONG "bbr" \
 --set-val DEFAULT_RENO n \
 --set-val DEFAULT_CUBIC n \
+--set-val IP6_NF_NAT y \
+--set-val IP6_NF_TARGET_MASQUERADE y \
+--set-val NF_NAT_IPV6 y
 
 # KernelSU Next configs
 ./kernel-5.10/scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
@@ -115,6 +118,9 @@ patch -p1 < ../patches/kernel_patches/next/hotfixsamsungnamespace.patch
 
 print_msg "$GREEN" "Patching syscall_hooks in Kernel..."
 patch -p1 -F 3 < ../patches/kernel_patches/next/syscall_hooks.patch
+
+print_msg "$GREEN" "Patching Makefile in Kernel for config_data..."
+patch -p1 --forward < ../patches/fake_config.patch
 
 cd ./KernelSU-Next/
 print_msg "$GREEN" "Patching SUSFS in KernelSU Next..."

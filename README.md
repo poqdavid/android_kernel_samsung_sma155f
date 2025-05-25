@@ -130,7 +130,9 @@ This project includes executable file/s from https://github.com/topjohnwu/Magisk
 
 This project includes executable file/s from https://github.com/tiann/KernelSU/ project, licensed under the GPL-3.0.
 
-This project include file/s from https://android.googlesource.com/platform/external/avb project, licensed under the Apache License, Version 2.0.
+This project includes file/s from https://android.googlesource.com/platform/external/avb project, licensed under the Apache License, Version 2.0.
+
+This project includes patch from https://github.com/fatalcoder524.
 
 **Donate:**
 <br/>**BTC Legacy:** 1Q2JQG3iCLZPT2iJfDLow1oQVGKmxheoAh
