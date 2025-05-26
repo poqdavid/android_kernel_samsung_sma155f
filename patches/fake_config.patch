@@ -1,13 +1,18 @@
 diff --git a/kernel/Makefile b/kernel/Makefile
-index dfa6fde12..da5d2a072 100755
+index dfa6fde12..7ab986946 100755
 --- a/kernel/Makefile
 +++ b/kernel/Makefile
-@@ -138,9 +138,12 @@
+@@ -138,9 +138,17 @@
  
  $(obj)/configs.o: $(obj)/config_data.gz
  
++CONFIG_OPTIONS := \
++    CONFIG_IP6_NF_NAT \
++    CONFIG_NF_NAT_IPV6 \
++    CONFIG_IP6_NF_TARGET_MASQUERADE
++
 +quiet_cmd_modify_and_gzip = MODIFY_AND_GZIP $@
-+      cmd_modify_and_gzip = sed $< -e 's/^CONFIG_IP6_NF_NAT=y/\# CONFIG_IP6_NF_NAT is not set/' -e 's/^CONFIG_NF_NAT_IPV6=y/\# CONFIG_NF_NAT_IPV6 is not set/' -e 's/^CONFIG_IP6_NF_TARGET_MASQUERADE=y/\# CONFIG_IP6_NF_TARGET_MASQUERADE is not set/' | $(KGZIP) -n -f -9 > $@
++	cmd_modify_and_gzip = sed $(foreach option,$(CONFIG_OPTIONS),-e 's/^$(option)=y/# $(option) is not set/' -e 's/^$(option)=n/# $(option) is not set/') $< | $(KGZIP) -n -f -9 > $@
 +
  targets += config_data config_data.gz
  $(obj)/config_data.gz: $(obj)/config_data FORCE
