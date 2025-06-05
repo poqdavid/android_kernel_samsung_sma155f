@@ -63,6 +63,10 @@
 #ifndef _WLAN_OID_H
 #define _WLAN_OID_H
 
+#if CFG_TC10_FEATURE
+extern struct GETBSSINFO_T bssinfo_back;
+#endif
+
 /*******************************************************************************
  *                         C O M P I L E R   F L A G S
  *******************************************************************************

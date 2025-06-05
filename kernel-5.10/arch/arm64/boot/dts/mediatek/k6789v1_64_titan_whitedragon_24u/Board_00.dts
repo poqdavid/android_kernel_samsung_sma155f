@@ -2,12 +2,11 @@
 /*
  * Copyright (C) 2024 MediaTek Inc.
  */
-/dts-v1/;
-/plugin/;
+
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/pinctrl/mt6789-pinfunc.h>
-#include "mediatek/cust_mt6789_camera.dtsi"
+//#include "mediatek/cust_mt6789_camera.dtsi"
 / {
 	fragment@model {
 	target-path = "/";
@@ -196,7 +195,7 @@
 };
 /* GPS GPIO standardization end */
 
-#include "mediatek/k6789v1_64_titan_whitedragon_24u/cust_touch_zt7650m_1080_2400.dtsi"
+//#include "mediatek/k6789v1_64_titan_whitedragon_24u/cust_touch_zt7650m_1080_2400.dtsi"
 #include "mediatek/cust_mt6789_camera_v4l2.dtsi"
 
 &snd_scp_audio {
@@ -243,12 +242,17 @@
 };
 /*svp end*/
 
+&mmc0 {
+	status = "disabled";
+};
+
 /* SDcard gpio active level */
 &mmc1 {
+	sec-sd-slot-type = <3>; /* Hybrid Tray SD slot */
 	vmmc-supply = <&mt6358_vmch_eint_low>;
 };
 
-#include "mediatek/k6789v1_64_titan_whitedragon_24u/gpio00.dtsi"
-#include "../../../../drivers/misc/mediatek/ssdev_in_mtk/dts/sm5714_fuelgauge.a24_lte.dtsi"
-#include "../../../../drivers/misc/mediatek/ssdev_in_mtk/dts/battery_common.a24_lte.dtsi"
+//#include "mediatek/k6789v1_64_titan_whitedragon_24u/gpio00.dtsi"
+//#include "../../../../drivers/misc/mediatek/ssdev_in_mtk/dts/sm5714_fuelgauge.a24_lte.dtsi"
+//#include "../../../../drivers/misc/mediatek/ssdev_in_mtk/dts/battery_common.a24_lte.dtsi"
 /*End of this file, DO NOT ADD ANYTHING HERE*/

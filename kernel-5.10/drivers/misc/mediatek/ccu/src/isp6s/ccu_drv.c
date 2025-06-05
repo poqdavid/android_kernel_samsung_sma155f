@@ -770,7 +770,13 @@ static long ccu_ioctl(struct file *flip, unsigned int cmd,
 		uint32_t *outdata = NULL;
 
 		indata = kzalloc(CCU_IPC_IBUF_CAPACITY, GFP_KERNEL);
+		if (!indata)
+			return -ENOMEM;
 		outdata = kzalloc(CCU_IPC_OBUF_CAPACITY, GFP_KERNEL);
+		if (!outdata) {
+			kfree(indata);
+			return -ENOMEM;
+		}
 		ret = copy_from_user(&msg,
 			(void *)arg, sizeof(struct ccu_control_info));
 		if (ret != 0) {
@@ -947,7 +953,12 @@ static long ccu_ioctl(struct file *flip, unsigned int cmd,
 		ret = copy_from_user(&freq_level,
 			(void *)arg, sizeof(uint32_t));
 
-		LOG_DBG_MUST("request freq level: %d\n", freq_level);
+		LOG_DBG_MUST("request freq level: %d(%d)\n", freq_level, _step_size);
+		if (freq_level >= _step_size) {
+			ret = -EINVAL;
+			break;
+		}
+
 #ifdef CCU_QOS_SUPPORT_ENABLE
 		if (freq_level == CCU_REQ_CAM_FREQ_NONE) {
 			volt = 0;

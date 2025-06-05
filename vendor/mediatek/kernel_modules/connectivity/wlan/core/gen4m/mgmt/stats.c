@@ -352,6 +352,7 @@ void statsParseUDPInfo(struct sk_buff *skb, uint8_t *pucEthBody,
 	uint32_t u4DhcpMagicCode;
 	char buf[50] = {0};
 	char log[256] = {0};
+	bool fgIsDhcpRequestRx = FALSE;
 
 	prBootp = (struct BOOTP_PROTOCOL *) &pucUdp[UDP_HDR_LEN];
 	u2UdpDstPort = (pucUdp[2] << 8) | pucUdp[3];
@@ -372,12 +373,14 @@ void statsParseUDPInfo(struct sk_buff *skb, uint8_t *pucEthBody,
 				switch (u4Opt & 0xffffff00) {
 				case 0x35010100:
 					kalSnprintf(buf, 49, "DISCOVERY");
+					fgIsDhcpRequestRx = TRUE;
 					break;
 				case 0x35010200:
 					kalSnprintf(buf, 49, "OFFER");
 					break;
 				case 0x35010300:
 					kalSnprintf(buf, 49, "REQUEST");
+					fgIsDhcpRequestRx = TRUE;
 					break;
 				case 0x35010500:
 					kalSnprintf(buf, 49, "ACK");
@@ -391,7 +394,7 @@ void statsParseUDPInfo(struct sk_buff *skb, uint8_t *pucEthBody,
 				"<RX> DHCP: Recv %s IPID 0x%02x, MsgType 0x%x, TransID 0x%04x\n",
 				buf, u2IpId, prBootp->aucOptions[6],
 				u4TransID);
-			if (kalStrLen(buf)) {
+			if (kalStrLen(buf) && (fgIsDhcpRequestRx == FALSE)) {
 				kalSprintf(log, "[DHCP] %s", buf);
 				kalReportWifiLog(prAdapter, ucBssIndex, log);
 			}

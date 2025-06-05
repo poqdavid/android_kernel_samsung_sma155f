@@ -2693,6 +2693,18 @@ static irqreturn_t zt_touch_work(int irq, void *data)
 			continue;
 
 		tid = info->touch_info[i].byte00.value.tid;
+		if (tid >= info->cap_info.multi_fingers) {
+			input_err(true, &client->dev, "%s: tid is out of range. skip. tid: %d\n", __func__, tid);
+#if IS_ENABLED(CONFIG_SEC_FACTORY)
+			input_err(true, &client->dev, "tstatus:%d ttype:%d tid:%d x,y,z:(%d,%d,%d), major:%d, minor:%d noise:%d max_sense:%d\n",
+								tstatus, ttype, tid, (info->touch_info[i].byte01.value.x_coord_h << 4) | (info->touch_info[i].byte03.value.x_coord_l),
+								(info->touch_info[i].byte02.value.y_coord_h << 4) | (info->touch_info[i].byte03.value.y_coord_l),
+								info->touch_info[i].byte06.value.z_value, info->touch_info[i].byte04.value_u8bit,
+								info->touch_info[i].byte05.value_u8bit, info->touch_info[i].byte08.value_u8bit,
+								info->touch_info[i].byte09.value_u8bit);
+#endif
+			goto out;
+		}
 
 		info->cur_coord[tid].id = tid;
 		info->cur_coord[tid].touch_status = tstatus;

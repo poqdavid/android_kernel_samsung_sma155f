@@ -60,7 +60,7 @@
 			    loglevel=8 \
 			    8250.nr_uarts=2 \
 			    androidboot.hardware=mt6789 \
-			    initcall_debug=1 transparent_hugepage=never \
+			    initcall_debug=1 transparent_hugepage=never slab_merge \
 			    vmalloc=400M swiotlb=noforce cma=64M \
 			    firmware_class.path=/vendor/firmware pelt=8\
 			    loop.max_part=7 printk.devkmsg=on";

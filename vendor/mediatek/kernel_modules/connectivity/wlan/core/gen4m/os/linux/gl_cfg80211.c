@@ -713,6 +713,8 @@ int mtk_cfg80211_get_station(struct wiphy *wiphy,
 	} else {
 		/* convert from 100bps to 100kbps */
 		prGlueInfo->u4TxLinkSpeedCache[ucBssIndex] = u4TxRate / 1000;
+		bssinfo_back.datarate =
+				prGlueInfo->u4TxLinkSpeedCache[ucBssIndex];
 	}
 
 	if ((rStatus != WLAN_STATUS_SUCCESS) || (u4RxRate == 0)) {

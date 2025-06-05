@@ -39,11 +39,6 @@
 #define I2C_BUFFER_LEN (TRANSFER_UNIT)
 #endif
 
-#define XTC_BURST_WRITE_MODE (1)
-#if XTC_BURST_WRITE_MODE
-#define I2C_BURST_BUFFER_LEN 1400
-#endif
-
 static int sNightHyperlapseSpeed;
 
 #ifndef HI5022Q_DISABLE_ADAPTIVE_MIPI
@@ -433,16 +428,19 @@ static int write_cmos_sensor_8(kal_uint16 addr, kal_uint8 para)
 	return ret;
 }
 
-#if XTC_BURST_WRITE_MODE
-static int burst_table_write_cmos_sensor(kal_uint16 *para, kal_uint32 len)
+static int table_write_cmos_sensor(kal_uint16 *para, kal_uint32 len, bool enable_burst)
 {
-	char puSendCmd[I2C_BURST_BUFFER_LEN];
-	kal_uint32 tosend = 0, IDX = 0;
+	int ret = 0;
+	char puSendCmd[I2C_BUFFER_LEN];
+	kal_uint32 tosend, IDX;
 	kal_uint16 addr = 0, data = 0;
+
+	tosend = 0;
+	IDX = 0;
 
 	while (len > IDX) {
 		addr = para[IDX];
-		if (tosend == 0) {
+		if (!enable_burst || tosend == 0) {
 			puSendCmd[tosend++] = (char)(addr >> 8);
 			puSendCmd[tosend++] = (char)(addr & 0xFF);
 		}
@@ -450,42 +448,13 @@ static int burst_table_write_cmos_sensor(kal_uint16 *para, kal_uint32 len)
 		data = para[IDX + 1];
 		puSendCmd[tosend++] = (char)(data >> 8);
 		puSendCmd[tosend++] = (char)(data & 0xFF);
-		IDX += 2;
-
-		if ((len == IDX) || ((len > IDX) && (para[IDX] != (addr + 2))) || tosend >= (I2C_BURST_BUFFER_LEN - TRANSFER_UNIT)) {
-			iBurstWriteReg_multi(puSendCmd, tosend, imgsensor.i2c_write_id, tosend, imgsensor_info.i2c_speed);
-			tosend = 0;
-		}
-	}
-	return 0;
-}
-#endif
-
-static int table_write_cmos_sensor(kal_uint16 *para, kal_uint32 len)
-{
-	int ret = 0;
-	char puSendCmd[I2C_BUFFER_LEN];
-	kal_uint32 tosend, IDX;
-	kal_uint16 addr = 0, addr_last = 0, data = 0;
-
-	tosend = 0;
-	IDX = 0;
-
-	while (len > IDX) {
-		addr = para[IDX];
-		puSendCmd[tosend++] = (char)(addr >> 8);
-		puSendCmd[tosend++] = (char)(addr & 0xFF);
-
-		data = para[IDX + 1];
-		puSendCmd[tosend++] = (char)(data >> 8);
-		puSendCmd[tosend++] = (char)(data & 0xFF);
 
 		IDX += 2;
-		addr_last = addr;
 
-		if ((I2C_BUFFER_LEN - tosend) < TRANSFER_UNIT || IDX == len || addr != addr_last) {
+		if ((I2C_BUFFER_LEN - tosend) < TRANSFER_UNIT || IDX == len ||
+			(enable_burst && (IDX < len) && (para[IDX] != (addr + 2)))) {
 			ret |= iBurstWriteReg_multi(puSendCmd, tosend, imgsensor.i2c_write_id,
-					TRANSFER_UNIT, imgsensor_info.i2c_speed);
+					enable_burst ? tosend : TRANSFER_UNIT, imgsensor_info.i2c_speed);
 			tosend = 0;
 		}
 	}
@@ -581,7 +550,7 @@ static int set_mipi_mode(int mipi_index)
 	} else {
 		LOG_INF("adaptive Mipi setting(%s)", hi5022q_adaptive_mipi_setfile[sensor_mode][mipi_index].name);
 		table_write_cmos_sensor(hi5022q_adaptive_mipi_setfile[sensor_mode][mipi_index].setfile,
-			hi5022q_adaptive_mipi_setfile[sensor_mode][mipi_index].size);
+			hi5022q_adaptive_mipi_setfile[sensor_mode][mipi_index].size, false);
 	}
 	LOG_DBG("- X");
 	return ERROR_NONE;
@@ -823,7 +792,7 @@ static unsigned int set_mode_setfile(enum IMGSENSOR_MODE mode)
 		LOG_ERR("failed, mode: %d", mode);
 		ret = ERROR_INVALID_SCENARIO_ID;
 	} else {
-		sensor_ret = table_write_cmos_sensor(hi5022q_setfile_info[mode].setfile, hi5022q_setfile_info[mode].size);
+		sensor_ret = table_write_cmos_sensor(hi5022q_setfile_info[mode].setfile, hi5022q_setfile_info[mode].size, false);
 		if (sensor_ret == -1)
 			ret = ERROR_SENSOR_CONNECT_FAIL;
 	}
@@ -911,8 +880,11 @@ static void write_sensor_hw_xgc(void)
 	int write_cnt = 0;
 	kal_uint16 read_data = 0x0;
 
-	// TODO : sensor_dev_id needs to be updated according to actual id.
-	int sensor_dev_id = IMGSENSOR_SENSOR_IDX_MAIN;
+	int sensor_dev_id = IMGSENOSR_GET_SENSOR_IDX(imgsensor_info.sensor_id);
+	if (sensor_dev_id == IMGSENSOR_SENSOR_IDX_NONE) {
+		LOG_ERR("get_sensor_idx: fail");
+		return;
+	}
 
 	LOG_INF("-E");
 
@@ -975,11 +947,7 @@ static void write_sensor_hw_xgc(void)
 		write_data[2 * i + 1] = ((rom_cal_buf[2 * i] << 8) | rom_cal_buf[2 * i + 1]);
 		LOG_DBG("write data[%d]: %#06x", 2 * i + 1, write_data[2 * i + 1]);
 	}
-#if XTC_BURST_WRITE_MODE
-	burst_table_write_cmos_sensor(write_data, data_size / 2);
-#else
-	table_write_cmos_sensor(write_data, data_size / 2);
-#endif
+	table_write_cmos_sensor(write_data, data_size / 2, true);
 	LOG_INF("Gb done writing %d bytes", data_size / 2);
 
 	// XGC(Gb line) SRAM memory access disable
@@ -998,11 +966,7 @@ static void write_sensor_hw_xgc(void)
 		write_data[2 * i + 1] = ((rom_cal_buf[2 * i] << 8) | rom_cal_buf[2 * i + 1]);
 		LOG_DBG("write data[%d]: %#06x", 2 * i + 1, write_data[2 * i + 1]);
 	}
-#if XTC_BURST_WRITE_MODE
-	burst_table_write_cmos_sensor(write_data, data_size / 2);
-#else
-	table_write_cmos_sensor(write_data, data_size / 2);
-#endif
+	table_write_cmos_sensor(write_data, data_size / 2, true);
 	LOG_INF("Gr done writing %d bytes", data_size / 2);
 
 	// XGC(Gr line) SRAM memory access disable
@@ -1029,8 +993,11 @@ static void write_sensor_hw_qbgc(void)
 	int write_cnt = 0;
 	kal_uint16 read_data = 0x0;
 
-	// TODO : sensor_dev_id needs to be updated according to actual id.
-	int sensor_dev_id = IMGSENSOR_SENSOR_IDX_MAIN;
+	int sensor_dev_id = IMGSENOSR_GET_SENSOR_IDX(imgsensor_info.sensor_id);
+	if (sensor_dev_id == IMGSENSOR_SENSOR_IDX_NONE) {
+		LOG_ERR("get_sensor_idx: fail");
+		return;
+	}
 
 	LOG_INF("-E");
 
@@ -1094,11 +1061,7 @@ static void write_sensor_hw_qbgc(void)
 		write_data[2 * i + 1] = ((rom_cal_buf[2 * i] << 8) | rom_cal_buf[2 * i + 1]);
 		LOG_DBG("write data[%d]: %#06x", 2 * i + 1, write_data[2 * i + 1]);
 	}
-#if XTC_BURST_WRITE_MODE
-	burst_table_write_cmos_sensor(write_data, data_size);
-#else
-	table_write_cmos_sensor(write_data, data_size);
-#endif
+	table_write_cmos_sensor(write_data, data_size, true);
 	LOG_INF("done writing %d bytes", data_size);
 
 	// QBGC SRAM memory access disable
@@ -1583,8 +1546,11 @@ static int sensor_get_XTC_CAL_data(char *reordered_xtc_cal, unsigned int buf_len
 	int reordered_idx = 0;
 	unsigned short total_size = 0;
 
-	// TODO : sensor_dev_id needs to be updated according to actual id.
-	int sensor_dev_id = IMGSENSOR_SENSOR_IDX_MAIN;
+	int sensor_dev_id = IMGSENOSR_GET_SENSOR_IDX(imgsensor_info.sensor_id);
+	if (sensor_dev_id == IMGSENSOR_SENSOR_IDX_NONE) {
+		LOG_ERR("get_sensor_idx: fail");
+		return -1;
+	}
 
 	if (IMGSENSOR_GET_CAL_BUF_BY_SENSOR_IDX(sensor_dev_id, &rom_cal_buf) < 0) {
 		LOG_ERR("[%s] rom_cal_buf is NULL", __func__);

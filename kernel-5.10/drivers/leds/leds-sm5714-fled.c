@@ -37,6 +37,7 @@ extern int sm5714_usbpd_check_fled_state(bool enable, u8 mode);
 #endif
 
 static bool fd_use;
+bool afc_voltage = true;
 
 #if IS_ENABLED(CONFIG_CHARGER_SM5714)
 static void fled_set_enable_push_event(int event_type)
@@ -108,13 +109,15 @@ static void fled_set_fled_current(struct sm5714_fled_data *fled, u8 offset)
 {
 	sm5714_update_reg(fled->i2c, SM5714_CHG_REG_FLEDCNTL2, (offset << 0), (0xf << 0));
 	sm5714_fled_test_read(fled);
+	if (offset >= 3)
+		pr_info("[%s][D/D] flash current: %d mA\n", __func__, 50 * (offset - 3) + 900);
 }
 
 static void fled_set_mled_current(struct sm5714_fled_data *fled, u8 offset)
 {
 	sm5714_update_reg(fled->i2c, SM5714_CHG_REG_FLEDCNTL2, (offset << 4), (0x7 << 4));
 	sm5714_fled_test_read(fled);
-	pr_info("[%s][D/D] torch current: %d mA\n", __func__, 25*offset + 50);
+	pr_info("[%s][D/D] torch current: %d mA\n", __func__, 25 * offset + 50);
 }
 
 #if IS_ENABLED(CONFIG_CHARGER_SM5714)
@@ -129,6 +132,12 @@ static int sm5714_fled_check_vbus(struct sm5714_fled_data *fled)
 	return 0;
 }
 #endif
+
+void sm5714_fled_set_afc_voltage_mode(bool mode)
+{
+	afc_voltage = mode; /* true-enable, false-disable */
+}
+EXPORT_SYMBOL_GPL(sm5714_fled_set_afc_voltage_mode);
 
 static int sm5714_fled_control(u8 fled_mode)
 {
@@ -177,6 +186,13 @@ static int sm5714_fled_control(u8 fled_mode)
 		pr_info("sm5714-fled: %s: off mode & used gpio = %d.\n", __func__, fled->pdata->led.used_gpio_ctrl);
 
 		fled_set_mode(fled, fled_mode);
+
+		if (fled->pdata->led.en_mled == false && fled->pdata->led.en_fled == false) {
+#if IS_ENABLED(CONFIG_CHARGER_SM5714)
+			muic_check_fled_state(0, FLED_MODE_FLASH);
+			sm5714_usbpd_check_fled_state(0, FLED_MODE_FLASH);
+#endif
+		}
 
 		if (fled->pdata->led.used_gpio_ctrl == true) {
 			gpio_set_value(fled->pdata->led.men_pin, 0);
@@ -315,8 +331,9 @@ static int sm5714_fled_prepare_flash(void)
 		sm5714_usbpd_check_fled_state(1, FLED_MODE_FLASH);
 	}
 #endif
-	fled_set_fled_current(fled, fled->pdata->led.flash_brightness);
-	fled_set_mled_current(fled, fled->pdata->led.torch_brightness);
+	/* removed code because this is unnecessary code */
+	//fled_set_fled_current(fled, fled->pdata->led.flash_brightness);
+	//fled_set_mled_current(fled, fled->pdata->led.torch_brightness);
 
 	fled->flash_prepare_cnt++;
 	fled->pdata->led.pre_fled = true;
@@ -353,8 +370,10 @@ static int sm5714_fled_close_flash(void)
 	if (fled->flash_prepare_cnt == 0) {
 		fled_set_disable_push_event(SM5714_CHARGER_OP_EVENT_TORCH);
 		fled_set_disable_push_event(SM5714_CHARGER_OP_EVENT_FLASH);
-		muic_check_fled_state(0, FLED_MODE_FLASH);
-		sm5714_usbpd_check_fled_state(0, FLED_MODE_FLASH);
+		if (afc_voltage) {
+			muic_check_fled_state(0, FLED_MODE_FLASH);
+			sm5714_usbpd_check_fled_state(0, FLED_MODE_FLASH);
+		}
 	}
 #endif
 	fled->pdata->led.pre_fled = false;
@@ -415,7 +434,6 @@ int32_t sm5714_fled_mode_ctrl(int state, uint32_t brightness)
 		break;
 
 	case SM5714_FLED_MODE_MAIN_FLASH:
-		sm5714_fled_prepare_flash();
 		/* FlashLight Mode Flash */
 		if (brightness > 0)
 			ret = sm5714_fled_flash_on(iq_cur);
@@ -428,7 +446,6 @@ int32_t sm5714_fled_mode_ctrl(int state, uint32_t brightness)
 		break;
 
 	case SM5714_FLED_MODE_TORCH_FLASH: /* TORCH FLASH */
-		sm5714_fled_prepare_flash();
 		/* FlashLight Mode TORCH */
 		if (brightness > 0)
 			ret = sm5714_fled_torch_on(iq_cur);

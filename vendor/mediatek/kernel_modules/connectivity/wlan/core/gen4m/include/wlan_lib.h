@@ -1981,4 +1981,8 @@ uint32_t wlanSendFwLogControlCmd(IN struct ADAPTER *prAdapter,
 int wlanChipConfigWithType(struct ADAPTER *prAdapter,
 	char *pcCommand, int i4TotalLen, uint8_t type);
 
+#if (CFG_TC10_FEATURE == 1)
+uint32_t wlanSetEssBandBitmap(struct ADAPTER *prAdapter,
+	uint8_t ucEssBandBitMap);
+#endif
 #endif /* _WLAN_LIB_H */

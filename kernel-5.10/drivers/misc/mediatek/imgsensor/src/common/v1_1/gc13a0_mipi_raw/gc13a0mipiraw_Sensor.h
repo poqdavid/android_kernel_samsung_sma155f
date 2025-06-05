@@ -5,26 +5,26 @@
 
 #ifndef __GC13A0MIPI_SENSOR_H__
 #define __GC13A0MIPI_SENSOR_H__
-//#define IMAGE_NORMAL_MIRROR
-//#define IMAGE_H_MIRROR
-//#define IMAGE_V_MIRROR
-#define IMAGE_HV_MIRROR
 
-//#ifdef IMAGE_NORMAL_MIRROR
-//#define MIRROR 0x80
-//#endif
+/* GC13A0 REGISTER DEFINE */
+#define GC13A0_REG_STREAM_ONOFF             0x0100
+#define GC13A0_REG_MIPI_CLK_STATUS          0x0180
+#define GC13A0_REG_FRAME_CNT_HIGH           0x0146
+#define GC13A0_REG_FRAME_CNT_LOW            0x0147
+#define GC13A0_REG_AGAIN_HIGH               0x0204
+#define GC13A0_REG_AGAIN_LOW                0x0205
+#define GC13A0_REG_FRAME_LENGTH_HIGH        0x0340
+#define GC13A0_REG_FRAME_LENGTH_LOW         0x0341
+#define GC13A0_REG_SHUTTER_TIME_HIGH        0x0202
+#define GC13A0_REG_SHUTTER_TIME_LOW         0x0203
+#define GC13A0_REG_SENSOR_ID_HIGH           0x03F0
+#define GC13A0_REG_SENSOR_ID_LOW            0x03F1
 
-//#ifdef IMAGE_H_MIRROR
-//#define MIRROR 0x81
-//#endif
-
-//#ifdef IMAGE_V_MIRROR
-//#define MIRROR 0x82
-//#endif
-
-#ifdef IMAGE_HV_MIRROR
-#define MIRROR 0x83
-#endif
+/* GC13A0 STATUS DEFINE */
+#define GC13A0_STREAM_ON                    (0x01)
+#define GC13A0_STREAM_OFF                   (0x00)
+#define GC13A0_MIPI_CLK_ENABLE              (0x40)
+#define GC13A0_MIPI_CLK_DISABLE             (0x00)
 
 /* SENSOR PRIVATE INFO FOR GAIN SETTING */
 #define GC13A0_SENSOR_GAIN_BASE             0x400
@@ -32,8 +32,6 @@
 #define GC13A0_SENSOR_GAIN_MAX_VALID_INDEX  16
 #define GC13A0_SENSOR_GAIN_MAP_SIZE         16
 #define GC13A0_SENSOR_DGAIN_BASE            0x400
-
-#define GC13A0_OTP_START_ADDR    0x0078
 
 enum IMGSENSOR_MODE {
 	IMGSENSOR_MODE_INIT,

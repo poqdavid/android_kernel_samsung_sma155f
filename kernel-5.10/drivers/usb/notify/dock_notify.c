@@ -23,10 +23,16 @@
 
 #define SMARTDOCK_INDEX	1
 #define MMDOCK_INDEX	2
+#define ROOTHUB_MAX_INDEX 10
 
 struct dev_table {
 	struct usb_device_id dev;
 	int index;
+};
+
+struct roothub_vid_pid {
+	u16 vid;
+	u16 pid;
 };
 
 static struct dev_table enable_notify_hub_table[] = {
@@ -60,6 +66,47 @@ static struct dev_table unsupport_device_table[] = {
 	}, /* The device for usb certification */
 	{}
 };
+
+#ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
+static struct roothub_vid_pid root_hub_reserved[ROOTHUB_MAX_INDEX];
+
+static void save_roothub_vid_pid(struct usb_device *dev)
+{
+	u16 vid = le16_to_cpu(dev->descriptor.idVendor);
+	u16 pid = le16_to_cpu(dev->descriptor.idProduct);
+	int i;
+
+	for (i = 0; i < ROOTHUB_MAX_INDEX; i++) {
+		if (root_hub_reserved[i].vid == vid && root_hub_reserved[i].pid == pid)
+			break;
+		if (root_hub_reserved[i].vid == 0 && root_hub_reserved[i].pid == 0) {
+			root_hub_reserved[i].vid = vid;
+			root_hub_reserved[i].pid = pid;
+			break;
+		}
+	}
+}
+
+static bool match_roothub_vid_pid(struct usb_device *dev)
+{
+	u16 vid = le16_to_cpu(dev->descriptor.idVendor);
+	u16 pid = le16_to_cpu(dev->descriptor.idProduct);
+	bool ret = false;
+	int i;
+
+	for (i = 0; i < ROOTHUB_MAX_INDEX; i++) {
+		if (root_hub_reserved[i].vid == 0 && root_hub_reserved[i].pid == 0)
+			break;
+
+		if (root_hub_reserved[i].vid == vid && root_hub_reserved[i].pid == pid) {
+			ret = true;
+			break;
+		}
+	}
+
+	return ret;
+}
+#endif
 
 static int check_essential_device(struct usb_device *dev, int index)
 {
@@ -260,6 +307,10 @@ static void connect_usb_driver(struct usb_device *dev)
 	for (i = 0; i < dev->actconfig->desc.bNumInterfaces; i++) {
 		intf = dev->actconfig->interface[i];
 		intf->authorized = 1;
+	}
+
+	for (i = 0; i < dev->actconfig->desc.bNumInterfaces; i++) {
+		intf = dev->actconfig->interface[i];
 		if (!intf->dev.driver) {
 			ret = device_attach(&intf->dev);
 			if (ret < 0)
@@ -321,8 +372,15 @@ static int call_device_notify(struct usb_device *dev, int connect)
 				disconnect_usb_driver(dev);
 				usb_set_device_state(dev, USB_STATE_NOTATTACHED);
 				dev->authorized = 0;
-			} else if (ret == USB_NOTIFY_ALLOWLOST
-						|| ret == USB_NOTIFY_NORESTRICT) {
+			} else if (ret == USB_NOTIFY_ALLOWLOST) {
+				if (!match_roothub_vid_pid(dev)) {
+					connect_usb_driver(dev);
+				} else {
+					pr_info("error. this device has same vid,pid with root hub.\n");
+					disconnect_usb_driver(dev);
+					usb_set_device_state(dev, USB_STATE_NOTATTACHED);
+				}
+			} else if (ret == USB_NOTIFY_NORESTRICT) {
 				connect_usb_driver(dev);
 			}
 #endif
@@ -343,6 +401,7 @@ static int call_device_notify(struct usb_device *dev, int connect)
 #ifndef CONFIG_DISABLE_LOCKSCREEN_USB_RESTRICTION
 			if (check_usb_restrict_lock_state(o_notify))
 				intf_authorized_clear(dev);
+			save_roothub_vid_pid(dev);
 #endif
 		}
 	}

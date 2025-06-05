@@ -5,25 +5,9 @@
 
 #ifndef __GC02M1MIPI_SENSOR_H__
 #define __GC02M1MIPI_SENSOR_H__
-//#define IMAGE_NORMAL_MIRROR
-//#define IMAGE_H_MIRROR
-//#define IMAGE_V_MIRROR
-#define IMAGE_HV_MIRROR
 
-//#ifdef IMAGE_NORMAL_MIRROR
-//#define MIRROR 0x80
-//#endif
-
-//#ifdef IMAGE_H_MIRROR
-//#define MIRROR 0x81
-//#endif
-
-//#ifdef IMAGE_V_MIRROR
-//#define MIRROR 0x82
-//#endif
-
-#ifdef IMAGE_HV_MIRROR
-#define MIRROR 0x83
+#if IS_ENABLED(CONFIG_CAMERA_AAX_V16)
+#define ENABLE_MIRROR_HV
 #endif
 
 /* SENSOR PRIVATE INFO FOR GAIN SETTING */

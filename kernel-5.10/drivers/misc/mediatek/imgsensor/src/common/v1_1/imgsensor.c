@@ -2122,7 +2122,7 @@ static inline int adopt_CAMERA_HW_FeatureControl(void *pBuf)
 			kal_uint32 buf_type = (kal_uint32) (*(pFeaturePara_64 + 0));
 			void *usr_ptr = (void *)(uintptr_t)(*(pFeaturePara_64 + 1));
 			kal_uint32 buf_size = (kal_uint32) (*(pFeaturePara_64 + 2));
-#if defined(CONFIG_CAMERA_AAW_V24) || defined(CONFIG_CAMERA_AAX_V15)
+#if defined(CONFIG_CAMERA_AAW_V24) || defined(CONFIG_CAMERA_AAX_V15) || defined(CONFIG_CAMERA_AAX_V16)
 			char *XTC_CAL = NULL;
 			const int TYPE_XTALK_CAL = 0; // Correspond to FOUR_CELL_CAL_TYPE_GAIN_TBL (XTALK_CAL)
 

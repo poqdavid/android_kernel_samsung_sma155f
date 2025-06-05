@@ -72,6 +72,10 @@ config CAMERA_AAX_V15
 	bool "Camera aax_v15"
 	help
 	  For AAX V15 camera set
+config CAMERA_AAX_V16
+	bool "Camera aax_v16"
+	help
+	  For AAX V16 camera set
 endchoice
 
 config CAMERA_SAMSUNG_MODEL_NAME

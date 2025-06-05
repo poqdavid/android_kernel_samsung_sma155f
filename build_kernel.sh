@@ -142,6 +142,7 @@ print_msg "$GREEN" "Finished Generating configs..."
 
 export LTO=thin
 export ARCH=arm64
+export PLATFORM_VERSION=12
 export CROSS_COMPILE="aarch64-linux-gnu-"
 export CROSS_COMPILE_COMPAT="arm-linux-gnueabi-"
 export OUT_DIR="../out/target/product/a15/obj/KERNEL_OBJ"

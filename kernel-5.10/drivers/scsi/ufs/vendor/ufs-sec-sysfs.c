@@ -13,6 +13,7 @@
 #include <linux/sec_debug.h>
 
 #include "ufs-sec-sysfs.h"
+#include "ufs-mediatek.h"
 
 /* sec specific vendor sysfs nodes */
 static struct device *sec_ufs_cmd_dev;
@@ -31,7 +32,7 @@ static ssize_t ufs_lt_show(struct device *dev,
 
 	if (!hba) {
 		dev_err(dev, "skipping ufs lt read\n");
-		ufs_vdi.lifetime = 0;
+		ufs_vdi.lt = 0;
 	} else if (hba->ufshcd_state == UFSHCD_STATE_OPERATIONAL) {
 		pm_runtime_get_sync(hba->dev);
 		ufs_sec_get_health_desc(hba);
@@ -39,19 +40,63 @@ static ssize_t ufs_lt_show(struct device *dev,
 	} else {
 		/* return previous LT value if not operational */
 		dev_info(hba->dev, "ufshcd_state : %d, old LT: %01x\n",
-				hba->ufshcd_state, ufs_vdi.lifetime);
+				hba->ufshcd_state, ufs_vdi.lt);
 	}
-	return snprintf(buf, PAGE_SIZE, "%01x\n", ufs_vdi.lifetime);
+	return snprintf(buf, PAGE_SIZE, "%01x\n", ufs_vdi.lt);
 }
 static DEVICE_ATTR(lt, 0444, ufs_lt_show, NULL);
 
-static ssize_t ufs_lc_info_show(struct device *dev,
+static ssize_t ufs_sec_flt_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
 {
-	return sprintf(buf, "%u\n", ufs_vdi.lc_info);
+	struct ufs_hba *hba = ufs_vdi.hba;
+
+	if (!hba) {
+		dev_err(dev, "skipping ufs flt read\n");
+		ufs_vdi.flt = 0;
+	} else if (hba->ufshcd_state == UFSHCD_STATE_OPERATIONAL) {
+		pm_runtime_get_sync(hba->dev);
+		ufs_sec_get_health_desc(hba);
+		pm_runtime_put(hba->dev);
+	} else {
+		/* return previous FLT value if not operational */
+		dev_info(hba->dev, "ufshcd_state : %d, old FLT: %u\n",
+				hba->ufshcd_state, ufs_vdi.flt);
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%u\n", ufs_vdi.flt);
+}
+static DEVICE_ATTR(flt, 0444, ufs_sec_flt_show, NULL);
+
+static ssize_t ufs_sec_eli_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct ufs_hba *hba = ufs_vdi.hba;
+
+	if (!hba) {
+		dev_err(dev, "skipping ufs eli read\n");
+		ufs_vdi.eli = 0;
+	} else if (hba->ufshcd_state == UFSHCD_STATE_OPERATIONAL) {
+		pm_runtime_get_sync(hba->dev);
+		ufs_sec_get_health_desc(hba);
+		pm_runtime_put(hba->dev);
+	} else {
+		/* return previous ELI value if not operational */
+		dev_info(hba->dev, "ufshcd_state: %d, old eli: %01x\n",
+				hba->ufshcd_state, ufs_vdi.eli);
+	}
+
+	return sprintf(buf, "%u\n", ufs_vdi.eli);
+}
+static DEVICE_ATTR(eli, 0444, ufs_sec_eli_show, NULL);
+
+static ssize_t ufs_sec_ic_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", ufs_vdi.ic);
 }
 
-static ssize_t ufs_lc_info_store(struct device *dev,
+static ssize_t ufs_sec_ic_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
 {
 	unsigned int value;
@@ -59,11 +104,34 @@ static ssize_t ufs_lc_info_store(struct device *dev,
 	if (kstrtou32(buf, 0, &value))
 		return -EINVAL;
 
-	ufs_vdi.lc_info = value;
+	ufs_vdi.ic = value;
 
 	return count;
 }
-static DEVICE_ATTR(lc, 0664, ufs_lc_info_show, ufs_lc_info_store);
+static DEVICE_ATTR(ic, 0664, ufs_sec_ic_show, ufs_sec_ic_store);
+
+static ssize_t ufs_sec_shi_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%s\n", ufs_vdi.shi);
+}
+
+static ssize_t ufs_sec_shi_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	char shi_buf[UFS_SHI_SIZE] = {0, };
+
+	ret = sscanf(buf, "%255[^\n]%*c", shi_buf);
+
+	if (ret != 1)
+		return -EINVAL;
+
+	snprintf(ufs_vdi.shi, UFS_SHI_SIZE, "%s", shi_buf);
+
+	return count;
+}
+static DEVICE_ATTR(shi, 0664, ufs_sec_shi_show, ufs_sec_shi_store);
 
 static ssize_t man_id_show(struct device *dev,
 		struct device_attribute *attr, char *buf)
@@ -73,6 +141,198 @@ static ssize_t man_id_show(struct device *dev,
 	return sprintf(buf, "%04x\n", hba->dev_info.wmanufacturerid);
 }
 static DEVICE_ATTR_RO(man_id);
+
+static bool ufs_sec_wait_for_clear_pending(struct ufs_hba *hba, u64 timeout_us)
+{
+	unsigned long flags;
+	unsigned int tm_pending = 0;
+	unsigned int tr_pending = 0;
+	bool timeout = true;
+	ktime_t start;
+
+	ufshcd_hold(hba, false);
+
+	start = ktime_get();
+
+	do {
+		spin_lock_irqsave(hba->host->host_lock, flags);
+
+		tr_pending = 0;
+
+		tm_pending = ufshcd_readl(hba, REG_UTP_TASK_REQ_DOOR_BELL);
+		/* no mcq supports */
+		tr_pending = ufshcd_readl(hba, REG_UTP_TRANSFER_REQ_DOOR_BELL);
+
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+		if (!tm_pending && !tr_pending) {
+			dev_info(hba->dev, "doorbell clr complete.\n");
+			timeout = false;
+			break;
+		}
+
+		usleep_range(5000, 5100);
+	} while (ktime_to_us(ktime_sub(ktime_get(), start)) < timeout_us);
+
+	ufshcd_release(hba);
+
+	return timeout;
+}
+
+static int ufs_sec_send_pon(struct ufs_hba *hba)
+{
+	struct scsi_device *sdp = hba->sdev_ufs_device;
+	const unsigned char cdb[6] = { START_STOP, 0, 0, 0, UFS_POWERDOWN_PWR_MODE << 4, 0 };
+	struct scsi_sense_hdr sshdr;
+	int retries;
+	int ret;
+
+	for (retries = 3; retries > 0; --retries) {
+		ret = __scsi_execute(sdp, cdb, DMA_NONE, NULL, 0, NULL, &sshdr,
+				   10 * HZ, 0, 0, RQF_PM, NULL);
+		if (ret <= 0)
+			break;
+	}
+
+	if (ret) {
+		if (ret > 0) {
+			if (scsi_sense_valid(&sshdr))
+				scsi_print_sense_hdr(sdp, NULL, &sshdr);
+		}
+	} else {
+		dev_info(hba->dev, "pon done.\n");
+		hba->curr_dev_pwr_mode = UFS_POWERDOWN_PWR_MODE;
+	}
+
+	return ret;
+}
+
+static void ufs_sec_reset_device(struct ufs_hba *hba)
+{
+	struct ufs_mtk_host *host = ufshcd_get_variant(hba);
+	unsigned long flags;
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+
+	hba->force_reset = true;
+	host->skip_flush = true;
+	hba->ufshcd_state = UFSHCD_STATE_EH_SCHEDULED_FATAL;
+
+	queue_work(hba->eh_wq, &hba->eh_work);
+
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+	flush_work(&hba->eh_work);
+
+	dev_info(hba->dev, "reset done.\n");
+
+	if (host->skip_flush)
+		host->skip_flush = false;
+}
+
+static ssize_t ufs_sec_post_ffu_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct ufs_hba *hba = dev_get_drvdata(dev);
+	struct scsi_device *sdp_wlu = hba->sdev_ufs_device;
+	struct scsi_device *sdp;
+	u32 ahit_backup = hba->ahit;
+	unsigned long flags;
+	int ret = 0;
+
+#if IS_ENABLED(CONFIG_SCSI_UFS_TEST_MODE)
+	dev_err(hba->dev, "post_ffu is not allowed if test mode is enabled\n");
+
+	return -EINVAL;
+#endif
+
+	/* check product name string */
+	if (strncmp(buf, (char *)hba->dev_info.model, strlen(hba->dev_info.model)))
+		return -EINVAL;
+
+	dev_info(hba->dev, "post_ffu start\n");
+
+	pm_runtime_get_sync(hba->dev);
+
+	spin_lock_irqsave(hba->host->host_lock, flags);
+
+	if (sdp_wlu && scsi_device_online(sdp_wlu))
+		ret = scsi_device_get(sdp_wlu);
+	else
+		ret = -ENODEV;
+
+	spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+	if (ret)
+		goto resume_rpm;
+
+	/* set SDEV_QUIESCE */
+	shost_for_each_device(sdp, hba->host)
+		scsi_device_quiesce(sdp);
+
+	/* wait for clear outstanding requests after queue quiesce */
+	if (ufs_sec_wait_for_clear_pending(hba, USEC_PER_SEC)) {
+		dev_err(dev, "post_ffu: doorbell clr timedout 1s.\n");
+		ret = -ETIMEDOUT;
+		goto resume_scsi_dev;
+	}
+
+	/* disable AH8 */
+	ufshcd_auto_hibern8_update(hba, 0);
+
+	ret = ufs_sec_send_pon(hba);
+	if (ret) {
+		/* if PON fails, do not reset UFS device */
+		dev_err(dev, "post_ffu: pon failed.(%d)\n", ret);
+		ret = -EBUSY;
+	} else {
+		/* reset UFS by eh_work */
+		ufs_sec_reset_device(hba);
+	}
+
+	/* enable AH8 after UFS reset */
+	ufshcd_auto_hibern8_update(hba, ahit_backup);
+
+resume_scsi_dev:
+	/* set SDEV_RUNNING */
+	shost_for_each_device(sdp, hba->host)
+		scsi_device_resume(sdp);
+
+	scsi_device_put(sdp_wlu);
+
+resume_rpm:
+	pm_runtime_put(hba->dev);
+
+	if (ret) {
+		dev_err(hba->dev, "post_ffu error(%d).\n", ret);
+		return ret;
+	}
+
+	dev_info(hba->dev, "post_ffu finish\n");
+
+	return count;
+}
+static DEVICE_ATTR(post_ffu, 0220, NULL, ufs_sec_post_ffu_store);
+
+/* SEC s_info : begin */
+static ssize_t SEC_UFS_s_info_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret;
+	char s_buf[UFS_S_INFO_SIZE] = {0, };
+
+	ret = sscanf(buf, "%511s", s_buf);
+
+	if (ret != 1)
+		return -EINVAL;
+
+	snprintf(ufs_vdi.s_info, UFS_S_INFO_SIZE, "%s", s_buf);
+
+	return count;
+}
+
+SEC_UFS_DATA_ATTR_RW(SEC_UFS_s_info, "%s\n", ufs_vdi.s_info);
+/* SEC s_info : end */
 
 /* UFS SEC WB : begin */
 static ssize_t ufs_sec_wb_support_show(struct device *dev,
@@ -434,9 +694,13 @@ static DEVICE_ATTR(cmd_log, 0440, ufs_sec_cmd_log_show, NULL);
 
 static struct attribute *sec_ufs_info_attributes[] = {
 	&dev_attr_un.attr,
-	&dev_attr_man_id.attr,
 	&dev_attr_lt.attr,
-	&dev_attr_lc.attr,
+	&dev_attr_flt.attr,
+	&dev_attr_eli.attr,
+	&dev_attr_ic.attr,
+	&dev_attr_shi.attr,
+	&dev_attr_man_id.attr,
+	&dev_attr_post_ffu.attr,
 	NULL
 };
 
@@ -451,6 +715,7 @@ static struct attribute *sec_ufs_error_attributes[] = {
 	&dev_attr_sense_err_count.attr,
 	&dev_attr_sense_err_logging.attr,
 	&dev_attr_SEC_UFS_err_summary.attr,
+	&dev_attr_SEC_UFS_s_info.attr,
 	NULL
 };
 

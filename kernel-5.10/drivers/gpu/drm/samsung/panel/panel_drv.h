@@ -259,6 +259,7 @@ struct panel_drv_funcs {
 	int (*register_error_cb)(struct panel_device *, void *);
 	int (*get_panel_state)(struct panel_device *, void *);
 	int (*attach_adapter)(struct panel_device *, void *);
+	int (*set_adapter_fifo_size)(struct panel_device *, unsigned int);
 
 	/* panel control operation */
 	int (*probe)(struct panel_device *);

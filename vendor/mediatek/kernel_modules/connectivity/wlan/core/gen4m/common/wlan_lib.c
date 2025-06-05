@@ -565,6 +565,10 @@ PFN_OID_HANDLER_FUNC apfnOidWOTimeoutCheck[] = {
 
 #define NVRAM_TAG_HDR_SIZE  3 /*ID+Len MSB+Len LSB*/
 
+#if (CFG_TC10_FEATURE == 1)
+#define FW_CFG_KEY_ESS_BAND_BITMAP		"EssBandBitmap"
+#endif
+
 /*******************************************************************************
  *                                 M A C R O S
  *******************************************************************************
@@ -7596,32 +7600,8 @@ void wlanInitFeatureOption(IN struct ADAPTER *prAdapter)
 	prWifiVar->ucGbandProbe256QAM = (uint8_t) wlanCfgGetUint32(
 					prAdapter, "Probe256QAM",
 					FEATURE_ENABLED);
-
-	prWifiVar->ucCustomer1Oui = (uint8_t) wlanCfgGetUint32(
-			prAdapter, "Customer1Oui", FEATURE_ENABLED);
-	prWifiVar->ucCus1Oui[0] = (uint8_t) wlanCfgGetUint32(
-					prAdapter, "Cus1Oui0", 0x00);
-	prWifiVar->ucCus1Oui[1] = (uint8_t) wlanCfgGetUint32(
-					prAdapter, "Cus1Oui1", 0x16);
-	prWifiVar->ucCus1Oui[2] = (uint8_t) wlanCfgGetUint32(
-					prAdapter, "Cus1Oui2", 0x32);
-	prWifiVar->ucCusOuiLen[0] = (uint8_t) wlanCfgGetUint32(
-					prAdapter, "Cus1OuiLen", 5);
-	prWifiVar->ucCusOuiType[0] = (uint8_t) wlanCfgGetUint32(
-					prAdapter, "Cus1OuiType", 0x80);
-
-	prWifiVar->ucCustomer2Oui = (uint8_t) wlanCfgGetUint32(
-			prAdapter, "Customer2Oui", FEATURE_ENABLED);
-	prWifiVar->ucCus2Oui[0] = (uint8_t) wlanCfgGetUint32(
-					prAdapter, "Cus2Oui0", 0x00);
-	prWifiVar->ucCus2Oui[1] = (uint8_t) wlanCfgGetUint32(
-					prAdapter, "Cus2Oui1", 0x00);
-	prWifiVar->ucCus2Oui[2] = (uint8_t) wlanCfgGetUint32(
-					prAdapter, "Cus2Oui2", 0x0F);
-	prWifiVar->ucCusOuiLen[1] = (uint8_t) wlanCfgGetUint32(
-					prAdapter, "Cus2OuiLen", 4);
-	prWifiVar->ucCusOuiType[1] = (uint8_t) wlanCfgGetUint32(
-					prAdapter, "Cus2OuiType", 0xfe);
+	prWifiVar->ucCustomerOui = (uint8_t) wlanCfgGetUint32(
+			prAdapter, "CustomerOui", FEATURE_ENABLED);
 #endif
 #if CFG_SUPPORT_VHT_IE_IN_2G
 	prWifiVar->ucVhtIeIn2g = (uint8_t) wlanCfgGetUint32(
@@ -14017,3 +13997,25 @@ uint32_t wlanSendFwLogControlCmd(IN struct ADAPTER *prAdapter,
 
 	return status;
 }
+
+#if (CFG_TC10_FEATURE == 1)
+uint32_t wlanSetEssBandBitmap(
+	struct ADAPTER *prAdapter,
+	uint8_t ucEssBandBitMap)
+{
+	char cmd[128] = { 0 };
+	uint32_t status = WLAN_STATUS_FAILURE;
+
+	kalSnprintf(cmd, sizeof(cmd), "%s %d",
+				      FW_CFG_KEY_ESS_BAND_BITMAP,
+				      ucEssBandBitMap);
+	status =  wlanFwCfgParse(prAdapter, cmd);
+	if (status != WLAN_STATUS_SUCCESS)
+		DBGLOG(INIT, WARN, "set Ess band bitmap fail %d\n", status);
+	else
+		DBGLOG(INIT, INFO, "set Ess band bitmap success [%d]\n",
+				   ucEssBandBitMap);
+
+	return status;
+}
+#endif

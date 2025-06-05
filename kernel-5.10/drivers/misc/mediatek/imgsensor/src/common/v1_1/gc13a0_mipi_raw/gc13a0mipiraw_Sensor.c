@@ -342,13 +342,13 @@ static void set_dummy(void)
 	LOG_DBG("dummyline = %d, dummypixels = %d\n",
 		imgsensor.dummy_line, imgsensor.dummy_pixel);
 
-	write_cmos_sensor_8(0x0340, (u8)(imgsensor.frame_length >> 8) & 0xFF);
-	write_cmos_sensor_8(0x0341, (u8)(imgsensor.frame_length & 0xFF));
+	write_cmos_sensor_8(GC13A0_REG_FRAME_LENGTH_HIGH, (u8)(imgsensor.frame_length >> 8) & 0xFF);
+	write_cmos_sensor_8(GC13A0_REG_FRAME_LENGTH_LOW, (u8)(imgsensor.frame_length & 0xFF));
 }
 
 static kal_uint32 return_sensor_id(void)
 {
-	return (read_cmos_sensor_8(0x03f0) << 8) | read_cmos_sensor_8(0x03f1);
+	return (read_cmos_sensor_8(GC13A0_REG_SENSOR_ID_HIGH) << 8) | read_cmos_sensor_8(GC13A0_REG_SENSOR_ID_LOW);
 }
 
 static void set_max_framerate(UINT16 framerate, kal_bool min_framelength_en)
@@ -425,8 +425,8 @@ static void set_shutter(kal_uint16 shutter)
 	} else
 		set_max_framerate(realtime_fps, 0);
 
-	write_cmos_sensor_8(0x0202, (shutter >> 8) & 0xff);
-	write_cmos_sensor_8(0x0203, shutter & 0xff);
+	write_cmos_sensor_8(GC13A0_REG_SHUTTER_TIME_HIGH, (shutter >> 8) & 0xff);
+	write_cmos_sensor_8(GC13A0_REG_SHUTTER_TIME_LOW, shutter & 0xff);
 	LOG_DBG("shutter = %d, framelength = %d\n", shutter, imgsensor.frame_length);
 }
 
@@ -470,8 +470,8 @@ static void set_shutter_frame_length(kal_uint16 shutter, kal_uint16 frame_length
 	} else
 		set_max_framerate(realtime_fps, 0);
 
-	write_cmos_sensor_8(0x0202, (shutter >> 8) & 0xff);
-	write_cmos_sensor_8(0x0203, shutter & 0xff);
+	write_cmos_sensor_8(GC13A0_REG_SHUTTER_TIME_HIGH, (shutter >> 8) & 0xff);
+	write_cmos_sensor_8(GC13A0_REG_SHUTTER_TIME_LOW, shutter & 0xff);
 
 	LOG_DBG("shutter = %d, framelength = %d Stereo\n", shutter, imgsensor.frame_length);
 }
@@ -519,8 +519,8 @@ static kal_uint16 set_gain(kal_uint16 gain)
 
 	LOG_DBG("in_gain = 0x%04x, reg_gain = 0x%04x\n ", gain, reg_gain);
 
-	write_cmos_sensor_8(0x0204, (reg_gain >> 8) & 0xff);
-	write_cmos_sensor_8(0x0205, reg_gain & 0xff);
+	write_cmos_sensor_8(GC13A0_REG_AGAIN_HIGH, (reg_gain >> 8) & 0xff);
+	write_cmos_sensor_8(GC13A0_REG_AGAIN_LOW, reg_gain & 0xff);
 	return gain;
 }				/*    set_gain  */
 
@@ -1117,11 +1117,11 @@ static int wait_stream_changes(kal_uint32 addr, kal_uint32 val)
 	max_cnt = 100;
 	cur_cnt = 0;
 
-	read_val = read_cmos_sensor_8(read_addr) & 0x40;
+	read_val = read_cmos_sensor_8(read_addr) & GC13A0_MIPI_CLK_ENABLE;
 
 	while (read_val != val) {
 		mDELAY(wait_delay_ms);
-		read_val = read_cmos_sensor_8(read_addr) & 0x40;
+		read_val = read_cmos_sensor_8(read_addr) & GC13A0_MIPI_CLK_ENABLE;
 
 		LOG_DBG("read addr = 0x%.2x, val = 0x%.2x", addr, read_val);
 		cur_cnt++;
@@ -1144,12 +1144,12 @@ static int wait_stream_on()
 	unsigned int i = 0;
 	int timeout_cnt = 200;
 
-	frame_counter = (read_cmos_sensor_8(0x0146) << 8) | read_cmos_sensor_8(0x0147);
+	frame_counter = (read_cmos_sensor_8(GC13A0_REG_FRAME_CNT_HIGH) << 8) | read_cmos_sensor_8(GC13A0_REG_FRAME_CNT_LOW);
 	LOG_INF("wait_stream_on start frame_counter %d", frame_counter);
 	mDELAY(3);
 
 	for (i = 0; i < timeout_cnt; i++) {
-		temp_frame_counter = (read_cmos_sensor_8(0x0146) << 8) | read_cmos_sensor_8(0x0147);
+		temp_frame_counter = (read_cmos_sensor_8(GC13A0_REG_FRAME_CNT_HIGH) << 8) | read_cmos_sensor_8(GC13A0_REG_FRAME_CNT_LOW);
 		LOG_DBG("wait_stream_on start temp_frame_counter %d", temp_frame_counter);
 		if (temp_frame_counter != frame_counter)
 			break;
@@ -1173,15 +1173,15 @@ static kal_uint32 streaming_control(kal_bool enable)
 		if (enable_adaptive_mipi && imgsensor.current_scenario_id != MSDK_SCENARIO_ID_CUSTOM1)
 			set_mipi_mode(adaptive_mipi_index);
 
-		write_cmos_sensor_8(0x0100, 0X01);
+		write_cmos_sensor_8(GC13A0_REG_STREAM_ONOFF, GC13A0_STREAM_ON);
 #ifdef ENABLE_STREAM_ON_CHECKING_WITH_FRAMECOUNT
 		wait_stream_on();
 #else
-		wait_stream_changes(0x0180, 0x40);
+		wait_stream_changes(GC13A0_REG_MIPI_CLK_STATUS, GC13A0_MIPI_CLK_ENABLE);
 #endif
 	} else {
-		write_cmos_sensor_8(0x0100, 0x00);
-		wait_stream_changes(0x0180, 0x00);
+		write_cmos_sensor_8(GC13A0_REG_STREAM_ONOFF, GC13A0_STREAM_OFF);
+		wait_stream_changes(GC13A0_REG_MIPI_CLK_STATUS, GC13A0_MIPI_CLK_DISABLE);
 	}
 	return ERROR_NONE;
 }

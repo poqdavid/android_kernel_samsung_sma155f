@@ -5846,6 +5846,20 @@ int panel_ioctl_attach_adapter(struct panel_device *panel, void *arg)
 	return 0;
 }
 
+int panel_set_adapter_fifo_size(struct panel_device *panel, unsigned int fifo_size)
+{
+	if (!panel) {
+		panel_err("invalid argument\n");
+		return -EINVAL;
+	}
+
+	panel->adapter.fifo_size = fifo_size;
+
+	panel_info("adapter fifo_size = (%d)\n", panel->adapter.fifo_size);
+
+	return 0;
+}
+
 int panel_ioctl_get_panel_state(struct panel_device *panel, void *arg)
 {
 	/* TODO: extract function to update connected state */
@@ -7332,6 +7346,7 @@ struct panel_drv_funcs panel_drv_funcs = {
 	.register_cb = panel_register_cb,
 	.get_panel_state = panel_ioctl_get_panel_state,
 	.attach_adapter = panel_ioctl_attach_adapter,
+	.set_adapter_fifo_size = panel_set_adapter_fifo_size,
 
 	.probe = panel_probe,
 	.sleep_in = panel_sleep_in,

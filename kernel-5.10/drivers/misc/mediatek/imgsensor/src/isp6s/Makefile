@@ -24,6 +24,7 @@ imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor.o
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor_hw.o
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor_i2c.o
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor_legacy.o
+imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor_common_interface.o
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor_proc.o
 #imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor_pwr_seq.o
 imgsensor_isp6s-objs += ../common/$(COMMON_VERSION)/imgsensor_sensor_list.o

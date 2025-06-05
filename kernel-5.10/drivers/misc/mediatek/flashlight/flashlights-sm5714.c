@@ -32,6 +32,8 @@
 
 #include <linux/mfd/sm/sm5714/sm5714.h>
 
+extern void sm5714_fled_set_afc_voltage_mode(bool mode);
+
 #define SM5714_NAME "flashlights-sm5714"
 
 /* define level */
@@ -39,6 +41,8 @@
 #define SM5714_LEVEL_TORCH 8
 #define SM5714_HW_TIMEOUT 1600 /* ms */
 #define SM5714_DUTY_STEP 25
+int curr_Mode; /* 1-FLED_MODE_TORCH  and 2-FLED_MODE_Flash */
+bool main_flash_done = true;
 
 /* define mutex and work queue */
 static DEFINE_MUTEX(sm5714_mutex);
@@ -152,15 +156,26 @@ static int sm5714_ioctl(unsigned int cmd, unsigned long arg)
 			//0 based indexing for level
 			if (sm5714_is_torch(sm5714_current_level)) {
 				pr_debug("TORCH MODE");
+				curr_Mode = FLED_MODE_TORCH;
+				sm5714_fled_mode_ctrl(SM5714_FLED_MODE_PREPARE_FLASH, 0);
 				sm5714_fled_mode_ctrl(SM5714_FLED_MODE_TORCH_FLASH
 						, (sm5714_current_level + 1) * SM5714_DUTY_STEP);
 			} else {
 				pr_debug("FLASH MODE");
+				curr_Mode = FLED_MODE_FLASH;
 				sm5714_fled_mode_ctrl(SM5714_FLED_MODE_MAIN_FLASH
 						, (sm5714_current_level + 1) * SM5714_DUTY_STEP);
+				main_flash_done = true;
 			}
 		} else {
-			sm5714_fled_mode_ctrl(SM5714_FLED_MODE_OFF, 0);
+			if (!main_flash_done && curr_Mode == FLED_MODE_TORCH) {
+				sm5714_fled_set_afc_voltage_mode(false);
+				sm5714_fled_mode_ctrl(SM5714_FLED_MODE_OFF, 0);
+				sm5714_fled_set_afc_voltage_mode(true);
+				}
+			else
+				sm5714_fled_mode_ctrl(SM5714_FLED_MODE_OFF, 0);
+			sm5714_volt_state = SM5714_FLED_MODE_CLOSE_FLASH;
 			hrtimer_cancel(&sm5714_timer);
 		}
 		break;
@@ -196,13 +211,13 @@ static int sm5714_ioctl(unsigned int cmd, unsigned long arg)
 		break;
 
 	case FLASH_IOC_SET_SCENARIO:
+		main_flash_done = false;
 		pr_debug("FLASH_IOC_SET_SCENARIO(%d)\n", channel);
 		if (sm5714_volt_state == SM5714_FLED_MODE_CLOSE_FLASH) {
 			sm5714_volt_state = SM5714_FLED_MODE_PREPARE_FLASH;
 		} else if (sm5714_volt_state == SM5714_FLED_MODE_PREPARE_FLASH) {
 			sm5714_volt_state = SM5714_FLED_MODE_CLOSE_FLASH;
 		}
-		schedule_work(&sm5714_voltage_work);
 		break;
 
 	case FLASH_IOC_SET_VOLTAGE:

@@ -1035,6 +1035,13 @@ static int usb_audio_probe(struct usb_interface *intf,
 	chip->intf[chip->num_interfaces] = intf;
 	chip->num_interfaces++;
 	usb_set_intfdata(intf, chip);
+
+	if (USB_ID_VENDOR(id) == 0x04e8 && USB_ID_PRODUCT(id) == 0xa051) {
+		/* enable auto suspend */
+		usb_enable_autosuspend(dev);
+		device_wakeup_enable(&dev->dev);
+	}
+
 	atomic_dec(&chip->active);
 	mutex_unlock(&register_mutex);
 #ifdef CONFIG_USB_DEBUG_DETAILED_LOG

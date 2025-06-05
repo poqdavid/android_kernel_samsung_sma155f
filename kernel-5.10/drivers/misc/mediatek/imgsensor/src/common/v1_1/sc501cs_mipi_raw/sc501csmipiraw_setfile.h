@@ -6,7 +6,7 @@
 #ifndef __SC501CS_SENSOR_SETFILE_H__
 #define __SC501CS_SENSOR_SETFILE_H__
 
-/* setfile: */
+/* setfile: SC501CS_setting_Samsung_V1.3.0_Á¦Ç°¿ë_2023.07.29.xlsx */
 #include "sc501csmipiraw_Sensor.h"
 
 static kal_uint16 sc501cs_init_setting[] = {
@@ -177,7 +177,6 @@ static kal_uint16 sc501cs_preview_setting[] = {
 	0x5780, 0x66,
 	0x5900, 0x01,
 	0x5901, 0x00,
-	//0x0100, 0x01,
 };
 
 static kal_uint16 sc501cs_capture_setting[] = {

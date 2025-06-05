@@ -25,6 +25,8 @@
 #define DB_OPT_FTRACE   (0)	/* Dummy macro define to avoid build error */
 #endif
 
+static struct md_info mdee_info_v5;
+
 static void ccci_aed_v5(struct ccci_fsm_ee *mdee, unsigned int dump_flag,
 	char *aed_str, int db_opt)
 {
@@ -317,7 +319,7 @@ static void mdee_info_dump_v5(struct ccci_fsm_ee *mdee)
 		mdee_output_debug_info_to_buf(mdee, debug_info, ex_info);
 		break;
 	}
-
+	ret = snprintf(mdee_info_v5.md_ee_info_buf, mdee_info_v5.buf_len, "%s", ex_info);
 	if (debug_info->ELM_status != NULL) {
 		ret = scnprintf(ex_info_temp, EE_BUF_LEN_UMOLY, "%s", ex_info);
 		if (ret < 0 || ret >= EE_BUF_LEN_UMOLY) {
@@ -938,6 +940,22 @@ int mdee_dumper_v5_alloc(struct ccci_fsm_ee *mdee)
 {
 	struct mdee_dumper_v5 *dumper = NULL;
 	int md_id = mdee->md_id;
+	char *ex_info = NULL;
+
+	ex_info = kmalloc(512, GFP_ATOMIC);
+	if (ex_info == NULL) {
+		CCCI_ERROR_LOG(0, FSM, "Fail alloc Mem for ex_info!\n");
+		return -1;
+	}
+
+#if IS_ENABLED(CONFIG_MTK_AEE_IPANIC)
+	CCCI_ERROR_LOG(0, FSM, "CONFIG_MTK_AEE_IPANIC enable\n");
+	mrdump_mini_add_extra_file((unsigned long)ex_info, __pa_nodebug(ex_info),
+		512, "MD_EE_INFO");
+#endif
+	mdee_info_v5.buf_len = 512;
+	mdee_info_v5.md_ee_info_buf = ex_info;
+
 
 #if IS_ENABLED(CONFIG_MTK_EMI)
 	if (mtk_emimpu_md_handling_register(
