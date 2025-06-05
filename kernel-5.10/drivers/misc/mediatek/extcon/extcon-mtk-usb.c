@@ -26,6 +26,12 @@
 #include "tcpm.h"
 #endif
 
+#if IS_ENABLED(CONFIG_USB_NOTIFIER) && IS_ENABLED(CONFIG_PDIC_NOTIFIER)
+#include <linux/usb/typec/common/pdic_notifier.h>
+
+static struct mtk_extcon_info *g_extcon;
+#endif
+
 static const unsigned int usb_extcon_cable[] = {
 	EXTCON_USB,
 	EXTCON_USB_HOST,
@@ -80,10 +86,80 @@ static void mtk_usb_extcon_update_role(struct work_struct *work)
 	kfree(role);
 }
 
+#if IS_ENABLED(CONFIG_USB_NOTIFIER)
+int mtk_usb_notify_set_mode(int role)
+{
+#if IS_ENABLED(CONFIG_PDIC_NOTIFIER)
+	struct mtk_extcon_info *extcon = g_extcon;
+	struct usb_role_info *role_info;
+
+	if (!extcon) {
+		pr_info("%s: g_extcon is NULL\n", __func__);
+		return -ENODEV;
+	}
+
+	pr_info("%s: role %d\n", __func__, role);
+	/* create and prepare worker */
+	role_info = kzalloc(sizeof(*role_info), GFP_ATOMIC);
+	if (!role_info)
+		return -ENOMEM;
+
+	INIT_DELAYED_WORK(&role_info->dwork, mtk_usb_extcon_update_role);
+
+	role_info->extcon = extcon;
+	role_info->d_role = role;
+	/* issue connection work */
+	queue_delayed_work(extcon->extcon_wq, &role_info->dwork, 0);
+#else
+	pr_info("%s: role %d--\n", __func__, role);
+#endif
+	return 0;
+}
+EXPORT_SYMBOL(mtk_usb_notify_set_mode);
+#endif
+
+#if IS_ENABLED(CONFIG_USB_NOTIFIER) && IS_ENABLED(CONFIG_PDIC_NOTIFIER)
+void mt_usb_pdic_event_work(unsigned int role)
+{
+	PD_NOTI_TYPEDEF pdic_noti = {
+		.src = PDIC_NOTIFY_DEV_PDIC,
+		.dest = PDIC_NOTIFY_DEV_USB,
+		.id = PDIC_NOTIFY_ID_USB,
+		.sub1 = 0,
+		.sub2 = 0,//event,
+		.sub3 = 0,
+	};
+
+	switch (role) {
+	case USB_ROLE_HOST:
+		pdic_noti.sub2 = USB_STATUS_NOTIFY_ATTACH_DFP;
+		break;
+	case USB_ROLE_DEVICE:
+		pdic_noti.sub2 = USB_STATUS_NOTIFY_ATTACH_UFP;
+		break;
+	case USB_ROLE_NONE:
+	default:
+		pdic_noti.sub2 = USB_STATUS_NOTIFY_DETACH;
+		break;
+	}
+
+	pr_info("usb: %s :%s\n", __func__, pdic_usbstatus_string(pdic_noti.sub2));
+	pdic_notifier_notify((PD_NOTI_TYPEDEF *)&pdic_noti, 0, 0);
+}
+#endif
+
 static int mtk_usb_extcon_set_role(struct mtk_extcon_info *extcon,
 						unsigned int role)
 {
 	struct usb_role_info *role_info;
+
+#if IS_ENABLED(CONFIG_USB_NOTIFIER) && IS_ENABLED(CONFIG_PDIC_NOTIFIER)
+	extcon->last_dr_event = role;
+	if (g_extcon) {
+		mt_usb_pdic_event_work(role);
+		return 0;
+	}
+#endif
 
 	/* create and prepare worker */
 	role_info = kzalloc(sizeof(*role_info), GFP_ATOMIC);
@@ -282,12 +358,22 @@ static int mtk_extcon_tcpc_notifier(struct notifier_block *nb,
 		dev_info(dev, "%s dr_swap, new role=%d\n",
 				__func__, noti->swap_state.new_role);
 		if (noti->swap_state.new_role == PD_ROLE_UFP &&
-				extcon->c_role != USB_ROLE_DEVICE) {
+#if IS_ENABLED(CONFIG_USB_NOTIFIER) && IS_ENABLED(CONFIG_PDIC_NOTIFIER)
+				extcon->last_dr_event != USB_ROLE_DEVICE
+#else
+				extcon->c_role != USB_ROLE_DEVICE
+#endif
+				) {
 			dev_info(dev, "switch role to device\n");
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_DEVICE);
 		} else if (noti->swap_state.new_role == PD_ROLE_DFP &&
-				extcon->c_role != USB_ROLE_HOST) {
+#if IS_ENABLED(CONFIG_USB_NOTIFIER) && IS_ENABLED(CONFIG_PDIC_NOTIFIER)
+				extcon->last_dr_event != USB_ROLE_HOST
+#else
+				extcon->c_role != USB_ROLE_HOST
+#endif
+				) {
 			dev_info(dev, "switch role to host\n");
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_HOST);
@@ -552,6 +638,10 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	ret = mtk_usb_extcon_tcpc_init(extcon);
 	if (ret < 0)
 		dev_err(dev, "failed to init tcpc\n");
+#endif
+
+#if IS_ENABLED(CONFIG_USB_NOTIFIER) && IS_ENABLED(CONFIG_PDIC_NOTIFIER)
+	g_extcon = extcon;
 #endif
 
 	platform_set_drvdata(pdev, extcon);

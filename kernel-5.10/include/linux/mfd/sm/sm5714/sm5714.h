@@ -79,6 +79,7 @@ struct sm5714_fled_data {
 };
 
 extern int32_t sm5714_fled_mode_ctrl(int state, uint32_t brightness);
+extern void sm5714_fled_set_afc_voltage_mode(bool mode);
 
 #endif /* __SM5714_H__ */
 

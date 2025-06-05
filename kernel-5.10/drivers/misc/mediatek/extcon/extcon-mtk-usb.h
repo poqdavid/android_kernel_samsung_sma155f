@@ -8,6 +8,9 @@ struct mtk_extcon_info {
 	struct extcon_dev *edev;
 	struct usb_role_switch *role_sw;
 	unsigned int c_role; /* current data role */
+#if IS_ENABLED(CONFIG_USB_NOTIFIER) && IS_ENABLED(CONFIG_PDIC_NOTIFIER)
+	unsigned int last_dr_event; /* Last data role event */
+#endif
 	struct workqueue_struct *extcon_wq;
 	struct regulator *vbus;
 	unsigned int vbus_vol;
@@ -44,3 +47,7 @@ enum {
 	DUAL_PROP_PR_SNK,
 	DUAL_PROP_PR_NONE,
 };
+
+#if IS_ENABLED(CONFIG_USB_NOTIFIER)
+int mtk_usb_notify_set_mode(int role);
+#endif

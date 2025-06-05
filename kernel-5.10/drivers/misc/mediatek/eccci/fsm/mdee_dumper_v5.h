@@ -99,6 +99,11 @@ struct ex_overview_t {
 	u32 core_offset[MD_CORE_TOTAL_NUM];
 } __packed;
 
+struct md_info {
+	unsigned int buf_len;
+	char *md_ee_info_buf;
+};
+
 enum {
 	/* mips exception codes in cause[exccode] */
 	INTERRUPT_EXCEPTION = 0x0,

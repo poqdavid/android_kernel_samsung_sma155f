@@ -12417,7 +12417,7 @@ wlanoidSetBeaconRecv(IN struct ADAPTER *prAdapter,
 		IN void *pvSetBuffer, IN uint32_t u4SetBufferLen,
 		OUT uint32_t *pu4SetInfoLen)
 {
-	struct CMD_SET_REPORT_BEACON_STRUCT beaconRecv;
+	struct CMD_SET_REPORT_BEACON_STRUCT beaconRecv = {0};
 	struct SCAN_INFO *prScanInfo =
 		&(prAdapter->rWifiVar.rScanInfo);
 
@@ -17911,17 +17911,48 @@ uint32_t wlanoidGetBssInfo(IN struct ADAPTER *prAdapter,
 	prAisFsmInfo = aisGetAisFsmInfo(prAdapter, ucBssIndex);
 
 	if (!prBssInfo || !prBssDesc || !prStaRec || !prAisFsmInfo) {
-		DBGLOG(OID, WARN, "status error: %d,%d,%d,%d",
-			prBssInfo, prBssDesc, prStaRec, prAisFsmInfo);
+#if CFG_TC10_FEATURE
+		index += kalSprintf(pvSetBuffer + index, "%02x:%02x:%02x ",
+			bssinfo_back.OUI[0],
+			bssinfo_back.OUI[1],
+			bssinfo_back.OUI[2]);
+		index += kalSprintf(pvSetBuffer + index, "%d ",
+			bssinfo_back.channel_freq);
+		index += kalSprintf(pvSetBuffer + index, "%d ",
+			bssinfo_back.channel_bw);
+		index += kalSprintf(pvSetBuffer + index, "%d ",
+			bssinfo_back.rssi);
+		index += kalSprintf(pvSetBuffer + index, "%d ",
+			bssinfo_back.datarate);
+		index += kalSprintf(pvSetBuffer + index, "%d ",
+			bssinfo_back.phy_mode);
+		index += kalSprintf(pvSetBuffer + index, "%d ",
+			bssinfo_back.ant_mode);
+		index += kalSprintf(pvSetBuffer + index, "%d ", 0);
+		index += kalSprintf(pvSetBuffer + index, "%d ", 0);
+		index += kalSprintf(pvSetBuffer + index, "%d ", 0);
+		index += kalSprintf(pvSetBuffer + index, "%d ", 0);
+		index += kalSprintf(pvSetBuffer + index, "%d ",
+			bssinfo_back.AKM);
+		index += kalSprintf(pvSetBuffer + index, "%d ",
+			bssinfo_back.Roaming_count);
+		index += kalSprintf(pvSetBuffer + index, "%d ",
+			bssinfo_back.KV);
+		index += kalSprintf(pvSetBuffer + index, "%d",
+			bssinfo_back.KVIE);
+		kalMemCopy(pvSetBuffer + index, separator, 1);
+		index++;
+		*pu4SetInfoLen = index;
+#endif
 		return WLAN_STATUS_SUCCESS;
 	}
 	/* OUI */
-	index += kalSprintf(pvSetBuffer + index, "%x:%x:%x ",
+	index += kalSprintf(pvSetBuffer + index, "%02x:%02x:%02x ",
 		prBssInfo->aucBSSID[0],
 		prBssInfo->aucBSSID[1],
 		prBssInfo->aucBSSID[2]);
 
-	DBGLOG(OID, TRACE, "OUI =%x,%x,%x\n",
+	DBGLOG(OID, TRACE, "OUI =%02x:%02x:%02x\n",
 		prBssInfo->aucBSSID[0],
 		prBssInfo->aucBSSID[1],
 		prBssInfo->aucBSSID[2]);
@@ -17983,7 +18014,7 @@ uint32_t wlanoidGetBssInfo(IN struct ADAPTER *prAdapter,
 	index += kalSprintf(pvSetBuffer + index, "%d ", tempout);
 
 	/* Antenna mode */
-	tempout = prBssInfo->ucOpTxNss;
+	tempout = prBssInfo->ucOpTxNss - 1;
 	index += kalSprintf(pvSetBuffer + index, "%d ", tempout);
 
 	/* MU-MIMO : return 0 */
@@ -18122,7 +18153,7 @@ uint32_t wlanoidGetStaInfo(IN struct ADAPTER *prAdapter,
 
 	/* remote Device Address MAC */
 	index += kalSprintf(pvSetBuffer + index,
-		"%02x,%02x,%02x,%02x,%02x,%02x ",
+		"%02x:%02x:%02x:%02x:%02x:%02x ",
 		prStaRec->aucMacAddr[0],
 		prStaRec->aucMacAddr[1],
 		prStaRec->aucMacAddr[2],
@@ -18130,7 +18161,7 @@ uint32_t wlanoidGetStaInfo(IN struct ADAPTER *prAdapter,
 		prStaRec->aucMacAddr[4],
 		prStaRec->aucMacAddr[5]);
 
-	DBGLOG(OID, TRACE, "OUI =%02x,%02x,%02x,%02x,%02x,%02x\n",
+	DBGLOG(OID, TRACE, "OUI =%02x:%02x:%02x:%02x:%02x:%02x\n",
 		prStaRec->aucMacAddr[0],
 		prStaRec->aucMacAddr[1],
 		prStaRec->aucMacAddr[2],
@@ -18148,12 +18179,12 @@ uint32_t wlanoidGetStaInfo(IN struct ADAPTER *prAdapter,
 	index += kalSprintf(pvSetBuffer + index, "%s ", capDefault);
 
 	/* OUI */
-	index += kalSprintf(pvSetBuffer + index, "%02x,%02x,%02x ",
+	index += kalSprintf(pvSetBuffer + index, "%02x:%02x:%02x ",
 		prStaRec->aucMacAddr[0],
 		prStaRec->aucMacAddr[1],
 		prStaRec->aucMacAddr[2]);
 
-	DBGLOG(OID, TRACE, "OUI =%x,%x,%x\n",
+	DBGLOG(OID, TRACE, "OUI =%02x:%02x:%02x\n",
 		prStaRec->aucMacAddr[0],
 		prStaRec->aucMacAddr[1],
 		prStaRec->aucMacAddr[2]);

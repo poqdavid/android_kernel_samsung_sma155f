@@ -317,6 +317,10 @@ int fsm_sys_init(void);
 int ccci_get_ap_debug_level(void);
 #endif
 
+#if IS_ENABLED(CONFIG_MTK_AEE_IPANIC)
+extern int mrdump_mini_add_extra_file(unsigned long vaddr, unsigned long paddr,
+	unsigned long size, const char *name);
+#endif
 struct ccci_fsm_ctl *fsm_get_entity_by_device_number(dev_t dev_n);
 struct ccci_fsm_ctl *fsm_get_entity_by_md_id(int md_id);
 int fsm_monitor_send_message(int md_id, enum CCCI_MD_MSG msg, u32 resv);

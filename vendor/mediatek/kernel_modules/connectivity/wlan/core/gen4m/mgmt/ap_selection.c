@@ -674,7 +674,6 @@ static u_int8_t scanSanityCheckBssDesc(struct ADAPTER *prAdapter,
 {
 	struct BSS_INFO *prAisBssInfo;
 	struct BSS_DESC *target;
-	char log[256] = {0};
 
 #if CFG_SUPPORT_MBO
 	struct PARAM_BSS_DISALLOWED_LIST *disallow;
@@ -688,12 +687,6 @@ static u_int8_t scanSanityCheckBssDesc(struct ADAPTER *prAdapter,
 				&disallow->aucList[index])) {
 			log_dbg(SCN, WARN, MACSTR" disallowed list\n",
 				MAC2STR(prBssDesc->aucBSSID));
-			kalSprintf(log,
-				"[CONN] CONNECTING FAIL bssid=" RPTMACSTR
-				" freq=%d [reason: disallowed list]",
-				RPTMAC2STR(prBssDesc->aucBSSID),
-				prBssDesc->ucChannelNum);
-			kalReportWifiLog(prAdapter, ucBssIndex, log);
 
 			return FALSE;
 		}
@@ -729,12 +722,6 @@ static u_int8_t scanSanityCheckBssDesc(struct ADAPTER *prAdapter,
 		if (prBssDesc->prBlack->fgIsInFWKBlacklist) {
 			log_dbg(SCN, WARN, MACSTR" in FWK blocklist\n",
 				MAC2STR(prBssDesc->aucBSSID));
-			kalSprintf(log,
-				"[CONN] CONNECTING FAIL bssid=" RPTMACSTR
-				" freq=%d [reason: FWK blocklist]",
-				RPTMAC2STR(prBssDesc->aucBSSID),
-				prBssDesc->ucChannelNum);
-			kalReportWifiLog(prAdapter, ucBssIndex, log);
 
 			return FALSE;
 		}
@@ -883,12 +870,6 @@ static u_int8_t scanSanityCheckBssDesc(struct ADAPTER *prAdapter,
 		log_dbg(SCN, WARN, MACSTR " rsn policy select fail.\n",
 			MAC2STR(prBssDesc->aucBSSID));
 
-		kalSprintf(log,
-			"[CONN] CONNECTING FAIL bssid=" RPTMACSTR
-			" freq=%d [reason: RSN mismatch]",
-			RPTMAC2STR(prBssDesc->aucBSSID),
-			prBssDesc->ucChannelNum);
-		kalReportWifiLog(prAdapter, ucBssIndex, log);
 		return FALSE;
 	}
 	if (aisGetAisSpecBssInfo(prAdapter,
@@ -1475,6 +1456,11 @@ uint8_t apSelectionIsBssDescQualify(struct ADAPTER *prAdapter,
 	uint32_t u4CandidateApScore)
 {
 	struct WIFI_VAR *prWifiVar = &prAdapter->rWifiVar;
+
+	if (prAdapter->rNchoInfo.fgNCHOEnabled) {
+		log_dbg(SCN, INFO, "NCHO enable, only consider rssi");
+		return TRUE;
+	}
 
 	switch (eRoamReason) {
 	case ROAMING_REASON_POOR_RCPI:
@@ -2400,6 +2386,7 @@ void scanGetCurrentEssChnlList(struct ADAPTER *prAdapter,
 	uint8_t aucChnlApNum[234] = {0,};
 	uint8_t aucChnlUtil[234] = {0,};
 	uint8_t ucChnlCount = 0;
+	uint8_t ucEssBandBitMap = 0;
 	uint32_t i;
 	uint8_t j = 0;
 #if CFG_SUPPORT_802_11K
@@ -2546,22 +2533,15 @@ updated:
 	for (j = 0; j < ucChnlCount; j++) {
 		uint8_t ucChnl = prEssChnlInfo[j].ucChannel;
 
+		ucEssBandBitMap |= BIT(prEssChnlInfo[j].eBand);
 		prEssChnlInfo[j].ucApNum = aucChnlApNum[ucChnl];
 		prEssChnlInfo[j].ucUtilization = aucChnlUtil[ucChnl];
 	}
-#if 0
-	/* Sort according to AP number */
-	for (j = 0; j < ucChnlCount; j++) {
-		for (i = j + 1; i < ucChnlCount; i++)
-			if (prEssChnlInfo[j].ucApNum >
-				prEssChnlInfo[i].ucApNum) {
-				struct ESS_CHNL_INFO rTemp = prEssChnlInfo[j];
 
-				prEssChnlInfo[j] = prEssChnlInfo[i];
-				prEssChnlInfo[i] = rTemp;
-			}
-	}
+#if (CFG_TC10_FEATURE == 1)
+	wlanSetEssBandBitmap(prAdapter, ucEssBandBitMap);
 #endif
+
 	log_dbg(SCN, INFO, "Find %s in %d BSSes, result %d\n",
 		prConnSettings->aucSSID, prBSSDescList->u4NumElem,
 		prCurEssLink->u4NumElem);

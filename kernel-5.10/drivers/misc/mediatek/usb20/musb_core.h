@@ -539,7 +539,7 @@ static inline void musb_configure_ep0(struct musb *musb)
 	musb->endpoints[0].is_shared_fifo = true;
 }
 
-
+void musb_mac_reset(struct musb *musb);
 /***************************** Glue it together *****************************/
 
 extern const char musb_driver_name[];

@@ -612,20 +612,40 @@ static void night_mode(kal_bool enable)
 	/* No Need to implement this function */
 }
 
+static void wait_stream_off(void)
+{
+	unsigned int i = 0;
+	unsigned int initial_delay = 1;
+	unsigned int check_delay = 2;
+	unsigned int checked_val = 0xffff;
+	int timeout = (10000 / imgsensor.current_fps) + 1;
+
+	mDELAY(initial_delay);
+	for (i = 0; i < timeout; i++) {
+			checked_val = ((read_cmos_sensor_8(0x4868) << 8) | read_cmos_sensor_8(0x4869));
+			LOG_DBG("current value = %#x\n", checked_val);
+
+			if (checked_val != 0x0000)
+				mDELAY(check_delay);
+			else
+				break;
+	}
+	LOG_INF("wait_time = %d ms\n", i * check_delay + initial_delay);
+}
+
 static kal_uint32 streaming_control(kal_bool enable)
 {
-	//unsigned short frame_cnt = 0;
-	//int timeout_cnt = 0;
 	LOG_INF("streaming_enable(0=Sw Standby,1=streaming): %d\n", enable);
 	if (enable) {
 		write_cmos_sensor_8(0x0100, 0x01);
-
-		//10 ms delay for stabilization
-		usleep_range(10000, 10100);
 	} else {
 		write_cmos_sensor_8(0x0100, 0x00);
-		usleep_range(10000, 10100);
+		wait_stream_off();
 	}
+
+	//10 ms delay for stabilization
+	mDELAY(10);
+
 	return ERROR_NONE;
 }
 

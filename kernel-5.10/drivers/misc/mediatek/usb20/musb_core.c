@@ -3313,6 +3313,30 @@ static int mt_usb_wakeup_init(struct musb *musb)
 
 	return 0;
 }
+
+static void mt_usb_mac_reset(struct musb *musb)
+{
+	struct device_node *node = musb->glue->dev->of_node;
+	u32 tmp;
+
+	if (infracg == NULL)
+		return;
+
+	if (of_device_is_compatible(node, "mediatek,mt6789-usb20")) {
+		DBG(0, "reset usb ip");
+		/* writ 1 to reset */
+		regmap_read(infracg, 0x120, &tmp);
+		tmp |= 1 << 13;
+		regmap_write(infracg, 0x120, tmp);
+		udelay(10);
+		/* writ 1 to release */
+		regmap_read(infracg, 0x124, &tmp);
+		tmp |= 1 << 13;
+		regmap_write(infracg, 0x124, tmp);
+
+	}
+
+}
 #endif
 
 static u32 cable_mode = CABLE_MODE_NORMAL;
@@ -4044,6 +4068,16 @@ void musb_platform_reset(struct musb *musb)
 }
 EXPORT_SYMBOL(musb_platform_reset);
 
+void musb_mac_reset(struct musb *musb)
+{
+	/* reset mac when HM bit is 1 */
+	if (musb_readb(musb->mregs, MUSB_DEVCTL) & MUSB_DEVCTL_HM) {
+		musb_save_context(musb);
+		mt_usb_mac_reset(musb);
+		musb_restore_context(musb);
+	}
+}
+
 void musb_sync_with_bat(struct musb *musb, int usb_state)
 {
 	DBG(1, "BATTERY_SetUSBState, state=%d\n", usb_state);
@@ -4512,10 +4546,8 @@ static int musb_probe(struct platform_device *pdev)
 	}
 
 #if IS_ENABLED(CONFIG_MTK_MUSB_QMU_SUPPORT)
-	isoc_ep_end_idx = 1;
+	isoc_ep_end_idx = 3;
 	isoc_ep_gpd_count = 248; /* 30 ms for HS, at most (30*8 + 1) */
-
-	mtk_host_qmu_force_isoc_restart = 0;
 #endif
 #ifndef FPGA_PLATFORM
 	register_usb_hal_dpidle_request(usb_dpidle_request);

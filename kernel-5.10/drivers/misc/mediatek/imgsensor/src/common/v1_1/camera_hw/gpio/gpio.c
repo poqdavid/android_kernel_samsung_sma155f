@@ -13,6 +13,8 @@ struct GPIO_PINCTRL gpio_pinctrl_list_cam[
 	{"pnd0"},
 	{"rst1"},
 	{"rst0"},
+	{"rst2_on"},
+	{"rst2_off"},
 	{"vcama_on"},
 	{"vcama_off"},
 	{"vcama1_on"},

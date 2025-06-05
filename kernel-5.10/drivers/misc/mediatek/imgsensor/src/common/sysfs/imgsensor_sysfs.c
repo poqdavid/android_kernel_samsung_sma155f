@@ -71,7 +71,7 @@
 #define ISP_VENDOR_QC      'Q' // Q means qualcomm
 #endif
 
-#define CAM_CAL_BRINGUP "[cam_cal]"
+#define CAM_CAL_BRINGUP "[cam_cal D/D]"
 
 bool crc32_check_list[SENSOR_POSITION_MAX][CRC32_SCENARIO_MAX];
 bool check_latest_cam_module[SENSOR_POSITION_MAX] = {false, };
@@ -224,6 +224,41 @@ bool is_valid_sensor_position(int position)
 		return false;
 
 	return true;
+}
+
+enum IMGSENSOR_SENSOR_IDX imgsensor_get_sensor_idx(unsigned int sensor_id)
+{
+	int i = 0;
+	int max_num_of_rom_info = ARRAY_SIZE(vendor_rom_info);
+	enum sensor_position imgsensor_position = SENSOR_POSITION_NONE;
+
+	for (i = 0; i < max_num_of_rom_info; i++) {
+		if (vendor_rom_info[i].sensor_id_with_rom == sensor_id) {
+			imgsensor_position = vendor_rom_info[i].sensor_position;
+			pr_info(CAM_CAL_BRINGUP "[%s] sensor_id: %#06x, sensor position: %d",
+					__func__, sensor_id, imgsensor_position);
+			break;
+		}
+	}
+
+	switch (imgsensor_position) {
+	case SENSOR_POSITION_REAR:
+		return IMGSENSOR_SENSOR_IDX_MAIN;
+	case SENSOR_POSITION_FRONT:
+		return IMGSENSOR_SENSOR_IDX_SUB;
+	case SENSOR_POSITION_REAR2:
+		return IMGSENSOR_SENSOR_IDX_MAIN2;
+	case SENSOR_POSITION_REAR3:
+		return IMGSENSOR_SENSOR_IDX_SUB2;
+	case SENSOR_POSITION_REAR4:
+		return IMGSENSOR_SENSOR_IDX_MAIN3;
+	case SENSOR_POSITION_MAX:
+		return IMGSENSOR_SENSOR_IDX_MAX_NUM;
+	case SENSOR_POSITION_NONE:
+		return IMGSENSOR_SENSOR_IDX_NONE;
+	default:
+		return IMGSENSOR_SENSOR_IDX_NONE;
+	};
 }
 
 void update_curr_sensor_pos(int sensorId) {

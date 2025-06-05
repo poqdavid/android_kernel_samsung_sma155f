@@ -6944,6 +6944,12 @@ void p2pFuncSwitchSapChannel(
 		goto exit;
 	}
 
+	prP2pBssInfo = cnmGetSapBssInfo(prAdapter);
+	if (!prP2pBssInfo) {
+		DBGLOG(P2P, TRACE, "SAP is not active\n");
+		goto exit;
+	}
+
 	prAisBssInfo = aisGetConnectedBssInfo(prAdapter);
 	if (!prAisBssInfo) {
 		ucStaChannelNum = 0;
@@ -6975,12 +6981,6 @@ void p2pFuncSwitchSapChannel(
 		P2P_CONCURRENCY_POLICY_REMOVE)
 		if (prAisBssInfo)
 			p2pFuncRemoveOneSap(prAdapter);
-
-	prP2pBssInfo = cnmGetSapBssInfo(prAdapter);
-	if (!prP2pBssInfo) {
-		DBGLOG(P2P, TRACE, "SAP is not active\n");
-		goto exit;
-	}
 
 	if (prAdapter->rWifiVar.fgSapConcurrencyPolicy ==
 		P2P_CONCURRENCY_POLICY_KEEP) {
@@ -8003,7 +8003,7 @@ p2pFunDetermineChnlSwitchPolicy(IN struct ADAPTER *prAdapter,
 	 * 1. Cross band
 	 * 2. BW > 20MHz
 	*/
-	if (
+	if (prNewChannelInfo->eBand == BAND_5G ||
 #if (CFG_SUPPORT_WIFI_6G == 1)
 		prNewChannelInfo->eBand == BAND_6G ||
 #endif

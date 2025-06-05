@@ -647,6 +647,6 @@ void KD_IMGSENSOR_PROFILE(char *tag);
 void KD_IMGSENSOR_PROFILE_INIT_I2C(void);
 void KD_IMGSENSOR_PROFILE_I2C(char *tag, int trans_num);
 
-#define mDELAY(ms)     mdelay(ms)
+#define mDELAY(ms)       usleep_range(ms*1000, ms*1000)
 #define uDELAY(us)       udelay(us)
 #endif              /* _KD_IMGSENSOR_H */

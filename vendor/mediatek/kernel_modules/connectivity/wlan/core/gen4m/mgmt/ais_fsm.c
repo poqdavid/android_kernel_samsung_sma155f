@@ -70,6 +70,11 @@
  */
 #include "precomp.h"
 #include "mddp.h"
+
+#if CFG_TC10_FEATURE
+struct GETBSSINFO_T bssinfo_back = {0};
+#endif
+
 /*******************************************************************************
  *                              C O N S T A N T S
  *******************************************************************************
@@ -4889,6 +4894,66 @@ u_int8_t aisValidateProbeReq(IN struct ADAPTER *prAdapter,
 
 #endif /* CFG_SUPPORT_ADHOC */
 
+#if CFG_TC10_FEATURE
+uint32_t aisGet11KV(struct ADAPTER *prAdapter,
+	struct BSS_DESC *prBssDesc, struct STA_RECORD *prStaRec)
+{
+	uint32_t KV = 0;
+
+			/* 11K */
+	if (prBssDesc->aucRrmCap[0] &
+		    BIT(RRM_CAP_INFO_NEIGHBOR_REPORT_BIT))
+		KV |= BIT(0);
+	/* 11V */
+	if (prStaRec->fgSupportBTM)
+		KV |= BIT(1);
+	return KV;
+}
+
+uint32_t aisGet11KVIE(struct ADAPTER *prAdapter,
+	struct BSS_DESC *prBssDesc, struct STA_RECORD *prStaRec)
+{
+	/* KEIE supported */
+		uint32_t KVIE = 0;
+
+		if (*(uint32_t *)prBssDesc->aucRrmCap &
+				BIT(RRM_CAP_INFO_QBSS_LOAD_BIT))
+			KVIE |= BIT(0);
+		if (prStaRec->fgSupportProxyARP)
+			KVIE |= BIT(1);
+		if (prStaRec->fgSupportTFS)
+			KVIE |= BIT(2);
+		if (prStaRec->fgSupportWNMSleep)
+			KVIE |= BIT(3);
+		if (prStaRec->fgSupportTIMBcast)
+			KVIE |= BIT(4);
+		if (prStaRec->fgSupportBTM)
+			KVIE |= BIT(5);
+		if (prStaRec->fgSupportDMS)
+			KVIE |= BIT(6);
+		if (*(uint32_t *)prBssDesc->aucRrmCap &
+				BIT(RRM_CAP_INFO_LINK_MEASURE_BIT))
+			KVIE |= BIT(7);
+		if (*(uint32_t *)prBssDesc->aucRrmCap &
+				BIT(RRM_CAP_INFO_NEIGHBOR_REPORT_BIT))
+			KVIE |= BIT(8);
+		if (*(uint32_t *)prBssDesc->aucRrmCap &
+				BIT(RRM_CAP_INFO_BEACON_PASSIVE_MEASURE_BIT))
+			KVIE |= BIT(9);
+		if (*(uint32_t *)prBssDesc->aucRrmCap &
+				BIT(RRM_CAP_INFO_BEACON_ACTIVE_MEASURE_BIT))
+			KVIE |= BIT(10);
+		if (*(uint32_t *)prBssDesc->aucRrmCap &
+				BIT(RRM_CAP_INFO_BEACON_TABLE_BIT))
+			KVIE |= BIT(11);
+		if (*(uint32_t *)prBssDesc->aucRrmCap &
+				BIT(RRM_CAP_INFO_BSS_AVG_DELAY_BIT))
+			KVIE |= BIT(12);
+		return KVIE;
+
+}
+#endif
+
 /*----------------------------------------------------------------------------*/
 /*!
  * @brief This function will modify and update necessary information to firmware
@@ -4906,6 +4971,13 @@ void aisFsmDisconnect(IN struct ADAPTER *prAdapter,
 	uint16_t u2ReasonCode = REASON_CODE_UNSPECIFIED;
 	struct BSS_DESC *prBssDesc = NULL;
 	struct AIS_FSM_INFO *prAisFsmInfo = NULL;
+#if CFG_TC10_FEATURE
+	struct BSS_INFO *prBssInfo = NULL;
+	struct STA_RECORD *prStaRec = NULL;
+	u_int32_t ucConnectedBandwidth = 0;
+	uint8_t phy_mode = 0, ucDutNss = 0;
+	struct GLUE_INFO *prGlueInfo = prAdapter->prGlueInfo;
+#endif
 
 	prAisBssInfo = aisGetAisBssInfo(prAdapter, ucBssIndex);
 	prAisFsmInfo = aisGetAisFsmInfo(prAdapter, ucBssIndex);
@@ -4960,6 +5032,64 @@ void aisFsmDisconnect(IN struct ADAPTER *prAdapter,
 			u2ReasonCode =
 				prAisBssInfo->prStaRecOfAP->u2ReasonCode;
 		}
+#if CFG_TC10_FEATURE
+		prBssInfo = prAdapter->aprBssInfo[ucBssIndex];
+		prStaRec = aisGetStaRecOfAP(prAdapter, ucBssIndex);
+
+		if (prBssInfo->eBssSCO == CHNL_EXT_SCN) {
+			ucConnectedBandwidth = 20;
+		} else if (prBssInfo->eBssSCO != CHNL_EXT_SCN) {
+			switch (prBssInfo->ucVhtChannelWidth) {
+			case CW_20_40MHZ:
+				ucConnectedBandwidth = 40;
+				break;
+			case CW_80MHZ:
+				ucConnectedBandwidth = 80;
+				break;
+			case CW_160MHZ:
+				ucConnectedBandwidth = 160;
+				break;
+			case CW_80P80MHZ:
+				ucConnectedBandwidth = 160;
+				break;
+			}
+		}
+		if (prBssInfo->ucPhyTypeSet & PHY_TYPE_SET_802_11BG ||
+			prBssInfo->ucPhyTypeSet & PHY_TYPE_SET_802_11ABG ||
+			prBssInfo->ucPhyTypeSet & PHY_TYPE_SET_802_11ABGN)
+			phy_mode |= BIT(0);
+		if (prBssInfo->ucPhyTypeSet & PHY_TYPE_SET_802_11AC)
+			phy_mode |= BIT(1);
+		ucDutNss = wlanGetSupportNss(prAdapter, ucBssIndex);
+		prBssDesc = aisGetTargetBssDesc(prAdapter, ucBssIndex);
+		bssinfo_back.Roaming_count = prAisFsmInfo->u2ConnectedCount;
+			/* AKM */
+		if (prAisFsmInfo->ucAvailableAuthTypes ==
+				AUTH_TYPE_FAST_BSS_TRANSITION) {
+			bssinfo_back.AKM = 2;
+		} else if (rsnSearchPmkidEntry(prAdapter,
+				prBssDesc->aucBSSID, ucBssIndex)) {
+			bssinfo_back.AKM = 1;
+		} else {
+			bssinfo_back.AKM = 0;
+		}
+		bssinfo_back.KV = aisGet11KV(prAdapter,
+				prBssDesc, prStaRec);
+		bssinfo_back.KVIE = aisGet11KVIE(prAdapter,
+				prBssDesc, prStaRec);
+
+		bssinfo_back.OUI[0] = prBssInfo->aucBSSID[0];
+		bssinfo_back.OUI[1] = prBssInfo->aucBSSID[1];
+		bssinfo_back.OUI[2] = prBssInfo->aucBSSID[2];
+		bssinfo_back.channel_freq =
+			nicChannelNum2Freq(prBssInfo->ucPrimaryChannel,
+				prBssInfo->eBand) / 1000;
+		bssinfo_back.ant_mode = ucDutNss - 1;
+		bssinfo_back.channel_bw = ucConnectedBandwidth;
+		bssinfo_back.phy_mode = phy_mode;
+		bssinfo_back.rssi =
+				prGlueInfo->i4RssiCache[ucBssIndex];
+#endif
 		scanRemoveConnFlagOfBssDescByBssid(prAdapter,
 			prAisBssInfo->aucBSSID, ucBssIndex);
 		prBssDesc = aisGetTargetBssDesc(prAdapter, ucBssIndex);

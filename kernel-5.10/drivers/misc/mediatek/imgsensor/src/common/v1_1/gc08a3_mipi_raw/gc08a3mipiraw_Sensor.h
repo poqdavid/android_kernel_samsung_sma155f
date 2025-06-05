@@ -121,6 +121,8 @@ struct imgsensor_info_struct {
 	struct imgsensor_mode_struct custom2;
 	struct imgsensor_mode_struct custom3;
 	struct imgsensor_mode_struct custom4;
+	struct imgsensor_mode_struct *mode_info[IMGSENSOR_MODE_MAX];
+	bool is_invalid_mode;
 
 	kal_uint8 ae_shut_delay_frame;	//shutter delay frame for AE cycle
 	//sensor gain delay frame for AE cycle
@@ -172,11 +174,6 @@ struct imgsensor_info_struct {
 	kal_uint32 i2c_speed;	//khz
 };
 
-
-extern int iReadRegI2C(u8 *a_pSendData, u16 a_sizeSendData,
-		       u8 *a_pRecvData, u16 a_sizeRecvData,
-		       u16 i2cId);
-extern int iWriteRegI2C(u8 *a_pSendData, u16 a_sizeSendData, u16 i2cId);
 extern int iBurstWriteReg_multi(u8 *pData, u32 bytes, u16 i2cId,
 				u16 transfer_length, u16 timing);
 

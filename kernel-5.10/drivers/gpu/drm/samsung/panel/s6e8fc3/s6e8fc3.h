@@ -91,7 +91,7 @@
 #define S6E8FC3_SELF_DIAG_LEN			1
 
 #define S6E8FC3_SELF_MASK_CRC_REG		0xFB
-#define S6E8FC3_SELF_MASK_CRC_OFS		15
+#define S6E8FC3_SELF_MASK_CRC_OFS		4
 #define S6E8FC3_SELF_MASK_CRC_LEN		2
 
 #define S6E8FC3_SELF_MASK_CHECKSUM_REG		0x7F
@@ -464,8 +464,8 @@ static struct dump_expect cmdlog_expects[] = {
 #endif
 
 static struct dump_expect self_mask_crc_expects[] = {
-	{ .offset = 0, .mask = 0xFF, .value = 0xD3, .msg = "Self Mask CRC[0] Error(NG)" },
-	{ .offset = 1, .mask = 0xFF, .value = 0x9B, .msg = "Self Mask CRC[1] Error(NG)" },
+	{ .offset = 0, .mask = 0xFF, .value = 0x49, .msg = "Self Mask CRC[0] Error(NG)" },
+	{ .offset = 1, .mask = 0xFF, .value = 0xf4, .msg = "Self Mask CRC[1] Error(NG)" },
 };
 
 static struct dump_expect self_mask_checksum_expects[] = {

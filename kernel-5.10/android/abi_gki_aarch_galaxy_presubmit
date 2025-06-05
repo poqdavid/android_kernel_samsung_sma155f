@@ -9,3 +9,5 @@
   wakeup_sources_walk_next
   # required by drivers/usb/notify/usb_notify_layer.ko
   usb_set_configuration
+  # required by drivers/scsi/ufs/vendor/ufs_mediatek_mod.ko
+  scsi_device_resume

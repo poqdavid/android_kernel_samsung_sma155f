@@ -86,10 +86,33 @@ void ufs_sec_get_health_desc(struct ufs_hba *hba)
 		goto out;
 	}
 
-	/* getting Life Time at Device Health DESC*/
-	ufs_vdi.lifetime = desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_A];
+	ufs_vdi.lt = desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_A];
+	ufs_vdi.eli = desc_buf[HEALTH_DESC_PARAM_EOL_INFO];
 
-	dev_info(hba->dev, "LT: 0x%02x\n", (desc_buf[3] << 4) | desc_buf[4]);
+	switch (hba->dev_info.wmanufacturerid) {
+	case UFS_VENDOR_SAMSUNG:
+		ufs_vdi.flt = (u16)desc_buf[HEALTH_DESC_PARAM_SEC_FLT];
+		break;
+	case UFS_VENDOR_TOSHIBA:
+		ufs_vdi.flt = (((u16)desc_buf[HEALTH_DESC_PARAM_KIC_FLT] << 8) |
+				(u16)desc_buf[HEALTH_DESC_PARAM_KIC_FLT + 1]);
+		break;
+	case UFS_VENDOR_MICRON:
+		ufs_vdi.flt = (u16)desc_buf[HEALTH_DESC_PARAM_MIC_FLT];
+		break;
+	case UFS_VENDOR_SKHYNIX:
+		ufs_vdi.flt = (((u16)desc_buf[HEALTH_DESC_PARAM_SKH_FLT] << 8) |
+				(u16)desc_buf[HEALTH_DESC_PARAM_SKH_FLT + 1]);
+		break;
+	default:
+		ufs_vdi.flt = 0;
+		break;
+	}
+
+	dev_info(hba->dev, "LT: 0x%02x, FLT: %u, ELI: 0x%01x\n",
+			((desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_A] << 4) |
+			 desc_buf[HEALTH_DESC_PARAM_LIFE_TIME_EST_B]),
+			ufs_vdi.flt, ufs_vdi.eli);
 out:
 	kfree(desc_buf);
 }
@@ -103,7 +126,6 @@ static void ufs_set_sec_unique_number(struct ufs_hba *hba, u8 *desc_buf)
 	u8 *str_desc_buf = NULL;
 	int err;
 
-	/* read string desc */
 	buff_len = QUERY_DESC_MAX_SIZE;
 	str_desc_buf = kzalloc(buff_len, GFP_KERNEL);
 	if (!str_desc_buf)
@@ -111,7 +133,6 @@ static void ufs_set_sec_unique_number(struct ufs_hba *hba, u8 *desc_buf)
 
 	serial_num_index = desc_buf[DEVICE_DESC_PARAM_SN];
 
-	/* spec is unicode but sec uses hex data */
 	err = ufshcd_query_descriptor_retry(hba, UPIU_QUERY_OPCODE_READ_DESC,
 			QUERY_DESC_IDN_STRING, serial_num_index, 0,
 			str_desc_buf, &buff_len);
@@ -121,7 +142,6 @@ static void ufs_set_sec_unique_number(struct ufs_hba *hba, u8 *desc_buf)
 		goto out;
 	}
 
-	/* setup unique_number */
 	manid = desc_buf[DEVICE_DESC_PARAM_MANF_ID + 1];
 	memset(snum_buf, 0, sizeof(snum_buf));
 	memcpy(snum_buf, str_desc_buf + QUERY_DESC_HDR_SIZE, SERIAL_NUM_SIZE);
@@ -134,7 +154,6 @@ static void ufs_set_sec_unique_number(struct ufs_hba *hba, u8 *desc_buf)
 			snum_buf[0], snum_buf[1], snum_buf[2],
 			snum_buf[3], snum_buf[4], snum_buf[5], snum_buf[6]);
 
-	/* Null terminate the unique number string */
 	ufs_vdi.unique_number[UFS_UN_20_DIGITS] = '\0';
 
 	dev_dbg(hba->dev, "%s: ufs un : %s\n", __func__, ufs_vdi.unique_number);
@@ -346,8 +365,8 @@ static void ufs_sec_wb_off_work_func(struct work_struct *work)
 			set_wb_state(&ufs_wb, WB_OFF_READY);
 
 		spin_unlock_irqrestore(hba->host->host_lock, flags);
-	} else if (ufs_vdi.lifetime >= (u8)ufs_wb.disable_threshold_lt) {
-		pr_err("%s: disable WB by LT %u.\n", __func__, ufs_vdi.lifetime);
+	} else if (ufs_vdi.lt >= (u8)ufs_wb.disable_threshold_lt) {
+		pr_err("%s: disable WB by LT %u.\n", __func__, ufs_vdi.lt);
 		ufs_wb.support = false;
 	}
 
@@ -467,7 +486,7 @@ static void ufs_sec_wb_config(struct ufs_hba *hba, bool set)
 
 	set_wb_state(&ufs_wb, WB_OFF);
 
-	if (ufs_vdi.lifetime >= (u8)ufs_wb.disable_threshold_lt)
+	if (ufs_vdi.lt >= (u8)ufs_wb.disable_threshold_lt)
 		goto wb_disabled;
 
 	/* reset wb disable count and enable wb */
