@@ -17,8 +17,8 @@
 #include "s6e8fc3_a15_self_mask_img.h"
 #include "s6e8fc3_aod.h"
 
-#define S6E8FC3_A15SELF_MASK_VALID_CRC_1 (0xD3)
-#define S6E8FC3_A15SELF_MASK_VALID_CRC_2 (0x9B)
+#define S6E8FC3_A15SELF_MASK_VALID_CRC_1 (0x49)
+#define S6E8FC3_A15SELF_MASK_VALID_CRC_2 (0xF4)
 
 static u8 s6e8fc3_a15_self_mask_crc[] = {
 	S6E8FC3_A15SELF_MASK_VALID_CRC_1,
@@ -44,6 +44,9 @@ static DEFINE_STATIC_PACKET(s6e8fc3_aod_l3_key_disable, DSI_PKT_TYPE_WR, S6E8FC3
 
 static DEFINE_PANEL_MDELAY(s6e8fc3_aod_self_spsram_write_delay, 1);
 static DEFINE_PANEL_UDELAY(s6e8fc3_aod_self_spsram_sel_delay, 1);
+
+static DEFINE_PANEL_MDELAY(s6e8fc3_aod_self_10ms_delay, 10);
+static DEFINE_PANEL_MDELAY(s6e8fc3_aod_self_1ms_delay, 1);
 
 static DEFINE_PANEL_UDELAY(s6e8fc3_aod_self_mask_checksum_1frame_delay, 16700);
 static DEFINE_PANEL_UDELAY(s6e8fc3_aod_self_mask_checksum_2frame_delay, 33400);
@@ -159,66 +162,89 @@ static DEFINE_STATIC_PACKET_WITH_OPTION(s6e8fc3_a15_aod_self_mask_crc_img_pkt,
 		DSI_PKT_TYPE_WR_SR, S6E8FC3_A15_SELF_MASK_CRC_IMG, 0, PKT_OPTION_SR_ALIGN_16);
 #endif
 static char S6E8FC3_AOD_SELF_MASK_CRC_ON1[] = {
-	0xD8,
-	0x16,
+	0xFE,
+	0x80, 0xA0,
 };
-static DEFINE_STATIC_PACKET(s6e8fc3_aod_self_mask_crc_on1, DSI_PKT_TYPE_WR, S6E8FC3_AOD_SELF_MASK_CRC_ON1, 0x27);
+static DEFINE_STATIC_PACKET(s6e8fc3_aod_self_mask_crc_on1, DSI_PKT_TYPE_WR, S6E8FC3_AOD_SELF_MASK_CRC_ON1, 0x0A);
+
+static char S6E8FC3_AOD_SELF_MASK_DBIST_60HZ_1[] = {
+	0xF2,
+	0x29
+};
+static DEFINE_STATIC_PACKET(s6e8fc3_aod_self_mask_dbist_60hz_1, DSI_PKT_TYPE_WR, S6E8FC3_AOD_SELF_MASK_DBIST_60HZ_1, 0x2F);
+
+static char S6E8FC3_AOD_SELF_MASK_DBIST_60HZ_2[] = {
+	0xF2,
+	0x30
+};
+static DEFINE_STATIC_PACKET(s6e8fc3_aod_self_mask_dbist_60hz_2, DSI_PKT_TYPE_WR, S6E8FC3_AOD_SELF_MASK_DBIST_60HZ_2, 0x25);
 
 static char S6E8FC3_AOD_SELF_MASK_DBIST_ON[] = {
-	0xBF,
-	0x01, 0x07, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00
+	0xE9,
+	0x01, 0x00, 0xFF
 };
 static DEFINE_STATIC_PACKET(s6e8fc3_aod_self_mask_dbist_on, DSI_PKT_TYPE_WR, S6E8FC3_AOD_SELF_MASK_DBIST_ON, 0);
 
 static char S6E8FC3_AOD_SELF_MASK_DBIST_OFF[] = {
-	0xBF, 0x00
+	0xE9, 0x00
 };
 static DEFINE_STATIC_PACKET(s6e8fc3_aod_self_mask_dbist_off, DSI_PKT_TYPE_WR, S6E8FC3_AOD_SELF_MASK_DBIST_OFF, 0);
 
 static char S6E8FC3_AOD_SELF_MASK_ENABLE_FOR_CHECKSUM[] = {
 	0x7A,
-	0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x01, 0xF4, 0x02, 0x33,
-	0x09, 0x60, 0x09, 0x61, 0x00, 0x00, 0xFF, 0xFF,
-	0xFF
+	0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x02, 0x57, 0x09, 0x24, 0x09, 0x25, 0x00, 0x00, 0xff, 0xff, 0xff
 };
 
 static DEFINE_STATIC_PACKET(s6e8fc3_aod_self_mask_for_checksum, DSI_PKT_TYPE_WR, S6E8FC3_AOD_SELF_MASK_ENABLE_FOR_CHECKSUM, 0);
 
 static char S6E8FC3_AOD_SELF_MASK_RESTORE[] = {
 	0x7A,
-	0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x09, 0x60, 0x09, 0x61,
-	0x09, 0x62, 0x09, 0x63, 0x00, 0x00, 0x00, 0x00,
-	0x00
+	0x01, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x09, 0x24, 0x09, 0x25, 0x09, 0x26, 0x09, 0x27,
 };
 static DEFINE_STATIC_PACKET(s6e8fc3_aod_self_mask_restore, DSI_PKT_TYPE_WR, S6E8FC3_AOD_SELF_MASK_RESTORE, 0);
 
-#if defined(__PANEL_NOT_USED_VARIABLE__)
 static void *s6e8fc3_a15_aod_self_mask_crc_cmdtbl[] = {
 	&KEYINFO(s6e8fc3_aod_l1_key_enable),
 	&KEYINFO(s6e8fc3_aod_l2_key_enable),
 	&KEYINFO(s6e8fc3_aod_l3_key_enable),
+	/* CRC ON */
 	&PKTINFO(s6e8fc3_aod_self_mask_crc_on1),
-	&PKTINFO(s6e8fc3_aod_self_mask_dbist_on),
+
+	/* Side memory Write */
 	&PKTINFO(s6e8fc3_aod_self_mask_disable),
-	&DLYINFO(s6e8fc3_aod_self_mask_checksum_1frame_delay),
-	&PKTINFO(s6e8fc3_aod_self_mask_sd_path),
-	&DLYINFO(s6e8fc3_aod_self_spsram_sel_delay),
-	&PKTINFO(s6e8fc3_a15_aod_self_mask_crc_img_pkt),
-	&DLYINFO(s6e8fc3_aod_self_spsram_write_delay),
-	&PKTINFO(s6e8fc3_aod_reset_sd_path),
-	&DLYINFO(s6e8fc3_aod_self_spsram_sel_delay),
+	&DLYINFO(s6e8fc3_aod_self_10ms_delay),
+	&PKTINFO(s6e8fc3_aod_self_mask_sd_path_1),
+	&PKTINFO(s6e8fc3_aod_self_mask_sd_path_2),
+	&DLYINFO(s6e8fc3_aod_self_1ms_delay),
+	&PKTINFO(s6e8fc3_a15_aod_self_mask_img_pkt), /* Using Normal img */
+	&DLYINFO(s6e8fc3_aod_self_1ms_delay),
+	&PKTINFO(s6e8fc3_aod_reset_sd_path_1),
+	&PKTINFO(s6e8fc3_aod_reset_sd_path_2),
+
+	&DLYINFO(s6e8fc3_aod_self_10ms_delay),
+
+	/* DBIST 60HZ Setting */
+	&PKTINFO(s6e8fc3_aod_self_mask_dbist_60hz_1),
+	&PKTINFO(s6e8fc3_aod_self_mask_dbist_60hz_2),
+	/* DBIST On */
+	&PKTINFO(s6e8fc3_aod_self_mask_dbist_on),
+	/* SelfMask on*/
 	&PKTINFO(s6e8fc3_aod_self_mask_for_checksum),
+
 	&DLYINFO(s6e8fc3_aod_self_mask_checksum_2frame_delay),
+
 	&s6e8fc3_dmptbl[DUMP_SELF_MASK_CRC],
+	/* SelfMask Restore*/
 	&PKTINFO(s6e8fc3_aod_self_mask_restore),
+	/* DBIST Off */
 	&PKTINFO(s6e8fc3_aod_self_mask_dbist_off),
+
 	&KEYINFO(s6e8fc3_aod_l3_key_disable),
 	&KEYINFO(s6e8fc3_aod_l2_key_disable),
 	&KEYINFO(s6e8fc3_aod_l1_key_disable),
 };
-#endif
 // --------------------- end of check sum control ----------------------------
 
 static void *s6e8fc3_a15_aod_self_mask_img_cmdtbl[] = {
@@ -239,7 +265,7 @@ static struct seqinfo s6e8fc3_a15_aod_seqtbl[] = {
 	SEQINFO_INIT(SELF_MASK_IMG_SEQ, s6e8fc3_a15_aod_self_mask_img_cmdtbl),
 	SEQINFO_INIT(SELF_MASK_ENA_SEQ, s6e8fc3_a15_aod_self_mask_ena_cmdtbl),
 	SEQINFO_INIT(SELF_MASK_DIS_SEQ, s6e8fc3_a15_aod_self_mask_dis_cmdtbl),
-//	SEQINFO_INIT(SELF_MASK_CRC_SEQ, s6e8fc3_a15_aod_self_mask_crc_cmdtbl),
+	SEQINFO_INIT(SELF_MASK_CRC_SEQ, s6e8fc3_a15_aod_self_mask_crc_cmdtbl),
 };
 
 static struct aod_tune s6e8fc3_a15_aod = {

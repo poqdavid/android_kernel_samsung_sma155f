@@ -58,6 +58,11 @@ union ex_main_content {
 	struct ex_assert_v3 assert;
 } __packed;
 
+struct md_info {
+	unsigned int buf_len;
+	char *md_ee_info_buf;
+};
+
 enum exception_class {
 	MD_EX_CLASS_ASSET,
 	MD_EX_CLASS_FATAL,

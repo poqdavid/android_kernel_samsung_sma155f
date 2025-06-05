@@ -69,6 +69,19 @@ static int mcd_drm_parse_dt(void *_ctx, struct device_node *np)
 	return 0;
 }
 
+static void mcd_panel_set_adapter_fifo_size(struct mtk_panel *ctx, unsigned int fifo_size)
+{
+	int ret = 0;
+
+	ret = call_mcd_panel_func(ctx->mcd_panel_dev, set_adapter_fifo_size, fifo_size);
+
+	if (ret < 0) {
+		pr_err("%s: failed to set_adapter_fifo_size.\n", __func__);
+		return;
+	}
+
+}
+
 static void print_tx(u8 cmd_id, const u8 *cmd, int size)
 {
 	char data[256];
@@ -117,8 +130,11 @@ static inline unsigned char get_mipi_dsi_cmd_type(u8 cmd_id, int size)
 /* Max command set			(MTK S/W define) */
 #define MAX_CMDSET_NUM (MAX_TX_CMD_NUM)
 
-/* Max paylaod size of SFR		(MTK H/W define) */
+/* Max CMD MODE paylaod size of SFR		(MTK H/W define) */
 #define MAX_HW_TX_FIFO_SIZE (512)
+
+/* Max VDO MODE paylaod size of SFR		(MTK H/W define) */
+#define MAX_HW_TX_VDO_MODE_FIFO_SIZE (64)
 
 /* Panel_drv's CMD_QUEUE MAX size	(MCD S/W define) */
 #define MAX_CMD_SET_SIZE (MAX_PANEL_CMD_QUEUE)
@@ -822,6 +838,9 @@ static int mcd_panel_check_probe(struct mtk_panel *ctx)
 	}
 	ctx->mcd_panel_probed = true;
 
+	if (ctx->dsi->mode_flags & MIPI_DSI_MODE_VIDEO)
+		mcd_panel_set_adapter_fifo_size(ctx, MAX_HW_TX_VDO_MODE_FIFO_SIZE);
+
 	ret = call_mcd_panel_func(ctx->mcd_panel_dev, get_ddi_props, &ctx->ddi_props);
 	if (ret < 0) {
 		dev_err(ctx->dev, "%s: mcd_panel get ddi props failed %d", __func__, ret);
@@ -1352,11 +1371,17 @@ static int mcd_panel_prepare(struct drm_panel *panel)
 
 	ctx->mcd_drm_state = MCD_DRM_STATE_ENABLED;
 
+	if (ctx->dsi->mode_flags & MIPI_DSI_MODE_VIDEO)
+		mcd_panel_set_adapter_fifo_size(ctx, MAX_HW_TX_FIFO_SIZE);
+
 	ret = call_mcd_panel_func(ctx->mcd_panel_dev, sleep_out);
 	if (ret < 0) {
 		dev_err(ctx->dev, "%s failed to sleep_out %d\n", __func__, ret);
 		return 0; /* return ret; */
 	}
+
+	if (ctx->dsi->mode_flags & MIPI_DSI_MODE_VIDEO)
+		mcd_panel_set_adapter_fifo_size(ctx, MAX_HW_TX_VDO_MODE_FIFO_SIZE);
 
 	return 0;
 }

@@ -1129,8 +1129,11 @@ static void sensor_HW_GGC_write(void)
 	int write_data_size = 0;
 	int write_cnt = 0;
 
-	// TODO : sensor_dev_id needs to be updated according to actual id.
-	int sensor_dev_id = IMGSENSOR_SENSOR_IDX_MAIN;
+	int sensor_dev_id = IMGSENOSR_GET_SENSOR_IDX(imgsensor_info.sensor_id);
+	if (sensor_dev_id == IMGSENSOR_SENSOR_IDX_NONE) {
+		LOG_ERR("get_sensor_idx: fail");
+		return;
+	}
 
 	LOG_INF("-E");
 
@@ -1220,13 +1223,16 @@ static int sensor_get_XTC_CAL_data(char *reordered_xtc_cal, unsigned int buf_len
 	const int HEADER_SIZE = sizeof(unsigned short);
 	int i, timeout, cur_size, cur_addr;
 
-	// TODO : sensor_dev_id needs to be updated according to actual id.
-	int sensor_dev_id = IMGSENSOR_SENSOR_IDX_MAIN;
-
 	enum crosstalk_cal_name target_xtc_name;
 	const struct rom_cal_addr *cur_xtc_cal;
 	int reordered_idx = 0;
 	unsigned short total_size = 0;
+
+	int sensor_dev_id = IMGSENOSR_GET_SENSOR_IDX(imgsensor_info.sensor_id);
+	if (sensor_dev_id == IMGSENSOR_SENSOR_IDX_NONE) {
+		LOG_ERR("get_sensor_idx: fail");
+		return -1;
+	}
 
 	if (IMGSENSOR_GET_CAL_BUF_BY_SENSOR_IDX(sensor_dev_id, &rom_cal_buf) < 0) {
 		LOG_ERR("[%s] rom_cal_buf is NULL", __func__);
@@ -1293,10 +1299,14 @@ void test_sensor_get_xtc_cal_data(void)
 		{0x0140, (0x10DF - 0x0140 + 1)}, // pdxtc
 		{0x10E0, (0x1351 - 0x10E0 + 1)}, // sw ggc
 	};
-	// TODO : sensor_dev_id needs to be updated according to actual id.
-	int sensor_dev_id = IMGSENSOR_SENSOR_IDX_MAIN;
 	int i, addr, size;
 	int idx = 0;
+
+	int sensor_dev_id = IMGSENOSR_GET_SENSOR_IDX(imgsensor_info.sensor_id);
+	if (sensor_dev_id == IMGSENSOR_SENSOR_IDX_NONE) {
+		LOG_ERR("get_sensor_idx: fail");
+		return;
+	}
 
 	// get ans
 	if (IMGSENSOR_GET_CAL_BUF_BY_SENSOR_IDX(sensor_dev_id, &rom_cal_buf) < 0)

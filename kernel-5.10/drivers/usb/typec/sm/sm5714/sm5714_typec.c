@@ -2203,6 +2203,7 @@ void sm5714_src_transition_to_default(void *_data)
 #endif
 	pdic_data->data_role = USBPD_DFP;
 	pdic_data->pd_support = 0;
+	send_otg_notify(get_otg_notify(), NOTIFY_EVENT_PD_CONTRACT, 0);
 
 #if !IS_ENABLED(CONFIG_SM5714_DISABLE_PD)
 	if (!sm5714_check_vbus_state(data))
@@ -2249,6 +2250,7 @@ void sm5714_snk_transition_to_default(void *_data)
 	/* Hard Reset Done Notify to PRL */
 	sm5714_usbpd_write_reg(i2c, SM5714_REG_PD_CNTL4,
 			SM5714_ATTACH_SOURCE);
+	send_otg_notify(get_otg_notify(), NOTIFY_EVENT_PD_CONTRACT, 0);
 	dev_info(pdic_data->dev, "%s\n", __func__);
 }
 
@@ -3589,6 +3591,7 @@ static void sm5714_usbpd_notify_detach(void *data)
 	if (o_notify) {
 		send_otg_notify(o_notify, NOTIFY_EVENT_POWER_SOURCE, 0);
 		send_otg_notify(o_notify, NOTIFY_EVENT_DR_SWAP, 0);
+		send_otg_notify(o_notify, NOTIFY_EVENT_PD_CONTRACT, 0);
 	}
 #endif
 #if IS_ENABLED(CONFIG_PDIC_NOTIFIER)

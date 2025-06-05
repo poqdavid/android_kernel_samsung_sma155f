@@ -155,7 +155,7 @@ static int k250a_poweron(void)
 		usleep_range(1000, 2000);
 		gpio_set_value(g_k250a.reset_gpio, 1);
 
-		usleep_range(15000, 20000);
+		msleep(20);
 		return 0;
 	}
 
@@ -179,7 +179,7 @@ static int k250a_poweron(void)
 	}
 #endif
 
-	usleep_range(14000, 15000);
+	msleep(20);
 
 	return 0;
 }

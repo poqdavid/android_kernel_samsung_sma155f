@@ -3410,6 +3410,13 @@ static int musb_bus_resume(struct usb_hcd *hcd)
 	return 0;
 }
 
+static void musb_free_dev(struct usb_hcd *hcd, struct usb_device *udev)
+{
+	struct musb *musb = hcd_to_musb(hcd);
+
+	musb_mac_reset(musb);
+}
+
 const struct hc_driver musb_hc_driver = {
 	.description = "musb-hcd",
 	.product_desc = "MUSB HDRC host driver",
@@ -3424,6 +3431,8 @@ const struct hc_driver musb_hc_driver = {
 	.stop = musb_h_stop,
 
 	.get_frame_number = musb_h_get_frame_number,
+
+	.free_dev = musb_free_dev,
 
 	.urb_enqueue = musb_urb_enqueue,
 	.urb_dequeue = musb_urb_dequeue,

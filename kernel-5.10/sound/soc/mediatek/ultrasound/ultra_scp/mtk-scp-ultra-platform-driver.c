@@ -40,6 +40,7 @@ static bool ultra_ipi_wait;
 static struct wakeup_source *ultra_suspend_lock;
 static bool pcm_dump_switch;
 static bool pcm_dump_on;
+static bool scp_reseted; //indicator SCP reset happened,only ultrasound on will be handle.
 static const char *const mtk_scp_ultra_dump_str[] = {
 	"Off",
 	"On"};
@@ -78,6 +79,7 @@ static int usnd_scp_recover_event(struct notifier_block *this,
 	}
 	case SCP_EVENT_STOP:
 		ultra_SetScpRecoverStatus(true);
+		scp_reseted = true;
 		pr_info("%s(), SCP_EVENT_STOP\n", __func__);
 		break;
 	}
@@ -318,9 +320,18 @@ static int mtk_scp_ultra_engine_state_set(struct snd_kcontrol *kcontrol,
 		__func__, scp_ultra->usnd_state,
 		scp_ultra_memif_dl_id,
 		scp_ultra_memif_ul_id);
+	// SCP reset happened, only ultra on will be handle
+	if (scp_reseted == true && scp_ultra->usnd_state != SCP_ULTRA_STATE_ON) {
+		pr_info("%s(), unexcepted state since SCP reseted\n", __func__);
+		return -1;
+	}
 	switch (scp_ultra->usnd_state) {
 	case SCP_ULTRA_STATE_ON:
 		scp_register_feature(ULTRA_FEATURE_ID);
+		if (scp_reseted == true) {
+			scp_reseted = false;
+			pr_info("%s(), SCP_ULTRA_STATE_ON, set scp_reseted false\n", __func__);
+		}
 		aud_wake_lock(ultra_suspend_lock);
 		afe->memif[scp_ultra_memif_dl_id].scp_ultra_enable = true;
 		afe->memif[scp_ultra_memif_ul_id].scp_ultra_enable = true;
@@ -486,6 +497,10 @@ static int mtk_scp_ultra_pcm_start(struct snd_soc_component *component,
 	struct mtk_base_afe_irq *irqs_ul = &afe->irqs[irq_id_ul];
 	const struct mtk_base_irq_data *irq_data_ul = irqs_ul->irq_data;
 	int counter;
+	if (scp_reseted == true) {
+		pr_info("ultra scp reseted, do not start before ultra on\n");
+		return 0;
+	}
 
 	/* Set dl&ul irq target to scp */
 	set_afe_dl_irq_target(true);

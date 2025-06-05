@@ -1781,6 +1781,7 @@ void rrmCollectBeaconReport(IN struct ADAPTER *prAdapter,
 	} else if (bcnReq->ucChannel == 0) {
 		struct RF_CHANNEL_INFO aucChannelList[MAX_PER_BAND_CHN_NUM];
 		u_int8_t ucChannelListNum = 0;
+		kalMemZero(aucChannelList, sizeof(aucChannelList));
 
 		rlmDomainGetChnlListFromOpClass(prAdapter,
 			bcnReq->ucRegulatoryClass,

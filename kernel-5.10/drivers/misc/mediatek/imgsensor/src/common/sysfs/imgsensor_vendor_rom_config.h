@@ -18,6 +18,8 @@
 #include "./aaw_v24/imgsensor_vendor_rom_config_aaw_v24.h"
 #elif defined(CONFIG_CAMERA_AAX_V15)
 #include "./aax_v15/imgsensor_vendor_rom_config_aax_v15.h"
+#elif defined(CONFIG_CAMERA_AAX_V16)
+#include "./aax_v16/imgsensor_vendor_rom_config_aax_v16.h"
 #else
 //default
 #include "imgsensor_vendor_rom_config_default.h"

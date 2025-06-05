@@ -35,6 +35,10 @@ char * const imgsensor_hw_id_names[] = {
 	"gpio"
 };
 
+#if defined(CONFIG_CAMERA_AAX_V16)
+static bool uw_cam_status;
+#endif
+
 enum IMGSENSOR_RETURN imgsensor_hw_init(struct IMGSENSOR_HW *phw)
 {
 	struct IMGSENSOR_HW_SENSOR_POWER      *psensor_pwr;
@@ -182,6 +186,10 @@ enum IMGSENSOR_RETURN imgsensor_hw_init(struct IMGSENSOR_HW *phw)
 		}
 	}
 
+#if defined(CONFIG_CAMERA_AAX_V16)
+	uw_cam_status = false;
+#endif
+
 	return IMGSENSOR_RETURN_SUCCESS;
 }
 
@@ -193,6 +201,11 @@ enum IMGSENSOR_RETURN imgsensor_hw_release_all(struct IMGSENSOR_HW *phw)
 		if (phw->pdev[i]->release != NULL)
 			(phw->pdev[i]->release)(phw->pdev[i]->pinstance);
 	}
+
+#if defined(CONFIG_CAMERA_AAX_V16)
+	uw_cam_status = false;
+#endif
+
 	return IMGSENSOR_RETURN_SUCCESS;
 }
 
@@ -236,6 +249,13 @@ static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
 
 	ppwr_info = ppwr_seq->pwr_info;
 
+#if defined(CONFIG_CAMERA_AAX_V16)
+		if (sensor_idx == IMGSENSOR_SENSOR_IDX_MAIN2 && pwr_status == IMGSENSOR_HW_POWER_STATUS_ON) {
+			PK_INFO("uw_cam_status: ON\n");
+			uw_cam_status = true;
+		}
+#endif
+
 	while (ppwr_info->pin != IMGSENSOR_HW_PIN_NONE &&
 	       ppwr_info->pin < IMGSENSOR_HW_PIN_MAX_NUM &&
 	       ppwr_info < ppwr_seq->pwr_info + IMGSENSOR_HW_POWER_INFO_MAX) {
@@ -244,6 +264,16 @@ static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
 			if (ppwr_info->pin != IMGSENSOR_HW_PIN_UNDEF) {
 				if (psensor_pwr->id[ppwr_info->pin] != IMGSENSOR_HW_ID_MAX_NUM) {
 					pdev = phw->pdev[psensor_pwr->id[ppwr_info->pin]];
+
+#if defined(CONFIG_CAMERA_AAX_V16)
+					if (sensor_idx != IMGSENSOR_SENSOR_IDX_MAIN2 && ppwr_info->pin == IMGSENSOR_HW_PIN_RST2 && uw_cam_status) {
+						PK_INFO("[Power on] sensor_idx = %d, reset2->[skip], pin_state = %d, delay = 0 ms\n",
+							sensor_idx, ppwr_info->pin_state_on);
+						ppwr_info++;
+						pin_cnt++;
+						continue;
+					}
+#endif
 
 					if (__ratelimit(&ratelimit))
 						PK_INFO("[Power on] sensor_idx = %d, pin = %d, pin_state_on = %d, delay after setting = %u ms",
@@ -278,6 +308,14 @@ static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
 					if (ppwr_info->pin_on_delay)
 						mDELAY(ppwr_info->pin_on_delay);
 
+#if defined(CONFIG_CAMERA_AAX_V16)
+					if (sensor_idx != IMGSENSOR_SENSOR_IDX_MAIN2 && ppwr_info->pin == IMGSENSOR_HW_PIN_RST2) {
+						PK_INFO("[Power off]  sensor_idx = %d, reset2->[skip], pin_state = %d, delay = %u ms\n",
+							sensor_idx, ppwr_info->pin_state_off, ppwr_info->pin_on_delay);
+						continue;
+					}
+#endif
+
 					if (__ratelimit(&ratelimit))
 						PK_INFO("[Power off] sensor_idx = %d, pin = %d, pin_state_off = %d, delay before setting = %u ms",
 							sensor_idx,	ppwr_info->pin,	ppwr_info->pin_state_off, ppwr_info->pin_on_delay);
@@ -292,6 +330,13 @@ static enum IMGSENSOR_RETURN imgsensor_hw_power_sequence(
 			}
 		}
 	}
+
+#if defined(CONFIG_CAMERA_AAX_V16)
+	if (sensor_idx == IMGSENSOR_SENSOR_IDX_MAIN2 && pwr_status == IMGSENSOR_HW_POWER_STATUS_OFF) {
+		PK_INFO("uw_cam_status: OFF\n");
+		uw_cam_status = false;
+	}
+#endif
 
 	return IMGSENSOR_RETURN_SUCCESS;
 }

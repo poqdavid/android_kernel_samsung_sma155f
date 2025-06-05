@@ -39,7 +39,7 @@
 
 #include "ov48bmipiraw_Sensor.h"
 #include "ov48b_Sensor_setting.h"
-
+#include "platform_common.h"
 #define _I2C_BUF_SIZE 4096
 kal_uint16 _i2c_data[_I2C_BUF_SIZE];
 unsigned int _size_to_write;
@@ -53,6 +53,8 @@ bool _is_seamless;
 #define MULTI_WRITE 1
 
 #define FPT_PDAF_SUPPORT 1
+
+static unsigned int g_platform_id;
 
 static DEFINE_SPINLOCK(imgsensor_drv_lock);
 
@@ -2028,6 +2030,10 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 		else
 			seamless_switch((*feature_data), 0, 0, 0, 0);
 		break;
+	case SENSOR_FEATURE_GET_OFFSET_TO_START_OF_EXPOSURE:
+		if (IS_MT6789(g_platform_id))
+			*(MUINT32 *)(uintptr_t)(*(feature_data + 1)) = 1774600;
+		break;
 	case SENSOR_FEATURE_GET_GAIN_RANGE_BY_SCENARIO:
 		*(feature_data + 1) = imgsensor_info.min_gain;
 		*(feature_data + 2) = imgsensor_info.max_gain;
@@ -2469,13 +2475,20 @@ static kal_uint32 feature_control(MSDK_SENSOR_FEATURE_ENUM feature_id,
 	return ERROR_NONE;
 }   /*  feature_control()  */
 
+static void set_platform_info(unsigned int platform_id)
+{
+	g_platform_id = platform_id;
+	pr_info("%s id:%x\n", __func__, g_platform_id);
+}
+
 static struct SENSOR_FUNCTION_STRUCT sensor_func = {
 	open,
 	get_info,
 	get_resolution,
 	feature_control,
 	control,
-	close
+	close,
+	set_platform_info
 };
 
 UINT32 OV48B_MIPI_RAW_SensorInit(struct SENSOR_FUNCTION_STRUCT **pfFunc)

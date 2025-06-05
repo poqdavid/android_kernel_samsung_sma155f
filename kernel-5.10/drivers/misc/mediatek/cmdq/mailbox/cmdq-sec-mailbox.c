@@ -808,18 +808,15 @@ static s32 cmdq_sec_session_init(struct cmdq_sec_context *context)
 #endif
 
 #ifdef CMDQ_SECURE_MTEE_SUPPORT
-		if (!context->mtee_iwc_msg ||
-			!context->mtee_iwc_ex1 || !context->mtee_iwc_ex2) {
-			err = cmdq_sec_mtee_allocate_wsm(&context->mtee,
-				&context->mtee_iwc_msg,
-				sizeof(struct iwcCmdqMessage_t),
-				&context->mtee_iwc_ex1,
-				sizeof(struct iwcCmdqMessageEx_t),
-				&context->mtee_iwc_ex2,
-				sizeof(struct iwcCmdqMessageEx2_t));
-			if (err)
-				break;
-		}
+		err = cmdq_sec_mtee_register_wsm(&context->mtee,
+			&context->mtee_iwc_msg,
+			sizeof(struct iwcCmdqMessage_t),
+			&context->mtee_iwc_ex1,
+			sizeof(struct iwcCmdqMessageEx_t),
+			&context->mtee_iwc_ex2,
+			sizeof(struct iwcCmdqMessageEx2_t));
+		if (err)
+			break;
 #endif
 
 		context->state = IWC_WSM_ALLOCATED;
@@ -1824,6 +1821,43 @@ static struct platform_driver cmdq_sec_drv = {
 };
 
 #if defined(CMDQ_GP_SUPPORT) || defined(CMDQ_SECURE_MTEE_SUPPORT)
+
+static struct cmdq_sec_context *g_context[2];
+
+static s32 cmdq_sec_prealloc_mem(void)
+{
+	struct cmdq_sec_context *context = NULL;
+	static u32 i;
+	s32 err, retry_cnt = 0, total_retry_cnt = 5;
+
+	for (i = 0; i < 2; i++) {
+		do {
+			context = kzalloc(sizeof(struct cmdq_sec_context), GFP_ATOMIC);
+			if (context)
+				break;
+			cmdq_err("cmdq->context kzalloc failed, retry cnt:%d", retry_cnt);
+		} while (++retry_cnt < total_retry_cnt);
+
+		if (!context) {
+			cmdq_err("cmdq->context kzalloc failed");
+			return -ENOMEM;
+		}
+
+		err = cmdq_sec_mtee_allocate_wsm(
+			&context->mtee_iwc_msg, sizeof(struct iwcCmdqMessage_t),
+			&context->mtee_iwc_ex1, sizeof(struct iwcCmdqMessageEx_t),
+			&context->mtee_iwc_ex2, sizeof(struct iwcCmdqMessageEx2_t));
+		if (err) {
+			kfree(context);
+			return err;
+	}
+		g_context[i] = context;
+	}
+
+	return 0;
+}
+
+
 static s32 cmdq_sec_late_init_wsm(void *data)
 {
 	struct cmdq_sec *cmdq;
@@ -1839,11 +1873,16 @@ static s32 cmdq_sec_late_init_wsm(void *data)
 			g_cmdq_cnt, i, &cmdq->base_pa);
 
 		if (!cmdq->context) {
-			context = kzalloc(sizeof(*cmdq->context),
-				GFP_ATOMIC);
+			context = g_context[i];
 			if (!context) {
-				err = -CMDQ_ERR_NULL_SEC_CTX_HANDLE;
-				break;
+				context = kzalloc(sizeof(*cmdq->context),
+					GFP_ATOMIC);
+				if (!context) {
+					err = -CMDQ_ERR_NULL_SEC_CTX_HANDLE;
+					cmdq_err("cmdq->context kzalloc failed, err:%d", err);
+					break;
+				}
+				g_context[i] = context;
 			}
 			cmdq->context = context;
 			cmdq->context->state = IWC_INIT;
@@ -1854,8 +1893,7 @@ static s32 cmdq_sec_late_init_wsm(void *data)
 		if (cmdq->context->state == IWC_INIT)
 			cmdq_sec_setup_tee_context_base(cmdq->context);
 
-		if (cmdq->context)
-			err = cmdq_sec_session_init(cmdq->context);
+		err = cmdq_sec_session_init(cmdq->context);
 		mutex_unlock(&cmdq->exec_lock);
 		if (err) {
 			err = -CMDQ_ERR_SEC_CTX_SETUP;
@@ -1863,6 +1901,7 @@ static s32 cmdq_sec_late_init_wsm(void *data)
 			continue;
 		}
 	} while (++i < g_cmdq_cnt);
+
 	return err;
 }
 
@@ -1881,6 +1920,11 @@ static int __init cmdq_sec_late_init(void)
 static int __init cmdq_sec_init(void)
 {
 	s32 err;
+#ifdef CMDQ_SECURE_MTEE_SUPPORT
+	err = cmdq_sec_prealloc_mem();
+	if (err)
+		cmdq_err("cmdq_sec_prealloc_mem failed:%d", err);
+#endif
 
 	err = platform_driver_register(&cmdq_sec_drv);
 	if (err)

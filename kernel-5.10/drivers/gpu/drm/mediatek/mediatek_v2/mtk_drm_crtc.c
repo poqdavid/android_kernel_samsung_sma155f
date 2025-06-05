@@ -3412,6 +3412,11 @@ static void mtk_crtc_disp_mode_switch_begin(struct drm_crtc *crtc,
 		return;
 	}
 
+	if (mtk_state->prop_val[CRTC_PROP_DOZE_ACTIVE]) {
+		DDPMSG("%s : DOZE skip fps change\n", __func__);
+		return;
+	}
+
 	DDPMSG("%s++ from %u to %u\n", __func__,
 		old_mtk_state->prop_val[CRTC_PROP_DISP_MODE_IDX],
 		mtk_state->prop_val[CRTC_PROP_DISP_MODE_IDX]);
@@ -6181,7 +6186,7 @@ void mtk_crtc_stop(struct mtk_drm_crtc *mtk_crtc, bool need_wait)
 	} else if (mtk_crtc_is_frame_trigger_mode(&mtk_crtc->base)) {
 		/* 1. wait stream eof & clear tocken */
 		/* clear eof token to prevent any config after this command */
-		cmdq_pkt_wfe(cmdq_handle,
+		cmdq_pkt_clear_event(cmdq_handle,
 				 mtk_crtc->gce_obj.event[EVENT_STREAM_EOF]);
 
 		/* clear dirty token to prevent trigger loop start */

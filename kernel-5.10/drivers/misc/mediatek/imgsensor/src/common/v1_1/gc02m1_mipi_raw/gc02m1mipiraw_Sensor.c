@@ -216,7 +216,12 @@ static struct imgsensor_info_struct imgsensor_info = {
 	.sensor_interface_type = SENSOR_INTERFACE_TYPE_MIPI,
 	.mipi_sensor_type = MIPI_OPHY_NCSI2,
 	.mipi_settle_delay_mode = MIPI_SETTLEDELAY_AUTO,
+#ifdef ENABLE_MIRROR_HV
+	.sensor_output_dataformat = SENSOR_OUTPUT_FORMAT_RAW_B,
+#else
 	.sensor_output_dataformat = SENSOR_OUTPUT_FORMAT_RAW_R,
+#endif
+
 	.mclk = 26,
 	.mipi_lane_num = SENSOR_MIPI_1_LANE, //mipi lane num
 	.i2c_addr_table = {0x20, 0x6e, 0xff},
@@ -225,7 +230,11 @@ static struct imgsensor_info_struct imgsensor_info = {
 
 
 static struct imgsensor_struct imgsensor = {
-	.mirror = IMAGE_NORMAL,	//mirrorflip information
+#ifdef ENABLE_MIRROR_HV
+	.mirror = IMAGE_HV_MIRROR,
+#else
+	.mirror = IMAGE_NORMAL,
+#endif
 	.sensor_mode = IMGSENSOR_MODE_INIT,
 	.shutter = 0x3ED,	//current shutter
 	.gain = 0x40,		//current gain
@@ -664,6 +673,34 @@ static kal_uint16 table_write_cmos_sensor(kal_uint16 *para, kal_uint32 len)
 	return 0;
 }
 
+static void set_mirror_flip(kal_uint8 image_mirror)
+{
+	kal_uint8 itemp;
+
+	LOG_INF("image_mirror = %d\n", image_mirror);
+	write_cmos_sensor(0xfe, 0x00);
+	itemp = read_cmos_sensor(0x17);
+	itemp &= ~0x03;
+	switch (image_mirror) {
+
+	case IMAGE_NORMAL:
+		write_cmos_sensor(0x17, itemp);
+		break;
+
+	case IMAGE_V_MIRROR:
+		write_cmos_sensor(0x17, itemp | 0x02);
+		break;
+
+	case IMAGE_H_MIRROR:
+		write_cmos_sensor(0x17, itemp | 0x01);
+		break;
+
+	case IMAGE_HV_MIRROR:
+		write_cmos_sensor(0x17, itemp | 0x03);
+		break;
+	}
+}
+
 static int set_mode_setfile(enum IMGSENSOR_MODE mode)
 {
 	int ret = 0;
@@ -904,6 +941,7 @@ static kal_uint32 preview(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	spin_unlock(&imgsensor_drv_lock);
 
 	set_mode_setfile(imgsensor.sensor_mode);
+	set_mirror_flip(imgsensor.mirror);
 	LOG_INF("- X");
 
 	return ERROR_NONE;
@@ -940,6 +978,7 @@ static kal_uint32 capture(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	spin_unlock(&imgsensor_drv_lock);
 
 	set_mode_setfile(imgsensor.sensor_mode);
+	set_mirror_flip(imgsensor.mirror);
 	LOG_INF("- X");
 
 	return ERROR_NONE;
@@ -962,6 +1001,7 @@ static kal_uint32 normal_video(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *
 	spin_unlock(&imgsensor_drv_lock);
 
 	set_mode_setfile(imgsensor.sensor_mode);
+	set_mirror_flip(imgsensor.mirror);
 	LOG_INF("- X");
 
 	return ERROR_NONE;
@@ -986,6 +1026,7 @@ static kal_uint32 hs_video(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	spin_unlock(&imgsensor_drv_lock);
 
 	set_mode_setfile(imgsensor.sensor_mode);
+	set_mirror_flip(imgsensor.mirror);
 	LOG_INF("- X");
 
 	return ERROR_NONE;
@@ -1009,6 +1050,7 @@ static kal_uint32 slim_video(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	spin_unlock(&imgsensor_drv_lock);
 
 	set_mode_setfile(imgsensor.sensor_mode);
+	set_mirror_flip(imgsensor.mirror);
 	LOG_INF("- X");
 
 	return ERROR_NONE;
@@ -1031,6 +1073,7 @@ static kal_uint32 custom1(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	spin_unlock(&imgsensor_drv_lock);
 
 	set_mode_setfile(imgsensor.sensor_mode);
+	set_mirror_flip(imgsensor.mirror);
 	LOG_INF("- X");
 
 	return ERROR_NONE;
@@ -1053,6 +1096,7 @@ static kal_uint32 custom2(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	spin_unlock(&imgsensor_drv_lock);
 
 	set_mode_setfile(imgsensor.sensor_mode);
+	set_mirror_flip(imgsensor.mirror);
 	LOG_INF("- X");
 
 	return ERROR_NONE;
@@ -1074,6 +1118,7 @@ static kal_uint32 custom3(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	spin_unlock(&imgsensor_drv_lock);
 
 	set_mode_setfile(imgsensor.sensor_mode);
+	set_mirror_flip(imgsensor.mirror);
 	LOG_INF("- X");
 
 	return ERROR_NONE;
@@ -1095,6 +1140,7 @@ static kal_uint32 custom4(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	spin_unlock(&imgsensor_drv_lock);
 
 	set_mode_setfile(imgsensor.sensor_mode);
+	set_mirror_flip(imgsensor.mirror);
 	LOG_INF("- X");
 
 	return ERROR_NONE;
@@ -1116,6 +1162,7 @@ static kal_uint32 custom5(MSDK_SENSOR_EXPOSURE_WINDOW_STRUCT *image_window,
 	spin_unlock(&imgsensor_drv_lock);
 
 	set_mode_setfile(imgsensor.sensor_mode);
+	set_mirror_flip(imgsensor.mirror);
 	LOG_INF("- X");
 
 	return ERROR_NONE;
@@ -1647,7 +1694,11 @@ static void set_imgsensor_info_by_sensor_id(unsigned int sensor_id)
 	switch (sensor_id) {
 	case GC02M1_SENSOR_ID: //for macro sensor
 		LOG_INF("set imgsensor info for GC02M1");
+#ifdef ENABLE_MIRROR_HV
+		imgsensor_info.sensor_output_dataformat = SENSOR_OUTPUT_FORMAT_RAW_B,
+#else
 		imgsensor_info.sensor_output_dataformat = SENSOR_OUTPUT_FORMAT_RAW_R;
+#endif
 
 #if defined(CONFIG_CAMERA_AAT_V12) || defined(CONFIG_CAMERA_AAU_V22) ||\
 	defined(CONFIG_CAMERA_MMU_V22) || defined(CONFIG_CAMERA_MMU_V32) ||\

@@ -317,6 +317,22 @@ struct AIS_FSM_INFO {
 	struct AIS_BTO_INFO rBtoInfo;
 };
 
+#if CFG_TC10_FEATURE
+struct GETBSSINFO_T {
+	u_int32_t OUI[3];
+	u_int32_t channel_freq;
+	u_int32_t channel_bw;
+	u_int32_t rssi;
+	u_int32_t datarate;
+	u_int32_t phy_mode;
+	u_int32_t ant_mode;
+	u_int8_t AKM;
+	u_int8_t Roaming_count;
+	u_int32_t KV;
+	u_int32_t KVIE;
+};
+#endif
+
 struct AIS_OFF_CHNL_TX_REQ_INFO {
 	struct LINK_ENTRY rLinkEntry;
 	struct MSDU_INFO *prMgmtTxMsdu;
@@ -850,5 +866,13 @@ void aisMultiStaSetQuoteTime(
 	struct ADAPTER *prAdapter,
 	uint8_t fgSetQuoteTime);
 #endif
+
+#if CFG_TC10_FEATURE
+uint32_t aisGet11KV(struct ADAPTER *prAdapter,
+	struct BSS_DESC *prBssDesc, struct STA_RECORD *prStaRec);
+uint32_t aisGet11KVIE(struct ADAPTER *prAdapter,
+	struct BSS_DESC *prBssDesc, struct STA_RECORD *prStaRec);
+#endif
+
 
 #endif /* _AIS_FSM_H */

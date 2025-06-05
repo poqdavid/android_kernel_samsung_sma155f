@@ -687,65 +687,73 @@ void rlmGenerateMTKOuiIE(struct ADAPTER *prAdapter,
 } /* rlmGenerateMTKOuiIE */
 
 void rlmGenerateCustomer1OuiIE(struct ADAPTER *prAdapter,
-			 struct MSDU_INFO *prMsduInfo)
+	 struct MSDU_INFO *prMsduInfo)
 {
+	struct WLAN_MAC_MGMT_HEADER *mgmt;
+	uint16_t frame_ctrl;
 	struct BSS_INFO *prBssInfo;
 	uint8_t *pucBuffer;
-//	uint8_t aucCustomerOui[] = VENDOR_OUI_CUSTOMER1;
+	uint8_t aucCustomerOui[] = VENDOR_OUI_CUSTOMER1;
+	uint16_t len;
 
 	ASSERT(prAdapter);
 	ASSERT(prMsduInfo);
 
-	if (prAdapter->rWifiVar.ucCustomer1Oui == FEATURE_DISABLED)
+	if (prAdapter->rWifiVar.ucCustomerOui == FEATURE_DISABLED)
 		return;
 
 	prBssInfo = prAdapter->aprBssInfo[prMsduInfo->ucBssIndex];
 	if (!prBssInfo)
 		return;
 
-	pucBuffer = (uint8_t *)((unsigned long)prMsduInfo->prPacket +
-				(unsigned long)prMsduInfo->u2FrameLength);
+	mgmt = (struct WLAN_MAC_MGMT_HEADER *)(prMsduInfo->prPacket);
+	frame_ctrl = mgmt->u2FrameCtrl & MASK_FRAME_TYPE;
+	pucBuffer = (uint8_t *)((uintptr_t)prMsduInfo->prPacket +
+				(uintptr_t)prMsduInfo->u2FrameLength);
 
 	CUSTOMER_OUI_IE(pucBuffer)->ucId = ELEM_ID_VENDOR;
-	CUSTOMER_OUI_IE(pucBuffer)->ucLength = prAdapter->rWifiVar.ucCusOuiLen[0];
-	CUSTOMER_OUI_IE(pucBuffer)->aucOui[0] = prAdapter->rWifiVar.ucCus1Oui[0];
-	CUSTOMER_OUI_IE(pucBuffer)->aucOui[1] = prAdapter->rWifiVar.ucCus1Oui[1];
-	CUSTOMER_OUI_IE(pucBuffer)->aucOui[2] = prAdapter->rWifiVar.ucCus1Oui[2];
-	CUSTOMER_OUI_IE(pucBuffer)->ucOuiType = prAdapter->rWifiVar.ucCusOuiType[0];
-
-	prMsduInfo->u2FrameLength += IE_SIZE(pucBuffer);
-	pucBuffer += IE_SIZE(pucBuffer);
-}
+	CUSTOMER_OUI_IE(pucBuffer)->ucLength = ELEM_MIN_LEN_CUSTOMER1_OUI;
+	CUSTOMER_OUI_IE(pucBuffer)->aucOui[0] = aucCustomerOui[0];
+	CUSTOMER_OUI_IE(pucBuffer)->aucOui[1] = aucCustomerOui[1];
+	CUSTOMER_OUI_IE(pucBuffer)->aucOui[2] = aucCustomerOui[2];
+	CUSTOMER_OUI_IE(pucBuffer)->ucOuiType = VENDOR_OUI_TYPE_CUSTOMER1;
+	len = IE_SIZE(pucBuffer);
+	prMsduInfo->u2FrameLength += len;
+} /* rlmGenerateMTKOuiIE */
 
 void rlmGenerateCustomer2OuiIE(struct ADAPTER *prAdapter,
-			 struct MSDU_INFO *prMsduInfo)
+	 struct MSDU_INFO *prMsduInfo)
 {
+	struct WLAN_MAC_MGMT_HEADER *mgmt;
+	uint16_t frame_ctrl;
 	struct BSS_INFO *prBssInfo;
 	uint8_t *pucBuffer;
-//	uint8_t aucCustomerOui[] = VENDOR_OUI_CUSTOMER2;
+	uint8_t aucCustomerOui[] = VENDOR_OUI_CUSTOMER2;
+	uint16_t len;
 
 	ASSERT(prAdapter);
 	ASSERT(prMsduInfo);
 
-	if (prAdapter->rWifiVar.ucCustomer2Oui == FEATURE_DISABLED)
+	if (prAdapter->rWifiVar.ucCustomerOui == FEATURE_DISABLED)
 		return;
 
 	prBssInfo = prAdapter->aprBssInfo[prMsduInfo->ucBssIndex];
 	if (!prBssInfo)
 		return;
 
-	pucBuffer = (uint8_t *)((unsigned long)prMsduInfo->prPacket +
-				(unsigned long)prMsduInfo->u2FrameLength);
+	mgmt = (struct WLAN_MAC_MGMT_HEADER *)(prMsduInfo->prPacket);
+	frame_ctrl = mgmt->u2FrameCtrl & MASK_FRAME_TYPE;
+	pucBuffer = (uint8_t *)((uintptr_t)prMsduInfo->prPacket +
+				(uintptr_t)prMsduInfo->u2FrameLength);
 
 	CUSTOMER_OUI_IE(pucBuffer)->ucId = ELEM_ID_VENDOR;
-	CUSTOMER_OUI_IE(pucBuffer)->ucLength = prAdapter->rWifiVar.ucCusOuiLen[1];
-	CUSTOMER_OUI_IE(pucBuffer)->aucOui[0] = prAdapter->rWifiVar.ucCus2Oui[0];
-	CUSTOMER_OUI_IE(pucBuffer)->aucOui[1] = prAdapter->rWifiVar.ucCus2Oui[1];
-	CUSTOMER_OUI_IE(pucBuffer)->aucOui[2] = prAdapter->rWifiVar.ucCus2Oui[2];
-	CUSTOMER_OUI_IE(pucBuffer)->ucOuiType = prAdapter->rWifiVar.ucCusOuiType[1];
-
-	prMsduInfo->u2FrameLength += IE_SIZE(pucBuffer);
-	pucBuffer += IE_SIZE(pucBuffer);
+	CUSTOMER_OUI_IE(pucBuffer)->ucLength = ELEM_MIN_LEN_CUSTOMER2_OUI;
+	CUSTOMER_OUI_IE(pucBuffer)->aucOui[0] = aucCustomerOui[0];
+	CUSTOMER_OUI_IE(pucBuffer)->aucOui[1] = aucCustomerOui[1];
+	CUSTOMER_OUI_IE(pucBuffer)->aucOui[2] = aucCustomerOui[2];
+	CUSTOMER_OUI_IE(pucBuffer)->ucOuiType = VENDOR_OUI_TYPE_CUSTOMER2;
+	len = IE_SIZE(pucBuffer);
+	prMsduInfo->u2FrameLength += len;
 }
 
 uint32_t rlmCalculateCustomer1OuiIELen(
@@ -753,9 +761,9 @@ uint32_t rlmCalculateCustomer1OuiIELen(
 	uint8_t ucBssIndex,
 	struct STA_RECORD *prStaRec)
 {
-	uint8_t len = 0;
+	uint32_t len = 0;
 
-	len += (prAdapter->rWifiVar.ucCusOuiLen[0]);
+	len += ELEM_MIN_LEN_CUSTOMER1_OUI;
 	return len;
 }
 
@@ -764,12 +772,11 @@ uint32_t rlmCalculateCustomer2OuiIELen(
 	uint8_t ucBssIndex,
 	struct STA_RECORD *prStaRec)
 {
-	uint8_t len = 0;
+	uint32_t len = 0;
 
-	len += (prAdapter->rWifiVar.ucCusOuiLen[1]);
+	len += ELEM_MIN_LEN_CUSTOMER2_OUI;
 	return len;
 }
-
 
 /*----------------------------------------------------------------------------*/
 /*!
