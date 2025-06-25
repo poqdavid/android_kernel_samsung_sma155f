@@ -73,7 +73,7 @@ print_msg "$GREEN" "Modifying configs..."
 
 # KernelSU Next configs
 ./kernel-5.10/scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
---set-val KSU_WITH_KPROBES n \
+--set-val KSU_KPROBES_HOOK n \
 --set-val KSU_SUSFS y \
 --set-val KSU_SUSFS_HAS_MAGIC_MOUNT y \
 --set-val KSU_SUSFS_SUS_PATH y \
@@ -99,7 +99,7 @@ cd kernel-5.10
 print_msg "$GREEN" "Setting up KernelSU Next SUSFS..."
 
 #curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s next-susfs
-curl -LSs "https://raw.githubusercontent.com/poqdavid/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.0.7
+curl -LSs "https://raw.githubusercontent.com/poqdavid/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.0.8
 
 print_msg "$GREEN" "Finished Setting up KernelSU Next SUSFS..."
 
@@ -129,10 +129,10 @@ patch -p1 --forward < ../../patches/hotfixcorehookc.patch
 cd ..
 print_msg "$GREEN" "Finished Patching up..."
 
-print_msg "$GREEN" "Configuring Kernel metadata..."
-sed -i '$s|echo "\$res"|echo "-android12-9-28575149"|' ./scripts/setlocalversion
-perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 06 09:35:51 UTC 2025"}' ./scripts/mkcompile_h
-print_msg "$GREEN" "Finished Configuring Kernel metadata..."
+#print_msg "$GREEN" "Configuring Kernel metadata..."
+#sed -i '$s|echo "\$res"|echo "-android12-9-28575149"|' ./scripts/setlocalversion
+#perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 06 09:35:51 UTC 2025"}' ./scripts/mkcompile_h
+#print_msg "$GREEN" "Finished Configuring Kernel metadata..."
 
 print_msg "$GREEN" "Generating configs..."
 
