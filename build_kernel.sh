@@ -12,6 +12,22 @@ print_msg() {
     echo -e "${COLOR}$*${RESET}"
 }
 
+# Print runtime function
+print_runtime() {
+    # Calculate runtime in seconds
+    runtime=$(($3 - $2))
+    
+    # Convert seconds to HH:MM:SS format
+    hours=$((runtime / 3600))
+    minutes=$(((runtime % 3600) / 60))
+    seconds=$((runtime % 60))
+    
+    # Display runtime with proper formatting (zero-padded)
+    printf "\e[1;32m$1: %02d:%02d:%02d\n" $hours $minutes $seconds
+}
+
+config_start_time=$(date +%s)
+
 # Script header
 print_msg "$GREEN" "\n - Build script for Samsung kernel image - "
 print_msg "$RED" "       by poqdavid \n"
@@ -94,9 +110,24 @@ print_msg "$GREEN" "Modifying configs..."
 
 print_msg "$GREEN" "Modified configs ..."
 
+#print_msg "$GREEN" "Configuring Kernel metadata..."
+#sed -i '$s|echo "\$res"|echo "-android12-9-28575149"|' ./scripts/setlocalversion
+#perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 06 09:35:51 UTC 2025"}' ./scripts/mkcompile_h
+#print_msg "$GREEN" "Finished Configuring Kernel metadata..."
+
 cd kernel-5.10
 
+print_msg "$GREEN" "Generating configs..."
+
+python2 scripts/gen_build_config.py --kernel-defconfig a15_00_defconfig --kernel-defconfig-overlays entry_level.config -m user -o ../out/target/product/a15/obj/KERNEL_OBJ/build.config
+
+print_msg "$GREEN" "Finished Generating configs..."
+
+config_end_time=$(date +%s)
+
 print_msg "$GREEN" "Setting up KernelSU Next SUSFS..."
+
+patch_start_time=$(date +%s)
 
 #curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s next-susfs
 curl -LSs "https://raw.githubusercontent.com/poqdavid/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.0.8
@@ -129,17 +160,10 @@ patch -p1 --forward < ../../patches/kernel_patches/next/0001-kernel-implement-su
 #patch -p1 --forward < ../../patches/hotfixcorehookc.patch
 cd ..
 print_msg "$GREEN" "Finished Patching up..."
+patch_end_time=$(date +%s)
 
-#print_msg "$GREEN" "Configuring Kernel metadata..."
-#sed -i '$s|echo "\$res"|echo "-android12-9-28575149"|' ./scripts/setlocalversion
-#perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 06 09:35:51 UTC 2025"}' ./scripts/mkcompile_h
-#print_msg "$GREEN" "Finished Configuring Kernel metadata..."
-
-print_msg "$GREEN" "Generating configs..."
-
-python2 scripts/gen_build_config.py --kernel-defconfig a15_00_defconfig --kernel-defconfig-overlays entry_level.config -m user -o ../out/target/product/a15/obj/KERNEL_OBJ/build.config
-
-print_msg "$GREEN" "Finished Generating configs..."
+# Start timing
+build_start_time=$(date +%s)
 
 export LTO=thin
 export ARCH=arm64
@@ -155,4 +179,13 @@ print_msg "$GREEN" "Building Kernel..."
 cd ../kernel
 ./build/build.sh
 
+# End timing
+build_end_time=$(date +%s)
+
 print_msg "$GREEN" "Finished Building Kernel..."
+
+echo " "
+
+print_runtime "Config runtime" config_start_time config_end_time
+print_runtime "Patch runtime" patch_start_time patch_end_time
+print_runtime "Build runtime" build_start_time build_end_time
