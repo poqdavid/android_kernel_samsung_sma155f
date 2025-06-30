@@ -124,8 +124,9 @@ patch -p1 --forward < ../patches/fake_config.patch
 
 cd ./KernelSU-Next/
 print_msg "$GREEN" "Patching SUSFS in KernelSU Next..."
-patch -p1 --forward < ../../patches/kernel_patches/next/0001_susfs_157_for_ksunext.patch
-patch -p1 --forward < ../../patches/hotfixcorehookc.patch
+patch -p1 --forward < ../../patches/kernel_patches/next/fix_apk_sign.c.patch
+patch -p1 --forward < ../../patches/kernel_patches/next/0001-kernel-implement-susfs-v1.5.5-v1.5.7-KSUN-v1.0.8.patch
+#patch -p1 --forward < ../../patches/hotfixcorehookc.patch
 cd ..
 print_msg "$GREEN" "Finished Patching up..."
 
