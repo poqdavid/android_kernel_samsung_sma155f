@@ -12,6 +12,22 @@ print_msg() {
     echo -e "${COLOR}$*${RESET}"
 }
 
+# Print runtime function
+print_runtime() {
+    # Calculate runtime in seconds
+    runtime=$(($3 - $2))
+    
+    # Convert seconds to HH:MM:SS format
+    hours=$((runtime / 3600))
+    minutes=$(((runtime % 3600) / 60))
+    seconds=$((runtime % 60))
+    
+    # Display runtime with proper formatting (zero-padded)
+    printf "\e[1;32m$1: %02d:%02d:%02d\n" $hours $minutes $seconds
+}
+
+config_start_time=$(date +%s)
+
 # Script header
 print_msg "$GREEN" "\n - Build script for Samsung kernel image - "
 print_msg "$RED" "       by poqdavid \n"
@@ -75,7 +91,7 @@ cd kernel-5.10
 
 print_msg "$GREEN" "Setting up KernelSU..."
 
-curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s v1.0.5
 
 print_msg "$GREEN" "Finished Setting up KernelSU..."
 
@@ -91,6 +107,10 @@ python2 scripts/gen_build_config.py --kernel-defconfig a15_00_defconfig --kernel
 
 print_msg "$GREEN" "Finished Generating configs..."
 
+config_end_time=$(date +%s)
+
+build_start_time=$(date +%s)
+
 export LTO=thin
 export ARCH=arm64
 export PLATFORM_VERSION=12
@@ -105,4 +125,11 @@ print_msg "$GREEN" "Building Kernel..."
 cd ../kernel
 ./build/build.sh
 
+build_end_time=$(date +%s)
+
 print_msg "$GREEN" "Finished Building Kernel..."
+
+echo " "
+
+print_runtime "Config runtime" config_start_time config_end_time
+print_runtime "Build runtime" build_start_time build_end_time
