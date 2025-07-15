@@ -56,7 +56,9 @@
 #define INODE_STATE_SUS_KSTAT BIT(26)
 #define INODE_STATE_OPEN_REDIRECT BIT(27)
 
-#define TIF_NON_ROOT_USER_APP_PROC 33 // thread_info->flags is unsigned long :D
+ // thread_info->flags is unsigned long :D
+#define TIF_NON_ROOT_USER_APP_PROC 33
+#define TIF_PROC_SU_NOT_ALLOWED 34
 
 #define AS_FLAGS_ANDROID_DATA_ROOT_DIR 28
 #define AS_FLAGS_SDCARD_ROOT_DIR 29
@@ -82,5 +84,12 @@ static inline void susfs_set_current_non_root_user_app_proc(void) {
 	set_ti_thread_flag(&current->thread_info, TIF_NON_ROOT_USER_APP_PROC);
 }
 
+static inline bool susfs_is_current_proc_su_not_allowed(void) {
+	return test_ti_thread_flag(&current->thread_info, TIF_PROC_SU_NOT_ALLOWED);
+}
+
+static inline void susfs_set_current_proc_su_not_allowed(void) {
+	set_ti_thread_flag(&current->thread_info, TIF_PROC_SU_NOT_ALLOWED);
+}
 
 #endif // #ifndef KSU_SUSFS_DEF_H
