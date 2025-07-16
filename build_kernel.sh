@@ -129,35 +129,67 @@ print_msg "$GREEN" "Setting up KernelSU Next SUSFS..."
 
 patch_start_time=$(date +%s)
 
-#curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next-susfs/kernel/setup.sh" | bash -s next-susfs
-curl -LSs "https://raw.githubusercontent.com/poqdavid/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.0.8
+curl -LSs "https://raw.githubusercontent.com/poqdavid/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.0.9
 
 print_msg "$GREEN" "Finished Setting up KernelSU Next SUSFS..."
 
 print_msg "$GREEN" "Patching up..."
 
+echo " "
 print_msg "$GREEN" "Copying susfs4ksu Patchees to the Kernel..."
 cp ../patches/susfs4ksu/kernel_patches/fs/* ./fs/
 cp ../patches/susfs4ksu/kernel_patches/include/linux/* ./include/linux/
 print_msg "$GREEN" "Finished Copying SUSFS4KSU Patchees to the Kernel..."
 
+echo " "
 print_msg "$GREEN" "Patching SUSFS in Kernel..."
 patch -p1 < ../patches/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch
 
+echo " "
 print_msg "$GREEN" "Patching namespace fix in Kernel..."
 patch -p1 < ../patches/kernel_patches/next/hotfixsamsungnamespace.patch
 
+echo " "
 print_msg "$GREEN" "Patching syscall_hooks in Kernel..."
-patch -p1 -F 3 < ../patches/kernel_patches/next/syscall_hooks.patch
+patch -p1 --fuzz=3 < ../patches/kernel_patches/next/syscall_hooks.patch
 
+echo " "
 print_msg "$GREEN" "Patching Makefile in Kernel for config_data..."
 patch -p1 --forward < ../patches/fake_config.patch
 
 cd ./KernelSU-Next/
+
+echo " "
 print_msg "$GREEN" "Patching SUSFS in KernelSU Next..."
-patch -p1 --forward < ../../patches/kernel_patches/next/fix_apk_sign.c.patch
-patch -p1 --forward < ../../patches/kernel_patches/next/0001-kernel-implement-susfs-v1.5.5-v1.5.7-KSUN-v1.0.8.patch
-#patch -p1 --forward < ../../patches/hotfixcorehookc.patch
+
+echo " "
+print_msg "$GREEN" "Patching 10_enable_susfs_for_ksu.patch..."
+patch -p1 --forward --fuzz=3 < ../../patches/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch
+
+echo " "
+print_msg "$GREEN" "Patching fix_apk_sign.c.patch..."
+patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_apk_sign.c.patch
+
+echo " "
+print_msg "$GREEN" "Patching fix_core_hook.c.patch..."
+patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_core_hook.c.patch
+
+echo " "
+print_msg "$GREEN" "Patching fix_selinux.c.patch..."
+patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_selinux.c.patch
+
+echo " "
+print_msg "$GREEN" "Patching fix_ksud.c.patch..."
+patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_ksud.c.patch
+
+echo " "
+print_msg "$GREEN" "Patching fix_rules.c.patch..."
+patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_rules.c.patch
+
+echo " "
+print_msg "$GREEN" "Patching fix_sucompat.c.patch..."
+patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_sucompat.c.patch
+
 cd ..
 print_msg "$GREEN" "Finished Patching up..."
 patch_end_time=$(date +%s)
@@ -174,6 +206,7 @@ export OUT_DIR="../out/target/product/a15/obj/KERNEL_OBJ"
 export DIST_DIR="../out/target/product/a15/obj/KERNEL_OBJ"
 export BUILD_CONFIG="../out/target/product/a15/obj/KERNEL_OBJ/build.config"
 
+echo " "
 print_msg "$GREEN" "Building Kernel..."
 
 cd ../kernel
