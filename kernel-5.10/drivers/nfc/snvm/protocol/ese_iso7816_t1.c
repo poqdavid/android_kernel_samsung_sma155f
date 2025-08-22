@@ -129,6 +129,7 @@ static ESE_STATUS iso7816_t1_send_sframe(iso7816_t1_t *protocol)
 	uint32_t frame_size = (PROTOCOL_HEADER_SIZE + PROTOCOL_LRC_SIZE);
 	uint8_t buf[PROTOCOL_HEADER_SIZE + PROTOCOL_LRC_SIZE + SFRAME_MAX_INF_SIZE];
 	uint8_t pcb_byte = 0;
+	int32_t ret = 0;
 
 	protocol->last_frame = FRAME_SFRAME;
 	if ((protocol->next_tx.sframe.type & 0x20 )== 0) {
@@ -168,7 +169,9 @@ static ESE_STATUS iso7816_t1_send_sframe(iso7816_t1_t *protocol)
 	buf[frame_size - 1] = iso7816_t1_compute_lrc(buf, 0, (frame_size - 1));
 
 	iso7816_t1_print_buffer("[star-protocol] S_SFRAME: ", buf, frame_size);
-	if ((uint32_t)ese_hal_send(protocol->hal, buf, frame_size) != frame_size) {
+	ret = ese_hal_send(protocol->hal, buf, frame_size);
+	if ((uint32_t)ret != frame_size) {
+		LOG_E("sframe] ese_hal_send failed %d", ret);
 		return ESESTATUS_SEND_FAILED;
 	}
 	return ESESTATUS_SUCCESS;
@@ -177,6 +180,7 @@ static ESE_STATUS iso7816_t1_send_sframe(iso7816_t1_t *protocol)
 static ESE_STATUS iso7816_t1_send_rframe(iso7816_t1_t *protocol)
 {
 	uint8_t buf[RFRAME_PROTOCOL_SIZE] = {0x00, 0x80, 0x00, 0x00};
+	int32_t ret = 0;
 
 	if (protocol->next_tx.rframe.error != RFRAME_ERROR_NO) {
 		buf[1] |= protocol->next_tx.rframe.error;
@@ -191,7 +195,9 @@ static ESE_STATUS iso7816_t1_send_rframe(iso7816_t1_t *protocol)
 	buf[3] = iso7816_t1_compute_lrc(buf, 0x00, RFRAME_PROTOCOL_SIZE - 1);
 
 	iso7816_t1_print_buffer("[star-protocol] S_RFRAME: ", buf, RFRAME_PROTOCOL_SIZE);
-	if ((uint32_t)ese_hal_send(protocol->hal, buf, RFRAME_PROTOCOL_SIZE) != RFRAME_PROTOCOL_SIZE) {
+	ret = ese_hal_send(protocol->hal, buf, RFRAME_PROTOCOL_SIZE);
+	if ((uint32_t)ret != RFRAME_PROTOCOL_SIZE) {
+		LOG_E("rframe] ese_hal_send failed %d", ret);
 		return ESESTATUS_SEND_FAILED;
 	}
 
@@ -202,6 +208,7 @@ static ESE_STATUS iso7816_t1_send_iframe(iso7816_t1_t *protocol)
 {
 	uint32_t frame_size = 0;
 	uint8_t pcb_byte = 0;
+	int32_t ret = 0;
 
 	if (protocol->proc_buf == NULL) {
 		LOG_E("Process Buffer is NULL, INVALID");
@@ -235,7 +242,9 @@ static ESE_STATUS iso7816_t1_send_iframe(iso7816_t1_t *protocol)
 	(protocol->proc_buf)[frame_size - 1] = iso7816_t1_compute_lrc(protocol->proc_buf, 0, (frame_size - 1));
 
 	iso7816_t1_print_buffer("[star-protocol] S_IFRAME: ", protocol->proc_buf, PROTOCOL_HEADER_SIZE);
-	if ((uint32_t)ese_hal_send(protocol->hal, protocol->proc_buf, frame_size) != frame_size) {
+	ret = ese_hal_send(protocol->hal, protocol->proc_buf, frame_size);
+	if ((uint32_t)ret != frame_size) {
+		LOG_E("iframe] ese_hal_send failed %d", ret);
 		return ESESTATUS_SEND_FAILED;
 	}
 
@@ -454,7 +463,9 @@ static ESE_STATUS iso7816_t1_process(iso7816_t1_t *protocol)
 
 	PROTOCOL_UDELAY(100);
 	for (i = 0; i < PROTOCOL_ADDRESS_POLLING_COUNT; i++) {
-		if (ese_hal_receive(protocol->hal, protocol->proc_buf, 1) != 1) {
+		ret_size = (uint32_t)ese_hal_receive(protocol->hal, protocol->proc_buf, 1);
+		if (ret_size != 1) {
+			LOG_E("1. mismatch receive size %u, %u", 1, ret_size);
 			status = ESESTATUS_INVALID_RECEIVE_LENGTH;
 			goto error;
 		}
@@ -482,7 +493,7 @@ static ESE_STATUS iso7816_t1_process(iso7816_t1_t *protocol)
 
 	ret_size = (uint32_t)ese_hal_receive(protocol->hal, protocol->proc_buf + data_size, 2);
 	if (ret_size != 2) {
-		LOG_E("mismatch receive size %u, %u", 2, ret_size);
+		LOG_E("2. mismatch receive size %u, %u", 2, ret_size);
 		status = ESESTATUS_INVALID_RECEIVE_LENGTH;
 		goto error;
 	}
@@ -491,7 +502,7 @@ static ESE_STATUS iso7816_t1_process(iso7816_t1_t *protocol)
 	rec_size = (protocol->proc_buf)[2] + 1;
 	ret_size = (uint32_t)ese_hal_receive(protocol->hal, protocol->proc_buf + data_size, rec_size);
 	if (ret_size != rec_size) {
-		LOG_E("mismatch receive size %u, %u", rec_size, ret_size);
+		LOG_E("3. mismatch receive size %u, %u", rec_size, ret_size);
 		status = ESESTATUS_INVALID_RECEIVE_LENGTH;
 		goto error;
 	}
@@ -538,8 +549,10 @@ error:
 				protocol->timeout_counter = PROTOCOL_ZERO;
 			}
 		} else {
+			LOG_E("ese_hal_receive failed, 50ms wait");
 			PROTOCOL_UDELAY(50 * 1000);
 			if (status == ESESTATUS_INVALID_FRAME) {
+				LOG_E("invalid frame");
 				if (protocol->rnack_counter < PROTOCOL_MAX_RNACK_RETRY_LIMIT) {
 					protocol->last_rx.type = FRAME_INVALID;
 					protocol->next_tx.type = FRAME_RFRAME;
@@ -625,6 +638,7 @@ ESE_STATUS iso7816_t1_receive(void *ctx, ese_data_t *data)
 	} while (protocol->state != STATE_IDLE);
 	wstatus = ese_data_get(&(protocol->recv_data), &data->data, &data->size);
 	if (wstatus != ESESTATUS_SUCCESS) {
+		LOG_E("failed to get data %u", wstatus);
 		status = wstatus;
 	}
 
@@ -654,6 +668,7 @@ ESE_STATUS iso7816_t1_resync_response(void *ctx)
 	protocol->state = STATE_IDLE;
 	if (protocol->last_rx.type != FRAME_SFRAME &&
 			protocol->last_rx.sframe.type != SFRAME_RESYNCH_RSP) {
+		LOG_E("Invalid resync response Frame !");
 		return ESESTATUS_INVALID_FRAME;
 	}
 	return status;
@@ -680,6 +695,7 @@ ESE_STATUS iso7816_t1_wtx_response(void *ctx)
 	protocol->state = STATE_IDLE;
 	if (protocol->last_rx.type != FRAME_SFRAME &&
 			protocol->last_rx.sframe.type != SFRAME_WTX_RSP) {
+		LOG_E("Invalid wtx response Frame !");
 		return ESESTATUS_INVALID_FRAME;
 	}
 	return status;
@@ -713,6 +729,7 @@ void *iso7816_t1_init(uint8_t send_address, uint8_t receive_address, void *hal)
 
 	protocol = ESE_MALLOC(sizeof(iso7816_t1_t));
 	if (protocol == NULL) {
+		LOG_E("failed to allocate for protocol buf");
 		return NULL;
 	}
 
@@ -723,6 +740,7 @@ void *iso7816_t1_init(uint8_t send_address, uint8_t receive_address, void *hal)
  */
 	protocol->proc_buf = ESE_MALLOC(260);
 	if (protocol->proc_buf == NULL) {
+		LOG_E("failed to allocate for proc_buf");
 		ESE_FREE(protocol);
 		return NULL;
 	}
