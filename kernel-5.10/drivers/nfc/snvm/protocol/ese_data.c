@@ -48,6 +48,7 @@ static int32_t _ese_data_delete_list(data_list_t *head)
 	data_list_t *cur, *next;
 
 	if (head == NULL) {
+		LOG_E("invalid parameter, head list");
 		return -1;
 	}
 
@@ -81,6 +82,7 @@ ESE_STATUS ese_data_store(data_list_t *head, uint8_t *data, uint32_t data_size, 
 
 	new_node = ESE_MALLOC(sizeof(data_list_t));
 	if (new_node == NULL) {
+		LOG_E("1. failed to allocate new memory");
 		return ESESTATUS_MEMORY_ALLOCATION_FAIL;
 	}
 
@@ -90,6 +92,7 @@ ESE_STATUS ese_data_store(data_list_t *head, uint8_t *data, uint32_t data_size, 
 		new_node->packet.data = ESE_MALLOC(data_size);
 		if (new_node->packet.data == NULL) {
 			ESE_FREE(new_node);
+			LOG_E("2. failed to allocate new memory");
 			return ESESTATUS_MEMORY_ALLOCATION_FAIL;
 		}
 		memcpy(new_node->packet.data, data, data_size);
@@ -152,6 +155,7 @@ ESE_STATUS ese_data_delete(data_list_t *head)
 	data_list_t *cur, *next;
 
 	if (head == NULL) {
+		LOG_E("invalid parameter, head");
 		return -1;
 	}
 
