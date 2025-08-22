@@ -286,6 +286,7 @@
 	{feature_immutable_path_write,"/vendor/bin/hw/vendor.samsung.hardware.camera.provider-service_64"},
 	{feature_immutable_path_write,"/system/"},	/* DEFAULT */
 	{feature_immutable_path_write,"/vendor/"},	/* DEFAULT */
+	{feature_immutable_path_open,"/system/bin/app_process64"},
 	{feature_immutable_path_open,"/system/bin/"},	/* DEFAULT */
 	{feature_immutable_path_open,"/vendor/bin/"},	/* DEFAULT */
 	{feature_immutable_src_exception,"/system/bin/icd"},
