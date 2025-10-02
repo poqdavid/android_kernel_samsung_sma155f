@@ -32,3 +32,12 @@ ksu_susfs set_android_data_root_path /sdcard/Android/data
 ## Now we can add the path ##
 ksu_susfs add_sus_path /sdcard/Android/data/bin.mt.plus
 EOF
+
+#### For path that needs to be re-flagged as SUS_PATH on each non-root user app / isolated service starts via add_sus_path_loop ####
+cat <<EOF >/dev/null
+## - Path added via add_sus_path_loop will be re-flagged as SUS_PATH on each non-root process / isolated service starts ##
+## - This can help ensure some path that keep its inode status reset for whatever reason to be flagged as SUS_PATH again ##
+## - Please also note that only paths NOT inside '/sdcard/' or '/storage/' can be added via add_sus_path_loop ##
+## - ONLY USE THIS WHEN NECCESSARY !!! ##
+ksu_susfs add_sus_path_loop /sys/block/loop0
+EOF
