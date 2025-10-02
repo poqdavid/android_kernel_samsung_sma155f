@@ -165,6 +165,14 @@ for device in $(ls -Ld /proc/fs/jbd2/loop*8 | sed 's|/proc/fs/jbd2/||; s|-8||');
 done
 EOF
 
+#### Umount for all zygote spawned services ####
+cat <<EOF >/dev/null
+# - set to 1 to enable umount for all zygote spawned services, but be reminded that
+#   it may break some modules that ovsrlay framework files / overlay apks. Boot into
+#   KSU rescue mode if you encounter bootloop here.
+ksu_susfs umount_for_zygote_iso_service 1
+EOF
+
 #### Enable avc log spoofing to bypass 'su' domain detection via /proc/<pid> enumeration ####
 cat <<EOF >/dev/null
 ksu_susfs enable_avc_log_spoofing 1
