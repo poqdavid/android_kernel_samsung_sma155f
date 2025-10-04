@@ -45,7 +45,7 @@ checks() {
     print_msg "$GREEN" "Cleaning up WORKSPACE directory..."
     rm -rf $WORKSPACE/*
     print_msg "$GREEN" "WORKSPACE cleaned."
-
+    
     if [ ! -d "${CERTDIR}" ]; then
         print_msg "$GREEN" "CERTS directory not found. Creating directory at ${CERTDIR}..."
         cd $BINDIR
@@ -106,7 +106,7 @@ checks() {
     else
         print_msg "$GREEN" "No compressed boot image detected."
     fi
-
+    
     # Check if boot image is available
     if [ ! -f "${PARENTDIR}/boot.img" ]; then
         print_msg "$RED" "boot.img not found in ${PARENTDIR}!"
@@ -160,7 +160,7 @@ repack() {
         $MAGISKBOOT repack "${PARENTDIR}/boot.img" "${WORKSPACE}/new-boot.img"
         cd $PARENTDIR
         print_msg "$GREEN" "Boot image repacked into new-boot.img."
-
+        
         cp -f $WORKSPACE/new-boot.img $WORKSPACE/new-boot-signed.img
         print_msg "$GREEN" "Boot image Copied to ${WORKSPACE}/new-boot-signed.img."
         
@@ -179,10 +179,67 @@ repack() {
         print_msg "$GREEN" "Repacked boot image moved to ${PARENTDIR}/boot-repacked-signed.img."
         
         print_msg "$GREEN" "Repacking process completed successfully.\n"
+        return 0
     fi
+}
+
+package_tar() {
+    print_msg "$GREEN" "Packaging boot-repacked-signed.img into tar archive..."
+    
+    BASE_VERSION=10200
+    KSU_VERSION=$(( $(git -C ${PARENTDIR}/kernel-5.10/KernelSU-Next rev-list --count HEAD) + BASE_VERSION ))
+    
+    susfs_version=$(grep '#define SUSFS_VERSION' ${PARENTDIR}/kernel-5.10/include/linux/susfs.h | awk -F'"' '{print $2}')
+    
+    # Output tar name (edit as needed)
+    OUTTAR="../kernelsunext_${KSU_VERSION}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
+    
+    if [ ! -f "${PARENTDIR}/boot-repacked-signed.img" ]; then
+        print_msg "$RED" "Signed repacked boot image not found at ${PARENTDIR}/boot-repacked-signed.img"
+        print_msg "$RED" "Skipping tar packaging."
+        return 1
+    fi
+    
+    # Work in a temporary directory to control archive member names
+    TMPDIR=$(mktemp -d)
+    
+    print_msg "$GREEN" "Created temp directory at $TMPDIR"
+    
+    # Copy/sign image as boot.img inside temp dir so tar entry is named boot.img
+    cp -f "${PARENTDIR}/boot-repacked-signed.img" "${TMPDIR}/boot.img"
+    
+    # Also include vbmeta.img.lz4 if it exists in parent dir
+    if [ -f "${PARENTDIR}/vbmeta.img.lz4" ]; then
+        cp -f "${PARENTDIR}/vbmeta.img.lz4" "${TMPDIR}/vbmeta.img.lz4"
+        SRCFILES="boot.img vbmeta.img.lz4"
+    else
+        SRCFILES="boot.img"
+    fi
+    
+    # Create the tar using ustar header type and write to the requested output path
+    cd "$TMPDIR"
+    tar -H ustar -c -f "${PARENTDIR}/${OUTTAR##*/}" $SRCFILES
+    
+    # Move tar to the parent directory if created in TMPDIR (tar created there already)
+    if [ -f "${PARENTDIR}/${OUTTAR##*/}" ]; then
+        print_msg "$GREEN" "Tar archive created at ${PARENTDIR}/${OUTTAR##*/}"
+    else
+        print_msg "$RED" "Failed to create tar archive."
+        return 1
+    fi
+    
+    # Explicit cleanup of temporary directory and remove trap
+    trap 'rm -rf "$TMPDIR"' EXIT
+    
+    print_msg "$GREEN" "Deleted temp directory at $TMPDIR"
+    
+    # Cleanup handled by trap
+    print_msg "$GREEN" "Packaging completed successfully."
+    return 0
 }
 
 # Execute all functions
 checks
 unpack
 repack
+package_tar

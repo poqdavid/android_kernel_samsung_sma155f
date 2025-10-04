@@ -129,7 +129,7 @@ print_msg "$GREEN" "Setting up KernelSU Next SUSFS..."
 
 patch_start_time=$(date +%s)
 
-curl -LSs "https://raw.githubusercontent.com/poqdavid/KernelSU-Next/next/kernel/setup.sh" | bash -s v1.0.9
+curl -LSs "https://raw.githubusercontent.com/poqdavid/KernelSU-Next/next/kernel/setup.sh" | bash -s next
 
 print_msg "$GREEN" "Finished Setting up KernelSU Next SUSFS..."
 
@@ -151,7 +151,7 @@ patch -p1 < ../patches/kernel_patches/next/hotfixsamsungnamespace.patch
 
 echo " "
 print_msg "$GREEN" "Patching syscall_hooks in Kernel..."
-patch -p1 --fuzz=3 < ../patches/kernel_patches/next/syscall_hooks.patch
+patch -p1  --fuzz=3 < ../patches/kernel_patches/next/syscall_hooks.patch
 
 echo " "
 print_msg "$GREEN" "Patching Makefile in Kernel for config_data..."
@@ -159,36 +159,34 @@ patch -p1 --forward < ../patches/fake_config.patch
 
 cd ./KernelSU-Next/
 
+BASE_VERSION=10200
+KSU_VERSION=$(expr $(/usr/bin/git rev-list --count HEAD) "+" $BASE_VERSION)
+
+echo " "
+print_msg "$GREEN" "Detected KernelSU Next Version: $KSU_VERSION"
+
 echo " "
 print_msg "$GREEN" "Patching SUSFS in KernelSU Next..."
 
+susfs_version=$(grep '#define SUSFS_VERSION' ../../kernel-5.10/include/linux/susfs.h | awk -F'"' '{print $2}')
+
+echo " "
+print_msg "$GREEN" "Detected SUSFS Version: $susfs_version"
+
 echo " "
 print_msg "$GREEN" "Patching 10_enable_susfs_for_ksu.patch..."
-patch -p1 --forward --fuzz=3 < ../../patches/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch
+patch -p1 --forward < ../../patches/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch
 
-echo " "
-print_msg "$GREEN" "Patching fix_apk_sign.c.patch..."
-patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_apk_sign.c.patch
 
-echo " "
-print_msg "$GREEN" "Patching fix_core_hook.c.patch..."
-patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_core_hook.c.patch
-
-echo " "
-print_msg "$GREEN" "Patching fix_selinux.c.patch..."
-patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_selinux.c.patch
-
-echo " "
-print_msg "$GREEN" "Patching fix_ksud.c.patch..."
-patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_ksud.c.patch
-
-echo " "
-print_msg "$GREEN" "Patching fix_rules.c.patch..."
-patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_rules.c.patch
+for file in $(find ./kernel -maxdepth 2 -name "*.rej" -printf "%f\n" | cut -d'.' -f1); do
+    echo " "
+    print_msg "$GREEN" "Patching file: $file.c with fix_$file.c.patch"
+    patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.c.patch"
+done
 
 echo " "
 print_msg "$GREEN" "Patching fix_sucompat.c.patch..."
-patch -p1 --forward --fuzz=3 < ../../patches/kernel_patches/next/susfs_fix_patches/v1.5.9/fix_sucompat.c.patch
+patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$susfs_version/fix_kernel_compat.c.patch"
 
 cd ..
 print_msg "$GREEN" "Finished Patching up..."
