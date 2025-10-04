@@ -1,25 +1,25 @@
-diff --git a/fs/namespace.c b/fs/namespace.c
-index 5d5a426aa495..89c73e69b827 100644
---- a/fs/namespace.c
-+++ b/fs/namespace.c
-@@ -36,7 +36,34 @@
+--- a/fs/namespace.c	2025-10-02 19:35:43.702968100 +0000
++++ b/fs/namespace.c	2025-10-02 19:37:46.511687888 +0000
+@@ -32,14 +32,39 @@
+ #include <linux/shmem_fs.h>
+ #include <linux/fslog.h>
+ #ifdef CONFIG_KDP_NS
+ #include <linux/kdp.h>
  #endif
- 
 +#if defined(CONFIG_KSU_SUSFS_SUS_MOUNT) || defined(CONFIG_KSU_SUSFS_TRY_UMOUNT)
 +#include <linux/susfs_def.h>
 +#endif
-+
+ 
  #include "pnode.h"
  #include "internal.h"
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +extern bool susfs_is_current_ksu_domain(void);
 +extern bool susfs_is_current_zygote_domain(void);
++extern bool susfs_is_boot_completed_triggered;
 +
-+static DEFINE_IDA(susfs_mnt_id_ida);
-+static DEFINE_IDA(susfs_mnt_group_ida);
-+
-+#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
++static DEFINE_IDA(susfs_ksu_mnt_id_ida);
++static DEFINE_IDA(susfs_ksu_mnt_group_ida);
 +#endif
 +
 +#ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
@@ -37,18 +37,6 @@ index 5d5a426aa495..89c73e69b827 100644
 +
  /* Maximum number of mounts in a mount namespace */
  unsigned int sysctl_mount_max __read_mostly = 100000;
-@@ -3879,8 +3879,14 @@
-	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
-	if (user_ns != ns->user_ns)
-		copy_flags |= CL_SHARED_TO_SLAVE;
-+
-+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+	// Always let clone_mnt() in copy_tree() know it is from copy_mnt_ns()
-+	copy_flags |= CL_COPY_MNT_NS;
-+#endif
-+
- #ifdef CONFIG_KDP_NS
-	new = copy_tree(old, ((struct kdp_mount *)old)->mnt->mnt_root, copy_flags);
- #else
-	new = copy_tree(old, old->mnt.mnt_root, copy_flags);
- #endif
+ 
+ /* @fs.sec -- c4d165e8cb5ea1cc14cdedb9eab23efd642d4d5f -- */
+ static unsigned int sys_umount_trace_status;
