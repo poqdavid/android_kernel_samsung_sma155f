@@ -1,6 +1,6 @@
---- a/fs/namespace.c	2025-10-02 19:35:43.702968100 +0000
-+++ b/fs/namespace.c	2025-10-02 19:37:46.511687888 +0000
-@@ -32,14 +32,39 @@
+--- a/fs/namespace.c	2025-10-13 12:27:24.000000000 +0200
++++ b/fs/namespace.c	2025-10-13 13:33:49.814516800 +0200
+@@ -32,13 +32,39 @@
  #include <linux/shmem_fs.h>
  #include <linux/fslog.h>
  #ifdef CONFIG_KDP_NS
@@ -12,14 +12,15 @@
  
  #include "pnode.h"
  #include "internal.h"
- 
++ 
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +extern bool susfs_is_current_ksu_domain(void);
 +extern bool susfs_is_current_zygote_domain(void);
 +extern bool susfs_is_boot_completed_triggered;
 +
-+static DEFINE_IDA(susfs_ksu_mnt_id_ida);
 +static DEFINE_IDA(susfs_ksu_mnt_group_ida);
++
++#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
 +#endif
 +
 +#ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT
@@ -34,9 +35,22 @@
 +extern void susfs_auto_add_try_umount_for_bind_mount(struct path *path);
 +bool susfs_is_auto_add_try_umount_for_bind_mount_enabled = true;
 +#endif
-+
+ 
  /* Maximum number of mounts in a mount namespace */
  unsigned int sysctl_mount_max __read_mostly = 100000;
  
  /* @fs.sec -- c4d165e8cb5ea1cc14cdedb9eab23efd642d4d5f -- */
- static unsigned int sys_umount_trace_status;
+@@ -3933,10 +3959,13 @@
+ 	namespace_lock();
+ 	/* First pass: copy the tree topology */
+ 	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
+ 	if (user_ns != ns->user_ns)
+ 		copy_flags |= CL_SHARED_TO_SLAVE;
++#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
++	copy_flags |= CL_COPY_MNT_NS;
++#endif
+ #ifdef CONFIG_KDP_NS
+ 	new = copy_tree(old, ((struct kdp_mount *)old)->mnt->mnt_root, copy_flags);
+ #else
+ 	new = copy_tree(old, old->mnt.mnt_root, copy_flags);
+ #endif
