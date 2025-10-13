@@ -1,8 +1,8 @@
 diff --git a/kernel/Kconfig b/kernel/Kconfig
-index 67f177f4..e4365900 100644
+index 67f177f4..e6172171 100644
 --- a/kernel/Kconfig
 +++ b/kernel/Kconfig
-@@ -16,4 +16,139 @@ config KSU_DEBUG
+@@ -16,4 +16,131 @@ config KSU_DEBUG
  	help
  	  Enable KernelSU debug mode.
  
@@ -14,14 +14,6 @@ index 67f177f4..e4365900 100644
 +    default y
 +    help
 +      Patch and Enable SUSFS to kernel with KernelSU.
-+
-+config KSU_SUSFS_HAS_MAGIC_MOUNT
-+    bool "Say yes if the current KernelSU repo has magic mount implemented (default y)"
-+    depends on KSU_SUSFS
-+    default y
-+    help
-+      - Enable to indicate that the current SUSFS kernel supports the auto hide features for 5ec1cff's Magic Mount KernelSU
-+      - Every mounts from /debug_ramdisk/workdir will be treated as magic mount and processed differently by susfs
 +
 +config KSU_SUSFS_SUS_PATH
 +    bool "Enable to hide suspicious path (NOT recommended)"
@@ -285,7 +277,7 @@ index ba8b73f2..6ae5e3b9 100644
  }
 \ No newline at end of file
 diff --git a/kernel/core_hook.c b/kernel/core_hook.c
-index a63d34a7..610061a1 100644
+index a63d34a7..a0c4f887 100644
 --- a/kernel/core_hook.c
 +++ b/kernel/core_hook.c
 @@ -33,6 +33,10 @@
@@ -320,7 +312,7 @@ index a63d34a7..610061a1 100644
 +static bool susfs_is_umount_for_zygote_system_process_enabled = false;
 +static bool susfs_is_umount_for_zygote_iso_service_enabled = false;
 +extern bool susfs_hide_sus_mnts_for_all_procs;
-+//extern void susfs_reorder_mnt_id(void);
++extern void susfs_reorder_mnt_id(void);
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +#ifdef CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT
 +extern bool susfs_is_auto_add_sus_bind_mount_enabled;
@@ -396,7 +388,21 @@ index a63d34a7..610061a1 100644
  extern void ksu_sucompat_init();
  extern void ksu_sucompat_exit();
  
-@@ -325,6 +409,9 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+@@ -249,6 +333,13 @@ static void nuke_ext4_sysfs() {
+ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+ 		     unsigned long arg4, unsigned long arg5)
+ {
++#ifdef CONFIG_KSU_SUSFS
++	// - We straight up check if process is supposed to be umounted, return 0 if so
++	// - This is to prevent side channel attack as much as possible
++	if (likely(susfs_is_current_proc_umounted())) {
++		return 0;
++	}
++#endif
+ 	// if success, we modify the arg5 as result!
+ 	u32 *result = (u32 *)arg5;
+ 	u32 reply_ok = KERNEL_SU_OPTION;
+@@ -325,6 +416,9 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
  			if (!post_fs_data_lock) {
  				post_fs_data_lock = true;
  				pr_info("post-fs-data triggered\n");
@@ -406,7 +412,7 @@ index a63d34a7..610061a1 100644
  				on_post_fs_data();
  			}
  			break;
-@@ -334,6 +421,9 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+@@ -334,6 +428,9 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
  			if (!boot_complete_lock) {
  				boot_complete_lock = true;
  				pr_info("boot_complete triggered\n");
@@ -416,7 +422,7 @@ index a63d34a7..610061a1 100644
  			}
  			break;
  		}
-@@ -425,6 +515,374 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+@@ -425,6 +522,374 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
  		return 0;
  	}
  
@@ -791,7 +797,7 @@ index a63d34a7..610061a1 100644
  	// all other cmds are for 'root manager'
  	if (!from_manager) {
  		return 0;
-@@ -490,6 +948,12 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+@@ -490,6 +955,12 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
  		}
  
  		if (enabled) {
@@ -804,7 +810,7 @@ index a63d34a7..610061a1 100644
  			ksu_sucompat_init();
  		} else {
  			ksu_sucompat_exit();
-@@ -528,11 +992,15 @@ static bool should_umount(struct path *path)
+@@ -528,11 +999,15 @@ static bool should_umount(struct path *path)
  		return false;
  	}
  
@@ -820,7 +826,7 @@ index a63d34a7..610061a1 100644
  }
  
  static void ksu_umount_mnt(struct path *path, int flags)
-@@ -543,7 +1011,11 @@ static void ksu_umount_mnt(struct path *path, int flags)
+@@ -543,7 +1018,11 @@ static void ksu_umount_mnt(struct path *path, int flags)
  	}
  }
  
@@ -832,7 +838,7 @@ index a63d34a7..610061a1 100644
  {
  	struct path path;
  	int err = kern_path(mnt, 0, &path);
-@@ -563,9 +1035,109 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
+@@ -563,9 +1042,118 @@ static void try_umount(const char *mnt, bool check_mnt, int flags)
  		return;
  	}
  
@@ -892,6 +898,15 @@ index a63d34a7..610061a1 100644
 +		goto do_umount;
 +	}
 +
++	// - Since ksu maanger app uid is excluded in allow_list_arr, so ksu_uid_should_umount(manager_uid)
++	//   will always return true, that's why we need to explicitly check if new_uid.val belongs to
++	//   ksu manager
++	if (ksu_is_manager_uid_valid() &&
++		(new_uid.val % 1000000 == ksu_get_manager_uid())) // % 1000000 in case it is private space uid
++	{
++		return 0;
++	}
++
 +	// Check if spawned process is normal user app and needs to be umounted
 +	if (likely(is_zygote_normal_app_uid(new_uid.val) && ksu_uid_should_umount(new_uid.val))) {
 +		goto do_umount;
@@ -942,7 +957,7 @@ index a63d34a7..610061a1 100644
  int ksu_handle_setuid(struct cred *new, const struct cred *old)
  {
  	// this hook is used for umounting overlayfs for some uid, if there isn't any module mounted, just ignore it!
-@@ -632,6 +1204,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
+@@ -632,6 +1220,7 @@ int ksu_handle_setuid(struct cred *new, const struct cred *old)
  
  	return 0;
  }
