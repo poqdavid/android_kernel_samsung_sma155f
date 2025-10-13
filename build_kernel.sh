@@ -108,14 +108,15 @@ print_msg "$GREEN" "Modifying configs..."
 --set-val KSU_SUSFS_SUS_SU n \
 --set-val KSU y
 
+cd kernel-5.10
+
 print_msg "$GREEN" "Modified configs ..."
 
-#print_msg "$GREEN" "Configuring Kernel metadata..."
-#sed -i '$s|echo "\$res"|echo "-android12-9-28575149"|' ./scripts/setlocalversion
-#perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Mar 06 09:35:51 UTC 2025"}' ./scripts/mkcompile_h
-#print_msg "$GREEN" "Finished Configuring Kernel metadata..."
-
-cd kernel-5.10
+print_msg "$GREEN" "Configuring Kernel metadata..."
+sed -i '$s|echo "\$res"|echo "-android12-9-31117096"|' ./scripts/setlocalversion
+perl -pi -e 's{UTS_VERSION="\$\(echo \$UTS_VERSION \$CONFIG_FLAGS \$TIMESTAMP \| cut -b -\$UTS_LEN\)"}{UTS_VERSION="#1 SMP PREEMPT Thu Jul 31 08:40:06 UTC 2025"}' ./scripts/mkcompile_h
+sed -i 's/-dirty//' ./scripts/setlocalversion
+print_msg "$GREEN" "Finished Configuring Kernel metadata..."
 
 print_msg "$GREEN" "Generating configs..."
 
@@ -180,7 +181,7 @@ patch -p1 --forward < ../../patches/susfs4ksu/kernel_patches/KernelSU/10_enable_
 
 for file in $(find ./kernel -maxdepth 2 -name "*.rej" -printf "%f\n" | cut -d'.' -f1); do
     echo " "
-    print_msg "$GREEN" "Patching file: $file.c with fix_$file.c.patch"
+    print_msg "$GREEN" "Patching file: $file.c with kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.c.patch"
     patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.c.patch"
 done
 
