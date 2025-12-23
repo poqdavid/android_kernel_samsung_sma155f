@@ -28,10 +28,6 @@ cat <<EOF >/dev/null
 ksu_susfs hide_sus_mnts_for_all_procs 0
 EOF
 
-# NOTE: sus_su 2 can be only run during or after service stage #
-# uncomment it below to enable sus_su with mode 2 #
-#${SUSFS_BIN} sus_su 2
-
 ## Disable susfs kernel log ##
 #${SUSFS_BIN} enable_log 0
 

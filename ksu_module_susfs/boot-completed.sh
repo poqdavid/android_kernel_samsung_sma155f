@@ -41,3 +41,30 @@ cat <<EOF >/dev/null
 ## - ONLY USE THIS WHEN NECCESSARY !!! ##
 ksu_susfs add_sus_path_loop /sys/block/loop0
 EOF
+
+
+#### Hide the mmapped real file from various maps in /proc/self/ ####
+cat <<EOF >/dev/null
+## - Please note that it is better to do it in boot-completed starge
+##   Since some target path may be mounted by ksu, and make sure the
+##   target path has the same dev number as the one in global mnt ns,
+##   otherwise the sus map flag won't be seen on the umounted process.
+## - To debug with this, users can do this in a root shell:
+##   1. Find the pid and uid of a opened umounted app by running
+##      ps -enf | grep myapp
+##   2. cat /proc/<pid_of_myapp>/maps | grep "<added/sus_map/path>"'
+##   3. In other root shell, run
+##      cat /proc/1/mountinfo | grep "<added/sus_map/path>"'
+##   4. Finally compare the dev number with both output and see if they are consistent,
+##      if so, then it should be working, but if not, then the added sus_map path
+##      is probably not working, and you have to find out which mnt ns the dev number
+##      from step 2 belongs to, and add the path from that mnt ns:
+##         busybox nsenter -t <pid_of_mnt_ns_the_target_dev_number_belongs_to> -m ksu_susfs add_sus_map <target_path>
+
+## Hide some zygisk modules ##
+ksu_susfs add_sus_map /data/adb/modules/my_module/zygisk/arm64-v8a.so
+
+## Hide some map traces caused by some font modules ##
+ksu_susfs add_sus_map /system/fonts/Roboto-Regular.ttf
+ksu_susfs add_sus_map /system/fonts/RobotoStatic-Regular.ttf
+EOF
