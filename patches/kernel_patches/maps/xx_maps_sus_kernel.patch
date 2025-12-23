@@ -15,6 +15,7 @@ index ab4115a6e7ef..4f73241b1a7f 100644
 +extern struct list_head maps_string_list; // this is on ksu's core_hook.c
 +
 +extern atomic_t skip_rwxp;
++extern atomic_t skip_rxp;
 +
  unsigned long task_statm(struct mm_struct *mm,
  			 unsigned long *shared, unsigned long *text,
@@ -40,6 +41,22 @@ index ab4115a6e7ef..4f73241b1a7f 100644
 +		}
 +		
 +		if ((vma->vm_flags & (VM_READ | VM_WRITE | VM_EXEC)) == (VM_READ | VM_WRITE | VM_EXEC) && !(vma->vm_flags & VM_MAYSHARE)) {
++			seq_printf(m, "%08lx-%08lx ---- 00000000 00:00 0  \n",vma->vm_start, vma->vm_end);
++			skip_count = 2;
++			return;
++		}
++	}
++	// skip r-xp and two entries after it
++	if (atomic_read(&skip_rxp)) {
++		static int skip_count = 0;	
++		if (skip_count > 0) {
++			skip_count--;
++			seq_printf(m, "%08lx-%08lx ---- 00000000 00:00 0  \n",vma->vm_start, vma->vm_end);
++			
++			return;
++		}
++		
++		if ((vma->vm_flags & (VM_READ | VM_EXEC)) == (VM_READ | VM_EXEC) && !(vma->vm_flags & VM_MAYSHARE)) {
 +			seq_printf(m, "%08lx-%08lx ---- 00000000 00:00 0  \n",vma->vm_start, vma->vm_end);
 +			skip_count = 2;
 +			return;
@@ -72,3 +89,26 @@ index ab4115a6e7ef..4f73241b1a7f 100644
  	start = vma->vm_start;
  	end = vma->vm_end;
  	show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
+diff --git a/kernel/reboot.c b/kernel/reboot.c
+index 2946ed1d99d4..1b96a6765f4e 100644
+--- a/kernel/reboot.c
++++ b/kernel/reboot.c
+@@ -277,6 +277,9 @@ static DEFINE_MUTEX(reboot_mutex);
+  *
+  * reboot doesn't sync: do that yourself before calling this.
+  */
++
++extern int lkm_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user *arg);
++
+ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+ 		void __user *, arg)
+ {
+@@ -284,6 +287,8 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+ 	char buffer[256];
+ 	int ret = 0;
+ 
++	lkm_handle_sys_reboot(magic1, magic2, cmd, arg);
++
+ 	/* We only trust the superuser with rebooting the system. */
+ 	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
+ 		return -EPERM;
