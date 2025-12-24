@@ -314,7 +314,7 @@ index e121ab45..0bbf9924 100644
  	ksu_supercalls_exit();
  
 diff --git a/kernel/ksud.c b/kernel/ksud.c
-index fb6cb58d..8dad376c 100644
+index fb6cb58d..65f9c218 100644
 --- a/kernel/ksud.c
 +++ b/kernel/ksud.c
 @@ -57,9 +57,15 @@ static void stop_vfs_read_hook();
@@ -375,11 +375,24 @@ index fb6cb58d..8dad376c 100644
  	// https://cs.android.com/android/platform/superproject/+/android-16.0.0_r2:system/core/init/main.cpp;l=77
  	if (unlikely(!memcmp(filename->name, system_bin_init,
  				sizeof(system_bin_init) - 1) &&
-@@ -378,8 +398,13 @@ static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
+@@ -292,6 +312,12 @@ static ssize_t read_iter_proxy(struct kiocb *iocb, struct iov_iter *to)
+ static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
+ 				size_t *count_ptr, loff_t **pos)
+ {
++#ifdef CONFIG_KSU_SUSFS
++    if (!ksu_vfs_read_hook) {
++        return 0;
++    }
++#endif // #ifdef CONFIG_KSU_SUSFS
++
+ 	struct file *file;
+ 	char __user *buf;
+ 	size_t count;
+@@ -378,8 +404,13 @@ static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
  	return 0;
  }
  
-+#ifndef CONFIG_KSU_SUSFS0
++#ifndef CONFIG_KSU_SUSFS
  static int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
  				size_t *count_ptr)
 +#else
@@ -389,7 +402,7 @@ index fb6cb58d..8dad376c 100644
  {
  	struct file *file = fget(fd);
  	if (!file) {
-@@ -400,6 +425,12 @@ static bool is_volumedown_enough(unsigned int count)
+@@ -400,6 +431,12 @@ static bool is_volumedown_enough(unsigned int count)
  int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
  					int *value)
  {
@@ -402,7 +415,7 @@ index fb6cb58d..8dad376c 100644
  	if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
  		int val = *value;
  		pr_info("KEY_VOLUMEDOWN val: %d\n", val);
-@@ -437,6 +468,7 @@ bool ksu_is_safe_mode()
+@@ -437,6 +474,7 @@ bool ksu_is_safe_mode()
  	return false;
  }
  
@@ -410,15 +423,15 @@ index fb6cb58d..8dad376c 100644
  static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
  {
  	struct pt_regs *real_regs = PT_REAL_REGS(regs);
-@@ -519,17 +551,28 @@ static void do_stop_input_hook(struct work_struct *work)
+@@ -519,17 +557,28 @@ static void do_stop_input_hook(struct work_struct *work)
  {
  	unregister_kprobe(&input_event_kp);
  }
 +#endif // #ifndef CONFIG_KSU_SUSFS
  
  static void stop_vfs_read_hook()
-+#ifndef CONFIG_KSU_SUSFS
  {
++#ifndef CONFIG_KSU_SUSFS
  	bool ret = schedule_work(&stop_vfs_read_work);
  	pr_info("unregister vfs_read kprobe: %d!\n", ret);
 +#else
@@ -439,7 +452,7 @@ index fb6cb58d..8dad376c 100644
  }
  
  static void stop_input_hook()
-@@ -539,13 +582,19 @@ static void stop_input_hook()
+@@ -539,13 +588,19 @@ static void stop_input_hook()
  		return;
  	}
  	input_hook_stopped = true;
@@ -459,7 +472,7 @@ index fb6cb58d..8dad376c 100644
  	int ret;
  
  	ret = register_kprobe(&execve_kp);
-@@ -560,12 +609,15 @@ void ksu_ksud_init()
+@@ -560,12 +615,15 @@ void ksu_ksud_init()
  	INIT_WORK(&stop_vfs_read_work, do_stop_vfs_read_hook);
  	INIT_WORK(&stop_execve_hook_work, do_stop_execve_hook);
  	INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
