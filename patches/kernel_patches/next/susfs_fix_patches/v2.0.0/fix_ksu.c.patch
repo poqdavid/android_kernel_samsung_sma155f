@@ -2,7 +2,18 @@ diff --git a/kernel/ksu.c b/kernel/ksu.c
 index c1aa6f20..f4f4544b 100644
 --- a/kernel/ksu.c
 +++ b/kernel/ksu.c
-@@ -44,15 +44,22 @@ int __init kernelsu_init(void)
+@@ -22,6 +22,10 @@
+ #include "ksu.h"
+ #include "file_wrapper.h"
+ 
++#ifdef CONFIG_KSU_SUSFS
++extern void ksu_avc_spoof_init(void);
++#endif // #ifdef CONFIG_KSU_SUSFS
++
+ struct cred *ksu_cred;
+ 
+ int __init kernelsu_init(void)
+@@ -44,15 +44,23 @@ int __init kernelsu_init(void)
  	ksu_feature_init();
  
  	ksu_supercalls_init();
@@ -13,6 +24,7 @@ index c1aa6f20..f4f4544b 100644
 +#else
 +	ksu_setuid_hook_init();
 +	ksu_sucompat_init();
++	ksu_avc_spoof_init();
 +#endif // #ifndef CONFIG_KSU_SUSFS
  	ksu_allowlist_init();
  
