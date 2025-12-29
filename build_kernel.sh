@@ -67,8 +67,6 @@ print_msg "$GREEN" "Modifying configs..."
 
 # Kernel optimizations
 ./kernel-5.10/scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
---set-val TMPFS_XATTR y \
---set-val TMPFS_POSIX_ACL y \
 --set-val IP_NF_TARGET_TTL y \
 --set-val IP6_NF_TARGET_HL y \
 --set-val IP6_NF_MATCH_HL y \
@@ -89,6 +87,7 @@ print_msg "$GREEN" "Modifying configs..."
 
 # KernelSU Next configs
 ./kernel-5.10/scripts/config --file kernel-5.10/arch/arm64/configs/a15_00_defconfig \
+--set-val KSU y \
 --set-val KSU_KPROBES_HOOK n \
 --set-val KSU_SUSFS y \
 --set-val KSU_SUSFS_HAS_MAGIC_MOUNT y \
@@ -105,8 +104,10 @@ print_msg "$GREEN" "Modifying configs..."
 --set-val KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y \
 --set-val KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y \
 --set-val KSU_SUSFS_OPEN_REDIRECT y \
+--set-val KSU_SUSFS_SUS_MAP y \
 --set-val KSU_SUSFS_SUS_SU n \
---set-val KSU y
+--set-val TMPFS_XATTR y \
+--set-val TMPFS_POSIX_ACL y
 
 cd kernel-5.10
 
@@ -130,7 +131,7 @@ print_msg "$GREEN" "Setting up KernelSU Next SUSFS..."
 
 patch_start_time=$(date +%s)
 
-curl -LSs "https://raw.githubusercontent.com/poqdavid/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+curl -LSs "https://raw.githubusercontent.com/poqdavid/KernelSU-Next/dev/kernel/setup.sh" | bash -s dev
 
 print_msg "$GREEN" "Finished Setting up KernelSU Next SUSFS..."
 
@@ -141,18 +142,6 @@ print_msg "$GREEN" "Copying susfs4ksu Patchees to the Kernel..."
 cp ../patches/susfs4ksu/kernel_patches/fs/* ./fs/
 cp ../patches/susfs4ksu/kernel_patches/include/linux/* ./include/linux/
 print_msg "$GREEN" "Finished Copying SUSFS4KSU Patchees to the Kernel..."
-
-echo " "
-print_msg "$GREEN" "Patching SUSFS in Kernel..."
-patch -p1 < ../patches/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch
-
-echo " "
-print_msg "$GREEN" "Patching namespace fix in Kernel..."
-patch -p1 < ../patches/kernel_patches/next/hotfixsamsungnamespace.patch
-
-echo " "
-print_msg "$GREEN" "Patching syscall_hooks in Kernel..."
-patch -p1  --fuzz=3 < ../patches/kernel_patches/next/syscall_hooks.patch
 
 echo " "
 print_msg "$GREEN" "Patching Makefile in Kernel for config_data..."
@@ -178,16 +167,37 @@ echo " "
 print_msg "$GREEN" "Patching 10_enable_susfs_for_ksu.patch..."
 patch -p1 --forward < ../../patches/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch
 
+cd ../
+echo " "
+print_msg "$GREEN" "Patching SUSFS in Kernel..."
+patch -p1 < ../patches/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch
 
-for file in $(find ./kernel -maxdepth 2 -name "*.rej" -printf "%f\n" | cut -d'.' -f1); do
+echo " "
+print_msg "$GREEN" "Patching SUSFS .rej in Kernel..."
+for file in $(find ../patches/kernel_patches/samsung/SM-A155F -maxdepth 2 -name "*.patch";); do
     echo " "
-    print_msg "$GREEN" "Patching file: $file.c with kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.c.patch"
-    patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.c.patch"
+    print_msg "$GREEN" "Patching $file"
+    patch -p1 --forward < "$file"
+done
+
+cd ./KernelSU-Next/
+
+echo " "
+print_msg "$GREEN" "Patching SUSFS .rej in KernelSU Next..."
+
+for file in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
+    echo " "
+    print_msg "$GREEN" "Patching file: $file with kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
+    patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$susfs_version/fix_$file.patch"
 done
 
 echo " "
-print_msg "$GREEN" "Patching fix_sucompat.c.patch..."
-patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$susfs_version/fix_kernel_compat.c.patch"
+print_msg "$GREEN" "Patching overwrite_hook_mode.patch..."
+patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/v2.0.0/overwrite_hook_mode.patch"
+
+echo " "
+print_msg "$GREEN" "Patching ksu_toolkit.patch..."
+patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$susfs_version/ksu_toolkit.patch"
 
 cd ..
 print_msg "$GREEN" "Finished Patching up..."
