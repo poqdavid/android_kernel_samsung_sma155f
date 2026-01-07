@@ -2090,28 +2090,31 @@ index c1df842fb884..6e814b360cea 100644
  	if (!ns_capable(pid_ns->user_ns, CAP_SYS_BOOT))
  		return -EPERM;
 diff --git a/kernel/sys.c b/kernel/sys.c
-index 1de01fab5788..2588a1914468 100644
+index 1de01fab5788..107492ccc42d 100644
 --- a/kernel/sys.c
 +++ b/kernel/sys.c
-@@ -707,8 +707,17 @@ long __sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
- 	return retval;
+@@ -632,6 +632,9 @@ SYSCALL_DEFINE1(setuid, uid_t, uid)
+ 	return __sys_setuid(uid);
  }
  
 +#ifdef CONFIG_KSU_SUSFS
 +extern int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);
 +#endif
-+
- SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
- {
-+#ifdef CONFIG_KSU_SUSFS
-+	if (ksu_handle_setresuid(ruid, euid, suid)) {
-+		pr_info("Something wrong with ksu_handle_setresuid()\n");
-+	}
-+#endif
- 	return __sys_setresuid(ruid, euid, suid);
- }
  
-@@ -1271,12 +1280,18 @@ static int override_release(char __user *release, size_t len)
+ /*
+  * This function implements a generic ability to update ruid, euid,
+@@ -646,6 +649,10 @@ long __sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
+ 	kuid_t kruid, keuid, ksuid;
+ 	bool ruid_new, euid_new, suid_new;
+ 
++#ifdef CONFIG_KSU_SUSFS
++	(void)ksu_handle_setresuid(ruid, euid, suid);
++#endif
++
+ 	kruid = make_kuid(ns, ruid);
+ 	keuid = make_kuid(ns, euid);
+ 	ksuid = make_kuid(ns, suid);
+@@ -1271,12 +1278,18 @@ static int override_release(char __user *release, size_t len)
  	return ret;
  }
  
