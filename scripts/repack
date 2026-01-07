@@ -12,179 +12,194 @@ KERNELPATH=$PARENTDIR/out/target/product/a15/obj/KERNEL_OBJ/kernel-5.10/arch/arm
 WORKSPACE=$BINDIR/workspace
 CERTDIR=$BINDIR/certs
 
-# Color Variables
+# -------- Colors & logging --------
 RED="\e[1;31m"
 GREEN="\e[1;32m"
+YELLOW="\e[1;33m"
 RESET="\e[0m"
 
-# Print message function
 print_msg() {
-    local COLOR=$1
-    shift
-    echo -e "${COLOR}$*${RESET}"
+    local color="$1"; shift
+    printf "%b%s%b\n" "${color}" "$*" "${RESET}"
 }
 
-# Script header
-print_msg "$GREEN" "\n - Boot image repack script for Samsung kernel image - "
-print_msg "$RED" "       by poqdavid \n"
+_log_handler() {
+  local color="$1"
+  local level="$2"
+  shift 2  # Remove color and level from the arguments list
+  
+  local nl=""
+  # Now $1 is the first argument the user actually typed (e.g., -n)
+  [[ "$1" == "-n" ]] && { nl="\n"; shift; }
+
+  printf "${nl}%b[%s] %s%b\n" "${color}" "${level}" "$*" "${RESET}"
+}
+
+info() { _log_handler "${GREEN}"  "INFO"  "$@"; }
+warn() { _log_handler "${YELLOW}" "WARN"  "$@"; }
+err()  { _log_handler "${RED}"    "ERROR" "$@"; }
+
+# -------- Script header --------
+print_msg "$GREEN" " - Build script for Samsung kernel image - "
+print_msg "$RED" "       by poqdavid "
 
 # Check requirements and environment
 checks() {
-    print_msg "$GREEN" "Starting environment checks..."
+    info -n "Starting environment checks..."
     
     if [ ! -d "${WORKSPACE}" ]; then
-        print_msg "$GREEN" "WORKSPACE directory not found. Creating directory at ${WORKSPACE}..."
+        info -n "WORKSPACE directory not found. Creating directory at ${WORKSPACE}..."
         cd $BINDIR
         mkdir workspace > /dev/null 2>&1
         cd $PARENTDIR
-        print_msg "$GREEN" "WORKSPACE directory created."
+        info -n "WORKSPACE directory created."
     else
-        print_msg "$GREEN" "WORKSPACE directory exists."
+        info -n "WORKSPACE directory exists."
     fi
     
-    print_msg "$GREEN" "Cleaning up WORKSPACE directory..."
+    info -n "Cleaning up WORKSPACE directory..."
     rm -rf $WORKSPACE/*
-    print_msg "$GREEN" "WORKSPACE cleaned."
+    info -n "WORKSPACE cleaned."
     
     if [ ! -d "${CERTDIR}" ]; then
-        print_msg "$GREEN" "CERTS directory not found. Creating directory at ${CERTDIR}..."
+        info -n "CERTS directory not found. Creating directory at ${CERTDIR}..."
         cd $BINDIR
         mkdir certs > /dev/null 2>&1
         cd $PARENTDIR
-        print_msg "$GREEN" "CERTS directory created."
+        info -n "CERTS directory created."
     else
-        print_msg "$GREEN" "CERTS directory exists."
+        info -n "CERTS directory exists."
     fi
     
     if [ ! -d "${KERNELPATH}" ]; then
-        print_msg "$RED" "Kernel path not found: ${KERNELPATH}"
-        print_msg "$RED" "Aborting environment checks..."
+        err -n "Kernel path not found: ${KERNELPATH}"
+        err -n "Aborting environment checks..."
         exit 1
     else
-        print_msg "$GREEN" "Kernel path found: ${KERNELPATH}"
+        info -n "Kernel path found: ${KERNELPATH}"
     fi
     
     if [ ! -f "${KSUD}" ]; then
-        print_msg "$RED" "KSUD not found: ${KSUD}"
-        print_msg "$RED" "Aborting..."
+        err -n "KSUD not found: ${KSUD}"
+        err -n "Aborting..."
         exit 1
     else
-        print_msg "$GREEN" "Found KSUD at ${KSUD}."
+        info -n "Found KSUD at ${KSUD}."
     fi
     
     if [ ! -f "${MAGISKBOOT}" ]; then
-        print_msg "$RED" "Magiskboot not found: ${MAGISKBOOT}"
-        print_msg "$RED" "Aborting..."
+        err -n "Magiskboot not found: ${MAGISKBOOT}"
+        err -n "Aborting..."
         exit 1
     else
-        print_msg "$GREEN" "Found MAGISKBOOT at ${MAGISKBOOT}."
+        info -n "Found MAGISKBOOT at ${MAGISKBOOT}."
     fi
     
     if ! command -v lz4 &> /dev/null; then
-        print_msg "$RED" "lz4 is not installed. Please run:"
-        print_msg "$RED" "sudo apt install lz4 -y"
-        print_msg "$RED" "Aborting..."
+        err -n "lz4 is not installed. Please run:"
+        err -n "sudo apt install lz4 -y"
+        err -n "Aborting..."
         exit 1
     else
-        print_msg "$GREEN" "lz4 is installed."
+        info -n "lz4 is installed."
     fi
     
     if ! command -v python3 &> /dev/null; then
-        print_msg "$RED" "python3 is not installed. Please run:"
-        print_msg "$RED" "sudo apt install python3 -y"
-        print_msg "$RED" "Aborting..."
+        err -n "python3 is not installed. Please run:"
+        err -n "sudo apt install python3 -y"
+        err -n "Aborting..."
         exit 1
     else
-        print_msg "$GREEN" "python3 is installed."
+        info -n "python3 is installed."
     fi
     
     # Uncompress if needed
     if [ -f "${PARENTDIR}/boot.img.lz4" ]; then
-        print_msg "$GREEN" "Found boot.img.lz4. Decompressing now..."
+        info -n "Found boot.img.lz4. Decompressing now..."
         lz4 -B6 --content-size -f boot.img.lz4 boot.img
-        print_msg "$GREEN" "Decompression complete."
+        info -n "Decompression complete."
     else
-        print_msg "$GREEN" "No compressed boot image detected."
+        info -n "No compressed boot image detected."
     fi
     
     # Check if boot image is available
     if [ ! -f "${PARENTDIR}/boot.img" ]; then
-        print_msg "$RED" "boot.img not found in ${PARENTDIR}!"
-        print_msg "$RED" "Please place your boot.img in ${PARENTDIR}."
-        print_msg "$RED" "Aborting..."
+        err -n "boot.img not found in ${PARENTDIR}!"
+        err -n "Please place your boot.img in ${PARENTDIR}."
+        err -n "Aborting..."
         exit 1
     else
-        print_msg "$GREEN" "boot.img is available."
+        info -n "boot.img is available."
     fi
-    print_msg "$GREEN" "Environment checks completed successfully.\n"
+    info -n "Environment checks completed successfully.\n"
 }
 
 # Unpacking the boot.img
 unpack() {
-    print_msg "$GREEN" "Generating a signing key (if not already present)..."
+    info -n "Generating a signing key (if not already present)..."
     if [ ! -f $CERTDIR/sign.pub.bin ]; then
         openssl req -new -x509 -newkey rsa:4096 -keyout $CERTDIR/sign.pk8 -out $CERTDIR/sign.pem -days 824 -nodes -sha256 -config $BINDIR/samsung_cert.conf
-        print_msg "$GREEN" "Signing key generated successfully."
+        info -n "Signing key generated successfully."
     else
-        print_msg "$GREEN" "Signing key already exists. Skipping generation."
+        info -n "Signing key already exists. Skipping generation."
     fi
     
-    print_msg "$GREEN" "Extracting public key from the signing key..."
+    info -n "Extracting public key from the signing key..."
     python3 "${AVBTOOL}" extract_public_key --key $CERTDIR/sign.pk8 --output $CERTDIR/sign.pub.bin
-    print_msg "$GREEN" "Public key extracted successfully."
+    info -n "Public key extracted successfully."
     
-    print_msg "$GREEN" "Starting unpacking of boot.img..."
+    info -n "Starting unpacking of boot.img..."
     cd $WORKSPACE
     $MAGISKBOOT unpack -n "${PARENTDIR}/boot.img"
     rm kernel
     cd $PARENTDIR
-    print_msg "$GREEN" "Boot image unpacked successfully."
+    info -n "Boot image unpacked successfully."
     
-    print_msg "$GREEN" "Returning to parent directory..."
+    info -n "Returning to parent directory..."
 }
 
 # Repacking the Kernel image to boot.img
 repack() {
     if [ ! -f "${KERNELPATH}/Image" ]; then
-        print_msg "$RED" "No Kernel Image found in ${KERNELPATH}!"
-        print_msg "$RED" "Aborting repack process..."
+        err -n "No Kernel Image found in ${KERNELPATH}!"
+        err -n "Aborting repack process..."
         exit 1
     else
-        print_msg "$GREEN" "Kernel Image found. Copying to temporary file..."
+        info -n "Kernel Image found. Copying to temporary file..."
         cp -f "${KERNELPATH}/Image" "${WORKSPACE}/kernel"
-        print_msg "$GREEN" "Kernel Image copied successfully."
+        info -n "Kernel Image copied successfully."
         
         # Repacking boot image
-        print_msg "$GREEN" "Starting repacking of boot image..."
+        info -n "Starting repacking of boot image..."
         cd $WORKSPACE
         $MAGISKBOOT repack "${PARENTDIR}/boot.img" "${WORKSPACE}/new-boot.img"
         cd $PARENTDIR
-        print_msg "$GREEN" "Boot image repacked into new-boot.img."
+        info -n "Boot image repacked into new-boot.img."
         
         cp -f $WORKSPACE/new-boot.img $WORKSPACE/new-boot-signed.img
-        print_msg "$GREEN" "Boot image Copied to ${WORKSPACE}/new-boot-signed.img."
+        info -n "Boot image Copied to ${WORKSPACE}/new-boot-signed.img."
         
         mv $WORKSPACE/new-boot.img $PARENTDIR/boot-repacked.img
-        print_msg "$GREEN" "Repacked boot image moved to ${PARENTDIR}/boot-repacked.img."
+        info -n "Repacked boot image moved to ${PARENTDIR}/boot-repacked.img."
         
-        print_msg "$GREEN" "Signing boot image..."
+        info -n "Signing boot image..."
         python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image $WORKSPACE/new-boot-signed.img --algorithm SHA256_RSA4096 --key $CERTDIR/sign.pk8
         
         ## Alternative options to sign the boot image
         #python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $(wc -c $WORKSPACE/new-boot-signed.img | cut -f 1 -d ' ') --image $WORKSPACE/new-boot-signed.img --algorithm SHA256_RSA4096 --key $CERTDIR/sign.pk8
         #$MAGISKBOOT sign $WORKSPACE/new-boot-signed.img $CERTDIR/sign.pem
-        print_msg "$GREEN" "Boot image signed successfully."
+        info -n "Boot image signed successfully."
         
         mv $WORKSPACE/new-boot-signed.img $PARENTDIR/boot-repacked-signed.img
-        print_msg "$GREEN" "Repacked boot image moved to ${PARENTDIR}/boot-repacked-signed.img."
+        info -n "Repacked boot image moved to ${PARENTDIR}/boot-repacked-signed.img."
         
-        print_msg "$GREEN" "Repacking process completed successfully.\n"
+        info -n "Repacking process completed successfully.\n"
         return 0
     fi
 }
 
 package_tar() {
-    print_msg "$GREEN" "Packaging boot-repacked-signed.img into tar archive..."
+    info -n "Packaging boot-repacked-signed.img into tar archive..."
     
     BASE_VERSION=10200
     KSU_VERSION=$(( $(git -C ${PARENTDIR}/kernel-5.10/KernelSU-Next rev-list --count HEAD) + BASE_VERSION ))
@@ -195,15 +210,15 @@ package_tar() {
     OUTTAR="../kernelsunext_${KSU_VERSION}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
     
     if [ ! -f "${PARENTDIR}/boot-repacked-signed.img" ]; then
-        print_msg "$RED" "Signed repacked boot image not found at ${PARENTDIR}/boot-repacked-signed.img"
-        print_msg "$RED" "Skipping tar packaging."
+        err -n "Signed repacked boot image not found at ${PARENTDIR}/boot-repacked-signed.img"
+        err -n "Skipping tar packaging."
         return 1
     fi
     
     # Work in a temporary directory to control archive member names
     TMPDIR=$(mktemp -d)
     
-    print_msg "$GREEN" "Created temp directory at $TMPDIR"
+    info -n "Created temp directory at $TMPDIR"
     
     # Copy/sign image as boot.img inside temp dir so tar entry is named boot.img
     cp -f "${PARENTDIR}/boot-repacked-signed.img" "${TMPDIR}/boot.img"
@@ -222,19 +237,19 @@ package_tar() {
     
     # Move tar to the parent directory if created in TMPDIR (tar created there already)
     if [ -f "${PARENTDIR}/${OUTTAR##*/}" ]; then
-        print_msg "$GREEN" "Tar archive created at ${PARENTDIR}/${OUTTAR##*/}"
+        info -n "Tar archive created at ${PARENTDIR}/${OUTTAR##*/}"
     else
-        print_msg "$RED" "Failed to create tar archive."
+        err -n "Failed to create tar archive."
         return 1
     fi
     
     # Explicit cleanup of temporary directory and remove trap
     trap 'rm -rf "$TMPDIR"' EXIT
     
-    print_msg "$GREEN" "Deleted temp directory at $TMPDIR"
+    info -n "Deleted temp directory at $TMPDIR"
     
     # Cleanup handled by trap
-    print_msg "$GREEN" "Packaging completed successfully."
+    info -n "Packaging completed successfully."
     return 0
 }
 
