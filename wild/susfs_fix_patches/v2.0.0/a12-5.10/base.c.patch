@@ -1,5 +1,5 @@
---- a/fs/proc/base.c
-+++ b/fs/proc/base.c
+--- a/fs/proc/base.c	2026-01-02 21:19:48.950240379 -0500
++++ b/fs/proc/base.c	2026-01-02 21:20:55.078301497 -0500
 @@ -863,6 +863,22 @@
  
  	while (count > 0) {
