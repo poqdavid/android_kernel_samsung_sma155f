@@ -256,7 +256,7 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
     
     # 4. Generate build.config
     info -n "Generating build configs..."
-    run_cmd "python2 scripts/gen_build_config.py --kernel-defconfig a15_00_defconfig --kernel-defconfig-overlays entry_level.config -m user -o ../$OUT_DIR/build.config"
+    run_cmd "python2 scripts/gen_build_config.py --kernel-defconfig a15_00_defconfig --kernel-defconfig-overlays entry_level.config -m user -o $OUT_DIR/build.config"
     popd > /dev/null
     CONFIG_END=$(_ts)
 fi
@@ -340,7 +340,7 @@ export ARCH=arm64
 export PLATFORM_VERSION=12
 export CROSS_COMPILE="aarch64-linux-gnu-"
 export CROSS_COMPILE_COMPAT="arm-linux-gnueabi-"
-export OUT_DIR="../$OUT_DIR"
+export OUT_DIR="$OUT_DIR"
 export DIST_DIR="$OUT_DIR"
 export BUILD_CONFIG="$OUT_DIR/build.config"
 

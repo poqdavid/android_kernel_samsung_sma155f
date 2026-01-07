@@ -131,7 +131,7 @@ checks() {
     else
         info -n "boot.img is available."
     fi
-    info -n "Environment checks completed successfully.\n"
+    info -n "Environment checks completed successfully."
 }
 
 # Unpacking the boot.img
@@ -193,7 +193,7 @@ repack() {
         mv $WORKSPACE/new-boot-signed.img $PARENTDIR/boot-repacked-signed.img
         info -n "Repacked boot image moved to ${PARENTDIR}/boot-repacked-signed.img."
         
-        info -n "Repacking process completed successfully.\n"
+        info -n "Repacking process completed successfully."
         return 0
     fi
 }
