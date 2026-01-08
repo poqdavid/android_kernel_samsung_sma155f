@@ -322,8 +322,14 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
         done
         
         # Final KSU patches
-        run_cmd "patch -p1 --forward < \"../../patches/kernel_patches/next/susfs_fix_patches/v2.0.0/overwrite_hook_mode.patch\" || true"
+        info -n "Patching Hook Mode!"
+        run_cmd "patch -p1 --forward < \"../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/overwrite_hook_mode.patch\" || true"
+
+        info -n "Patching KSU_TOOLKIT Support for SusFS kernel!"
         run_cmd "patch -p1 --forward < \"../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/ksu_toolkit.patch\" || true"
+
+        info -n "Patching Multi-manager Support for SusFS kernel!"
+        run_cmd "patch -p1 --forward < \"../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/multi_manager.patch\" ||true"
         popd > /dev/null
     fi
     
