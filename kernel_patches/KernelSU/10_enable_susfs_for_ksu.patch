@@ -1,5 +1,5 @@
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index 5fa11ae9..79517337 100644
+index 70511859..5ee1c52f 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
 @@ -3,7 +3,6 @@ kernelsu-objs += allowlist.o
@@ -156,7 +156,7 @@ index 28e5a3a8..63559d7e 100644
 +endif
  # Keep a new line here!! Because someone may append config
 diff --git a/kernel/allowlist.c b/kernel/allowlist.c
-index 5822b1be..b4907053 100644
+index 511e91fc..95e7cfe8 100644
 --- a/kernel/allowlist.c
 +++ b/kernel/allowlist.c
 @@ -17,7 +17,9 @@
@@ -301,19 +301,19 @@ index b2aabf08..c235486f 100644
      ksu_supercalls_exit();
  
 diff --git a/kernel/ksud.c b/kernel/ksud.c
-index 49392584..b8824824 100644
+index 715f891f..65e7122d 100644
 --- a/kernel/ksud.c
 +++ b/kernel/ksud.c
-@@ -58,9 +58,15 @@ static void stop_vfs_read_hook();
+@@ -58,9 +58,15 @@ static void stop_init_rc_hook();
  static void stop_execve_hook();
  static void stop_input_hook();
  
 +#ifndef CONFIG_KSU_SUSFS
- static struct work_struct stop_vfs_read_work;
+ static struct work_struct stop_init_rc_hook_work;
  static struct work_struct stop_execve_hook_work;
  static struct work_struct stop_input_hook_work;
 +#else
-+bool ksu_vfs_read_hook __read_mostly = true;
++bool ksu_init_rc_hook __read_mostly = true;
 +bool ksu_execveat_hook __read_mostly = true;
 +bool ksu_input_hook __read_mostly = true;
 +#endif // #ifndef CONFIG_KSU_SUSFS
@@ -359,34 +359,19 @@ index 49392584..b8824824 100644
      return 0;
  }
  
-@@ -354,6 +371,12 @@ append_ksu_rc:
- static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
-                                size_t *count_ptr, loff_t **pos)
- {
-+#ifdef CONFIG_KSU_SUSFS
-+    if (!ksu_vfs_read_hook) {
-+        return 0;
-+    }
-+#endif // #ifdef CONFIG_KSU_SUSFS
-+
-     struct file *file;
-     size_t count;
- 
-@@ -421,8 +444,13 @@ static int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
-     return 0;
+@@ -381,7 +398,11 @@ static bool is_init_rc(struct file *fp)
+     return true;
  }
  
 +#ifndef CONFIG_KSU_SUSFS
- static int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
-                                size_t *count_ptr)
+ static void ksu_handle_sys_read(unsigned int fd)
 +#else
-+int ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr,
-+                               size_t *count_ptr)
++void ksu_handle_sys_read(unsigned int fd)
 +#endif // #ifndef CONFIG_KSU_SUSFS
  {
      struct file *file = fget(fd);
      if (!file) {
-@@ -443,6 +471,12 @@ static bool is_volumedown_enough(unsigned int count)
+@@ -436,6 +457,12 @@ static bool is_volumedown_enough(unsigned int count)
  int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code,
                                    int *value)
  {
@@ -399,7 +384,7 @@ index 49392584..b8824824 100644
      if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
          int val = *value;
          pr_info("KEY_VOLUMEDOWN val: %d\n", val);
-@@ -480,6 +514,7 @@ bool ksu_is_safe_mode()
+@@ -473,6 +500,7 @@ bool ksu_is_safe_mode()
      return false;
  }
  
@@ -407,20 +392,37 @@ index 49392584..b8824824 100644
  static int sys_execve_handler_pre(struct kprobe *p, struct pt_regs *regs)
  {
      struct pt_regs *real_regs = PT_REAL_REGS(regs);
-@@ -563,17 +598,28 @@ static void do_stop_input_hook(struct work_struct *work)
+@@ -608,17 +636,45 @@ static void do_stop_input_hook(struct work_struct *work)
  {
      unregister_kprobe(&input_event_kp);
  }
 +#endif // #ifndef CONFIG_KSU_SUSFS
++
++#ifdef CONFIG_KSU_SUSFS
++void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr) {
++    loff_t new_size = *kstat_size_ptr + ksu_rc_len;
++    struct file *file = fget(fd);
++
++    if (!file)
++        return;
++
++    if (is_init_rc(file)) {
++        pr_info("stat init.rc");
++        pr_info("adding ksu_rc_len: %lld -> %lld", *kstat_size_ptr, new_size);
++        *kstat_size_ptr = new_size;
++    }
++    fput(file);
++}
++#endif // #ifdef CONFIG_KSU_SUSFS
  
- static void stop_vfs_read_hook()
+ static void stop_init_rc_hook()
  {
 +#ifndef CONFIG_KSU_SUSFS
-     bool ret = schedule_work(&stop_vfs_read_work);
-     pr_info("unregister vfs_read kprobe: %d!\n", ret);
+     bool ret = schedule_work(&stop_init_rc_hook_work);
+     pr_info("unregister init_rc_hook kprobe: %d!\n", ret);
 +#else
-+    ksu_vfs_read_hook = false;
-+    pr_info("stop vfs_read_hook\n");
++    ksu_init_rc_hook = false;
++    pr_info("stop init_rc_hook\n");
 +#endif // #ifndef CONFIG_KSU_SUSFS
  }
  
@@ -436,7 +438,7 @@ index 49392584..b8824824 100644
  }
  
  static void stop_input_hook()
-@@ -583,13 +629,19 @@ static void stop_input_hook()
+@@ -628,13 +684,19 @@ static void stop_input_hook()
          return;
      }
      input_hook_stopped = true;
@@ -456,8 +458,8 @@ index 49392584..b8824824 100644
      int ret;
  
      ret = register_kprobe(&execve_kp);
-@@ -604,12 +656,15 @@ void ksu_ksud_init()
-     INIT_WORK(&stop_vfs_read_work, do_stop_vfs_read_hook);
+@@ -652,12 +714,15 @@ void ksu_ksud_init()
+     INIT_WORK(&stop_init_rc_hook_work, do_stop_init_rc_hook);
      INIT_WORK(&stop_execve_hook_work, do_stop_execve_hook);
      INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
 +#endif // #ifndef CONFIG_KSU_SUSFS
@@ -467,8 +469,8 @@ index 49392584..b8824824 100644
  {
 +#ifndef CONFIG_KSU_SUSFS
      unregister_kprobe(&execve_kp);
-     // this should be done before unregister vfs_read_kp
-     // unregister_kprobe(&vfs_read_kp);
+     // this should be done before unregister sys_read_kp
+     // unregister_kprobe(&sys_read_kp);
      unregister_kprobe(&input_event_kp);
 +#endif // #ifndef CONFIG_KSU_SUSFS
  }
@@ -521,10 +523,10 @@ index fac0d0d7..13d4b600 100644
  }
  
 diff --git a/kernel/selinux/selinux.c b/kernel/selinux/selinux.c
-index 24c8e851..9e019fe3 100644
+index ff66c1f2..7ef9b218 100644
 --- a/kernel/selinux/selinux.c
 +++ b/kernel/selinux/selinux.c
-@@ -208,3 +208,99 @@ bool is_init(const struct cred *cred)
+@@ -207,3 +207,99 @@ bool is_init(const struct cred *cred)
  {
      return is_sid_match(cred, cached_init_sid, INIT_CONTEXT);
  }
@@ -782,7 +784,7 @@ index 849947c1..084bf38b 100644
  void ksu_setuid_hook_init(void)
  {
 diff --git a/kernel/sucompat.c b/kernel/sucompat.c
-index 04d8d3ca..9079a616 100644
+index 04d8d3ca..dbe5beeb 100644
 --- a/kernel/sucompat.c
 +++ b/kernel/sucompat.c
 @@ -11,6 +11,12 @@
@@ -806,7 +808,7 @@ index 04d8d3ca..9079a616 100644
  int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
                           int *__unused_flags)
  {
-@@ -164,6 +171,147 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
+@@ -164,6 +171,150 @@ int ksu_handle_execve_sucompat(const char __user **filename_user,
  
      return 0;
  }
@@ -826,8 +828,11 @@ index 04d8d3ca..9079a616 100644
 +        if (unlikely(strcmp(filename->name, KSUD_PATH) == 0)) {
 +            pr_info("hook_manager: escape to root for init executing ksud: %d\n", current->pid);
 +            escape_to_root_for_init();
-+        } else if (likely(strstr(filename->name, "/app_process") == NULL && strstr(filename->name, "/adbd") == NULL)) {
-+            pr_info("hook_manager: unmark %d exec %s\n", current->pid, filename->name);
++        } else if (likely(strstr(filename->name, "/app_process") == NULL &&
++                    strstr(filename->name, "/adbd") == NULL) &&
++                    !susfs_is_current_proc_umounted())
++        {
++            pr_info("susfs: mark no sucompat checks for pid: '%d', exec: '%s'\n", current->pid, filename->name);
 +            susfs_set_current_proc_umounted();
 +        }
 +        return 0;
@@ -971,7 +976,7 @@ index b8d26982..cdac225d 100644
                                 void *__never_use_argv, void *__never_use_envp,
                                 int *__never_use_flags);
 diff --git a/kernel/supercalls.c b/kernel/supercalls.c
-index f66be06b..fdea34e8 100644
+index f66be06b..b5420c51 100644
 --- a/kernel/supercalls.c
 +++ b/kernel/supercalls.c
 @@ -11,6 +11,10 @@
@@ -1114,8 +1119,8 @@ index f66be06b..fdea34e8 100644
 +        }
 +#endif //#ifdef CONFIG_KSU_SUSFS_SUS_PATH
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+        if (cmd == CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS) {
-+            susfs_set_hide_sus_mnts_for_all_procs(arg);
++        if (cmd == CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS) {
++            susfs_set_hide_sus_mnts_for_non_su_procs(arg);
 +            return 0;
 +        }
 +#endif //#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
