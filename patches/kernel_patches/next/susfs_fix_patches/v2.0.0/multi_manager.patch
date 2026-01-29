@@ -1,8 +1,24 @@
 diff --git a/kernel/apk_sign.c b/kernel/apk_sign.c
-index 3f2ae2d4..862e471b 100644
+index 3f2ae2d4..96a3c861 100644
 --- a/kernel/apk_sign.c
 +++ b/kernel/apk_sign.c
-@@ -360,5 +360,7 @@ bool is_manager_apk(char *path)
+@@ -18,6 +18,10 @@
+ #include "app_profile.h"
+ #include "klog.h" // IWYU pragma: keep
+ 
++#ifdef KSU_MANAGER_PACKAGE
++#define WILD_KSU_PACKAGE_NAME "com.twj.wksu"
++#endif
++
+ struct sdesc {
+ 	struct shash_desc shash;
+ 	char ctx[];
+@@ -356,9 +360,11 @@ bool is_manager_apk(char *path)
+ 	}
+ 
+ 	// pkg is `<real package>`
+-	if (strncmp(pkg, KSU_MANAGER_PACKAGE, sizeof(KSU_MANAGER_PACKAGE))) {
++	if (strncmp(pkg, WILD_KSU_PACKAGE_NAME, sizeof(WILD_KSU_PACKAGE_NAME)) || strncmp(pkg, KSU_MANAGER_PACKAGE, sizeof(KSU_MANAGER_PACKAGE))) {
  		return false;
  	}
  #endif
