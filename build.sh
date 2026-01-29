@@ -316,7 +316,7 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
         for rej in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
             FIX_PATCH="../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/fix_$rej.patch"
             if [[ -f "$FIX_PATCH" ]]; then
-			    info "Patching $file"
+			    info "Patching $rej"
                 run_cmd "patch -p1 --forward < \"$FIX_PATCH\" || true"
             fi
         done
