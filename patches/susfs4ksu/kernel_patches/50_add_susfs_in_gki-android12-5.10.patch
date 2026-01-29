@@ -1334,10 +1334,10 @@ index f96a51999489..645261072d4d 100644
  
  		len = min(count, PM_ENTRY_BYTES * pm.pos);
 diff --git a/fs/proc_namespace.c b/fs/proc_namespace.c
-index eafb75755fa3..21eb07b7a7d7 100644
+index eafb75755fa3..a1a6c2590d82 100644
 --- a/fs/proc_namespace.c
 +++ b/fs/proc_namespace.c
-@@ -12,12 +12,19 @@
+@@ -12,12 +12,20 @@
  #include <linux/security.h>
  #include <linux/fs_struct.h>
  #include <linux/sched/task.h>
@@ -1351,18 +1351,22 @@ index eafb75755fa3..21eb07b7a7d7 100644
  #include "internal.h"
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+extern bool susfs_hide_sus_mnts_for_all_procs;
++extern bool susfs_hide_sus_mnts_for_non_su_procs;
++extern bool susfs_is_current_ksu_domain(void);
 +#endif
 +
  static __poll_t mounts_poll(struct file *file, poll_table *wait)
  {
  	struct seq_file *m = file->private_data;
-@@ -103,6 +110,12 @@ static int show_vfsmnt(struct seq_file *m, struct vfsmount *mnt)
+@@ -103,6 +111,15 @@ static int show_vfsmnt(struct seq_file *m, struct vfsmount *mnt)
  	struct super_block *sb = mnt_path.dentry->d_sb;
  	int err;
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+	if (susfs_hide_sus_mnts_for_all_procs && r->mnt_id >= DEFAULT_KSU_MNT_ID) {
++	if (susfs_hide_sus_mnts_for_non_su_procs &&
++		r->mnt_id >= DEFAULT_KSU_MNT_ID &&
++		!susfs_is_current_ksu_domain())
++	{
 +		return 0;
 +	}
 +#endif
@@ -1370,24 +1374,31 @@ index eafb75755fa3..21eb07b7a7d7 100644
  	if (sb->s_op->show_devname) {
  		err = sb->s_op->show_devname(m, mnt_path.dentry);
  		if (err)
-@@ -137,6 +150,11 @@ static int show_mountinfo(struct seq_file *m, struct vfsmount *mnt)
+@@ -137,6 +154,15 @@ static int show_mountinfo(struct seq_file *m, struct vfsmount *mnt)
  	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };
  	int err;
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+	if (susfs_hide_sus_mnts_for_all_procs && r->mnt_id >= DEFAULT_KSU_MNT_ID) {
++	if (susfs_hide_sus_mnts_for_non_su_procs &&
++		r->mnt_id >= DEFAULT_KSU_MNT_ID &&
++		!susfs_is_current_ksu_domain())
++	{
 +		return 0;
 +	}
 +#endif
++
  	seq_printf(m, "%i %i %u:%u ", r->mnt_id, r->mnt_parent->mnt_id,
  		   MAJOR(sb->s_dev), MINOR(sb->s_dev));
  	if (sb->s_op->show_path) {
-@@ -199,6 +217,12 @@ static int show_vfsstat(struct seq_file *m, struct vfsmount *mnt)
+@@ -199,6 +225,15 @@ static int show_vfsstat(struct seq_file *m, struct vfsmount *mnt)
  	struct super_block *sb = mnt_path.dentry->d_sb;
  	int err;
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+	if (susfs_hide_sus_mnts_for_all_procs && r->mnt_id >= DEFAULT_KSU_MNT_ID) {
++	if (susfs_hide_sus_mnts_for_non_su_procs &&
++		r->mnt_id >= DEFAULT_KSU_MNT_ID &&
++		!susfs_is_current_ksu_domain())
++	{
 +		return 0;
 +	}
 +#endif
@@ -1396,24 +1407,23 @@ index eafb75755fa3..21eb07b7a7d7 100644
  	if (sb->s_op->show_devname) {
  		seq_puts(m, "device ");
 diff --git a/fs/read_write.c b/fs/read_write.c
-index 729c02a917ed..181394a619c8 100644
+index 729c02a917ed..fe93c4c5059f 100644
 --- a/fs/read_write.c
 +++ b/fs/read_write.c
-@@ -639,8 +639,19 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
+@@ -639,8 +639,18 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
  	return ret;
  }
  
 +#ifdef CONFIG_KSU_SUSFS
-+extern bool ksu_vfs_read_hook __read_mostly;
-+extern __attribute__((cold)) int ksu_handle_sys_read(unsigned int fd,
-+               char __user **buf_ptr, size_t *count_ptr);
++extern bool ksu_init_rc_hook __read_mostly;
++extern __attribute__((cold)) void ksu_handle_sys_read(unsigned int fd);
 +#endif
 +
  SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
  {
 +#ifdef CONFIG_KSU_SUSFS
-+	if (unlikely(ksu_vfs_read_hook))
-+		ksu_handle_sys_read(fd, &buf, &count);
++	if (unlikely(ksu_init_rc_hook))
++		ksu_handle_sys_read(fd);
 +#endif
 +
  	return ksys_read(fd, buf, count);
@@ -1873,7 +1883,7 @@ index 09e8ed7d4161..fe6c96984ae4 100644
  	if (error >= 0)
  		error = buf.error;
 diff --git a/fs/stat.c b/fs/stat.c
-index c6a2e10983f8..b161fe224985 100644
+index c6a2e10983f8..6ee413a71b27 100644
 --- a/fs/stat.c
 +++ b/fs/stat.c
 @@ -17,6 +17,10 @@
@@ -1916,7 +1926,30 @@ index c6a2e10983f8..b161fe224985 100644
  	stat->dev = inode->i_sb->s_dev;
  	stat->ino = inode->i_ino;
  	stat->mode = inode->i_mode;
-@@ -156,6 +175,16 @@ int vfs_fstat(int fd, struct kstat *stat)
+@@ -143,6 +162,13 @@ EXPORT_SYMBOL(vfs_getattr);
+  *
+  * 0 will be returned on success, and a -ve error code if unsuccessful.
+  */
++
++
++#ifdef CONFIG_KSU_SUSFS
++extern bool ksu_init_rc_hook __read_mostly;
++extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
++#endif // #ifdef CONFIG_KSU_SUSFS
++
+ int vfs_fstat(int fd, struct kstat *stat)
+ {
+ 	struct fd f;
+@@ -152,10 +178,25 @@ int vfs_fstat(int fd, struct kstat *stat)
+ 	if (!f.file)
+ 		return -EBADF;
+ 	error = vfs_getattr(&f.file->f_path, stat, STATX_BASIC_STATS, 0);
++#ifdef CONFIG_KSU_SUSFS
++	if (unlikely(ksu_init_rc_hook)) {
++		ksu_handle_vfs_fstat(fd, &stat->size);
++	}
++#endif // #ifdef CONFIG_KSU_SUSFS
+ 	fdput(f);
  	return error;
  }
  
@@ -1933,7 +1966,7 @@ index c6a2e10983f8..b161fe224985 100644
  /**
   * vfs_statx - Get basic and extra attributes by filename
   * @dfd: A file descriptor representing the base dir for a relative filename
-@@ -178,6 +207,18 @@ static int vfs_statx(int dfd, const char __user *filename, int flags,
+@@ -178,6 +219,18 @@ static int vfs_statx(int dfd, const char __user *filename, int flags,
  	unsigned lookup_flags = 0;
  	int error;
  

@@ -106,3 +106,10 @@ ksu_susfs enable_avc_log_spoofing 1
 #ksu_susfs enable_avc_log_spoofing 0
 EOF
 
+#### Hide all sus mounts for non-su processes in this stage just to prevent zygote from caching them in memory ####
+## This should be mainly applied if you have ReZygisk enabled but without TreatWheel module ##
+## Or it is up to you to keep it enabled since su process can still see the mounts ##
+cat <<EOF >/dev/null
+ksu_susfs hide_sus_mnts_for_non_su_procs 1
+EOF
+
