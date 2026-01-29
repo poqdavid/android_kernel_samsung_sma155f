@@ -1,8 +1,8 @@
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index e9d52a14..d6fae125 100644
+index 796476e0..942386d7 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
-@@ -93,4 +93,13 @@ ccflags-y += -DEXPECTED_MANAGER_HASH=\"$(KSU_NEXT_MANAGER_HASH)\"
+@@ -91,4 +91,14 @@ ccflags-y += -DEXPECTED_MANAGER_HASH=\"$(KSU_NEXT_MANAGER_HASH)\"
  ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
  ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable
  
@@ -15,4 +15,5 @@ index e9d52a14..d6fae125 100644
 +$(info -- You have not integrated susfs in your kernel yet.)
 +$(info -- Read: https://gitlab.com/simonpunk/susfs4ksu)
 +endif
++
  # Keep a new line here!! Because someone may append config
