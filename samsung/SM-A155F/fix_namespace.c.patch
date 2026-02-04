@@ -15,7 +15,7 @@
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +extern bool susfs_is_current_ksu_domain(void);
-+extern bool susfs_is_boot_completed_triggered __read_mostly;
++extern bool susfs_is_sdcard_android_data_decrypted __read_mostly;
 +
 +static DEFINE_IDA(susfs_ksu_mnt_group_ida);
 +static atomic64_t susfs_ksu_mounts = ATOMIC64_INIT(0);
