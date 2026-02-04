@@ -1,9 +1,9 @@
 --- a/fs/namespace.c
 +++ b/fs/namespace.c
-@@ -34,10 +34,23 @@
- #include <linux/mnt_idmapping.h>
- #include <linux/delay.h>
- #include <linux/fslog.h>
+@@ -36,10 +36,23 @@
+ #ifdef CONFIG_KDP_NS
+ #include <linux/kdp.h>
+ #endif
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +#include <linux/susfs_def.h>
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
@@ -22,5 +22,15 @@
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +
  /* Maximum number of mounts in a mount namespace */
- static unsigned int sysctl_mount_max __read_mostly = 100000;
+ unsigned int sysctl_mount_max __read_mostly = 100000;
  
+@@ -4070,6 +4083,9 @@
+ 	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
+ 	if (user_ns != ns->user_ns)
+ 		copy_flags |= CL_SHARED_TO_SLAVE;
++#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
++	copy_flags |= CL_COPY_MNT_NS;
++#endif
+ #ifdef CONFIG_KDP_NS
+ 	new = copy_tree(old, ((struct kdp_mount *)old)->mnt->mnt_root, copy_flags);
+ #else
