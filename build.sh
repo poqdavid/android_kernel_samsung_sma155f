@@ -191,7 +191,8 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-val PROCA_CERTIFICATES_XATTR n \
         --set-val PROCA_CERT_ENG n \
         --set-val PROCA_CERT_USER n \
-        --set-val GAF_V6 n --set-val FIVE n \
+        --set-val GAF_V6 n \
+        --set-val FIVE n \
         --set-val FIVE_CERT_USER n \
         --set-val FIVE_DEFAULT_HASH n \
         --set-val UH_RKP n \
@@ -202,8 +203,16 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-val KDP_CRED n \
         --set-val KDP_NS n \
         --set-val KDP_TEST n \
-        --set-val RKP_CRED n"
-    
+        --set-val RKP_CRED n \
+        --set-val MODULES y \
+        --set-val MODULE_FORCE_LOAD y \
+        --set-val MODULE_UNLOAD y \
+        --set-val MODULE_FORCE_UNLOAD y \
+        --set-val MODVERSIONS y \
+        --set-val MODULE_SRCVERSION_ALL n \
+        --set-val MODULE_SIG n \
+        --set-val MODULE_COMPRESS n"
+
     # Optimizations (BBR, etc)
     run_cmd "$CONFIG_TOOL --file $DEFCONFIG \
         --set-val IP_NF_TARGET_TTL y \
@@ -245,7 +254,9 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-val KSU_SUSFS_OPEN_REDIRECT y \
         --set-val KSU_SUSFS_SUS_MAP y \
         --set-val KSU_SUSFS_SUS_SU n \
-        --set-val TMPFS_XATTR y --set-val TMPFS_POSIX_ACL y"
+        --set-val OVERLAY_FS y \
+        --set-val TMPFS_XATTR y \
+        --set-val TMPFS_POSIX_ACL y"
     
     # 3. Metadata Configuration
     info -n "Configuring Kernel metadata..."
