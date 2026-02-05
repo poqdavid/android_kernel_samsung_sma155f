@@ -1,0 +1,78 @@
+--- anykernel.sh	2025-06-26 20:48:10.437950200 +0530
++++ anykernel.sh	2025-06-27 15:30:36.251378500 +0530
+@@ -52,3 +52,75 @@
+     flash_boot
+ fi
+ ## end boot install
++
++MKDTIMG=$BIN/mkdtimg
++FDTGET=$BIN/fdtget
++FDTPUT=$BIN/fdtput
++
++repack_and_patch_dtbo() {
++    ui_print " Extracting DTBO img"
++    DTBO_PARTITION="/dev/block/by-name/dtbo$(getprop ro.boot.slot_suffix)"
++    WORK_DIR="dtbo_dir"
++    mkdir -p "$WORK_DIR"
++    cd "$WORK_DIR"
++    dd if=$DTBO_PARTITION of="dtbo.img"
++    PAGE_SIZE=$($MKDTIMG dump "dtbo.img" -b "dtb" 2>&1 | sed -n 's/.*page_size[[:space:]]*=[[:space:]]*//p')
++    wait
++    [ -n "$PAGE_SIZE" ] || abort "Failed to extract page_size from dtbo.img"
++    
++    for i in dtb.*; do
++        local isPatched=0
++        local isFound=0
++        ui_print " Searching $i file"
++        fixups_output=$($FDTGET "$i" /__fixups__ soc 2>/dev/null) || continue
++        for j in $fixups_output; do
++            local lpath=$(echo $j | sed 's/\:target\:0//g')
++            if $FDTGET -l $i ${lpath}/__overlay__ | grep -q hmbird; then
++                if [ $($FDTGET $i ${lpath}/__overlay__/oplus,hmbird/version_type type) == "HMBIRD_GKI" ]; then
++                    isPatched=1
++                    ui_print " $i already patched"
++                fi
++                break
++            fi
++        done
++        
++        # Skip if already patched
++        [ "$isPatched" -eq 1 ] && continue
++        
++        # Try patching existing hmbird node
++        for j in $fixups_output; do
++            local lpath=$(echo $j | sed 's/\:target\:0//g')
++            if $FDTGET -l $i ${lpath}/__overlay__ | grep -q hmbird; then
++                isFound=1
++                ui_print " Patching $i file"
++                $FDTPUT -t s $i ${lpath}/__overlay__/oplus,hmbird/version_type type HMBIRD_GKI
++                break
++            fi
++        done
++        
++        # If no hmbird node, create one near reboot_reason
++        if [ $isFound -eq 0 ]; then
++            ui_print " oplus,hmbird not found. Adding HMBIRD_GKI to $i file."
++            for j in $fixups_output; do
++                local ppath=$(echo $j | sed 's/\:target\:0//g')
++                if $FDTGET -l $i ${ppath}/__overlay__ | grep -q reboot_reason; then
++                    $FDTPUT -p -c $i ${ppath}/__overlay__/oplus,hmbird/version_type
++                    $FDTPUT -t s $i ${ppath}/__overlay__/oplus,hmbird/version_type type HMBIRD_GKI
++                    break
++                fi
++            done
++        fi
++    done
++    
++    ui_print " Creating patched dtbo.img"
++    $MKDTIMG create dtbo_patched.img --page_size="$PAGE_SIZE" dtb.* >/dev/null 2>&1
++    wait
++    ui_print " Flashing patched dtbo.img"
++    dd if=dtbo_patched.img of=$DTBO_PARTITION
++    wait
++}
++
++if [ "$(getprop ro.product.manufacturer)" == "OnePlus" ] || [ "$(getprop ro.product.brand)" == "OnePlus" ]; then
++    repack_and_patch_dtbo
++fi
++
