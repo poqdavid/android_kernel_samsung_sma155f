@@ -45,7 +45,7 @@ checks() {
     print_msg "$GREEN" "Cleaning up WORKSPACE directory..."
     rm -rf $WORKSPACE/*
     print_msg "$GREEN" "WORKSPACE cleaned."
-
+    
     if [ ! -d "${CERTDIR}" ]; then
         print_msg "$GREEN" "CERTS directory not found. Creating directory at ${CERTDIR}..."
         cd $BINDIR
@@ -106,7 +106,7 @@ checks() {
     else
         print_msg "$GREEN" "No compressed boot image detected."
     fi
-
+    
     # Check if boot image is available
     if [ ! -f "${PARENTDIR}/boot.img" ]; then
         print_msg "$RED" "boot.img not found in ${PARENTDIR}!"
@@ -160,7 +160,7 @@ repack() {
         $MAGISKBOOT repack "${PARENTDIR}/boot.img" "${WORKSPACE}/new-boot.img"
         cd $PARENTDIR
         print_msg "$GREEN" "Boot image repacked into new-boot.img."
-
+        
         cp -f $WORKSPACE/new-boot.img $WORKSPACE/new-boot-signed.img
         print_msg "$GREEN" "Boot image Copied to ${WORKSPACE}/new-boot-signed.img."
         
@@ -185,14 +185,21 @@ repack() {
 package_tar() {
     print_msg "$GREEN" "Packaging boot-repacked-signed.img into tar archive..."
     
-    BASE_VERSION=10200
-    KSU_VERSION=$(( $(git -C ${PARENTDIR}/kernel-5.10/KernelSU-Next rev-list --count HEAD) + BASE_VERSION ))
+    BASE_VERSION=20000
+    KSU_VERSION=$(( $(git -C ${PARENTDIR}/kernel-5.10/KernelSU rev-list --count HEAD) + BASE_VERSION ))
     
-    #susfs_version=$(grep '#define SUSFS_VERSION' ${PARENTDIR}/kernel-5.10/include/linux/susfs.h | awk -F'"' '{print $2}')
+    susfs_header="${PARENTDIR}/kernel-5.10/include/linux/susfs.h"
     
-    # Output tar name (edit as needed)
-    #OUTTAR="../kernelsu_${KSU_VERSION}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
-    OUTTAR="../kernelsu_${KSU_VERSION}_A155FXXS7CYG4_A15_GKI.tar"
+    if [[ -f "$susfs_header" ]]; then
+        susfs_version=$(grep -oP '#define\s+SUSFS_VERSION\s+"\K[^"]+' "$susfs_header")
+    fi
+    
+    if [[ -z "$susfs_version" ]]; then
+        OUTTAR="../kernelsu_${KSU_VERSION}_A155FXXS7CYG4_A15_GKI.tar"
+        
+    else
+        OUTTAR="../kernelsu_${KSU_VERSION}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
+    fi
     
     if [ ! -f "${PARENTDIR}/boot-repacked-signed.img" ]; then
         print_msg "$RED" "Signed repacked boot image not found at ${PARENTDIR}/boot-repacked-signed.img"
