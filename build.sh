@@ -274,8 +274,11 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
     if [[ -d "./KernelSU" ]]; then
         # Version Detection
         pushd "./KernelSU/kernel" > /dev/null
-
-        BASE_VERSION=30000
+        
+        BASE_VERSION=$(grep -m1 -oP 'expr\s*\K[0-9]+' Kbuild)
+        
+        info -n "Detected KernelSU Base Version: $BASE_VERSION"
+        
         KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" $BASE_VERSION)
         
         info -n "Detected KernelSU Version: $KSU_VERSION"
