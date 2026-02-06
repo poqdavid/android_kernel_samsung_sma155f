@@ -24,15 +24,15 @@ print_msg() {
 }
 
 _log_handler() {
-  local color="$1"
-  local level="$2"
-  shift 2  # Remove color and level from the arguments list
-  
-  local nl=""
-  # Now $1 is the first argument the user actually typed (e.g., -n)
-  [[ "$1" == "-n" ]] && { nl="\n"; shift; }
-
-  printf "${nl}%b[%s] %s%b\n" "${color}" "${level}" "$*" "${RESET}"
+    local color="$1"
+    local level="$2"
+    shift 2  # Remove color and level from the arguments list
+    
+    local nl=""
+    # Now $1 is the first argument the user actually typed (e.g., -n)
+    [[ "$1" == "-n" ]] && { nl="\n"; shift; }
+    
+    printf "${nl}%b[%s] %s%b\n" "${color}" "${level}" "$*" "${RESET}"
 }
 
 info() { _log_handler "${GREEN}"  "INFO"  "$@"; }
@@ -201,13 +201,20 @@ repack() {
 package_tar() {
     info -n "Packaging boot-repacked-signed.img into tar archive..."
     
-    BASE_VERSION=10200
+    BASE_VERSION=$(grep -m1 -oP 'expr\s*\K[0-9]+' ${PARENTDIR}/kernel-5.10/KernelSU-Next/kernel/Kbuild)
     KSU_VERSION=$(( $(git -C ${PARENTDIR}/kernel-5.10/KernelSU-Next rev-list --count HEAD) + BASE_VERSION ))
     
-    susfs_version=$(grep '#define SUSFS_VERSION' ${PARENTDIR}/kernel-5.10/include/linux/susfs.h | awk -F'"' '{print $2}')
+    susfs_header="${PARENTDIR}/kernel-5.10/include/linux/susfs.h"
     
-    # Output tar name (edit as needed)
-    OUTTAR="../kernelsunext_${KSU_VERSION}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
+    if [[ -f "$susfs_header" ]]; then
+        susfs_version=$(grep -oP '#define\s+SUSFS_VERSION\s+"\K[^"]+' "$susfs_header")
+    fi
+    
+    if [[ -z "$susfs_version" ]]; then
+        OUTTAR="../kernelsunext_${KSU_VERSION}_A155FXXS7CYG4_A15_GKI.tar"
+    else
+        OUTTAR="../kernelsunext_${KSU_VERSION}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
+    fi
     
     if [ ! -f "${PARENTDIR}/boot-repacked-signed.img" ]; then
         err -n "Signed repacked boot image not found at ${PARENTDIR}/boot-repacked-signed.img"
