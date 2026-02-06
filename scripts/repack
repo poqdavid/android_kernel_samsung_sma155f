@@ -184,8 +184,8 @@ repack() {
 
 package_tar() {
     print_msg "$GREEN" "Packaging boot-repacked-signed.img into tar archive..."
-    
-    BASE_VERSION=20000
+
+    BASE_VERSION=30000
     KSU_VERSION=$(( $(git -C ${PARENTDIR}/kernel-5.10/KernelSU rev-list --count HEAD) + BASE_VERSION ))
     
     susfs_header="${PARENTDIR}/kernel-5.10/include/linux/susfs.h"

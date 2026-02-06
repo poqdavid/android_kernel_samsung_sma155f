@@ -273,9 +273,11 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
     
     if [[ -d "./KernelSU" ]]; then
         # Version Detection
-        pushd "./KernelSU" > /dev/null
-        KSU_COUNT=$(git rev-list --count HEAD || echo 0)
-        KSU_VERSION=$((KSU_COUNT + BASE_KSU_VERSION))
+        pushd "./KernelSU/kernel" > /dev/null
+
+        BASE_VERSION=30000
+        KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" $BASE_VERSION)
+        
         info -n "Detected KernelSU Version: $KSU_VERSION"
         popd > /dev/null
         
