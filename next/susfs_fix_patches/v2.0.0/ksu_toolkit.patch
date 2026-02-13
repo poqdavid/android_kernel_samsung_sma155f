@@ -1,8 +1,8 @@
 diff --git a/kernel/sucompat.c b/kernel/sucompat.c
-index b796ddc2..8ff29e66 100644
+index 97493b1e..31d91700 100644
 --- a/kernel/sucompat.c
 +++ b/kernel/sucompat.c
-@@ -227,6 +227,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+@@ -230,6 +230,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
      pr_info("ksu_handle_execveat_sucompat: su found\n");
      memcpy((void *)filename->name, ksud_path, sizeof(ksud_path));
  
@@ -10,7 +10,7 @@ index b796ddc2..8ff29e66 100644
      escape_with_root_profile();
  
      return 0;
-@@ -251,6 +252,7 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
+@@ -254,6 +255,7 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
  
      if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
          pr_info("ksu_handle_faccessat: su->sh!\n");
@@ -18,7 +18,7 @@ index b796ddc2..8ff29e66 100644
          *filename_user = sh_user_path();
      }
  
-@@ -270,6 +272,7 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags) {
+@@ -273,6 +275,7 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags) {
      }
  
      pr_info("ksu_handle_stat: su->sh!\n");
@@ -26,7 +26,7 @@ index b796ddc2..8ff29e66 100644
      memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
      return 0;
  }
-@@ -286,6 +289,7 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
+@@ -289,6 +292,7 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
  
      if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
          pr_info("ksu_handle_stat: su->sh!\n");
@@ -35,10 +35,10 @@ index b796ddc2..8ff29e66 100644
      }
  
 diff --git a/kernel/supercalls.c b/kernel/supercalls.c
-index fdca41ca..b665ac7e 100644
+index 6af29aba..d80cde07 100644
 --- a/kernel/supercalls.c
 +++ b/kernel/supercalls.c
-@@ -1049,6 +1049,122 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user
+@@ -1045,6 +1045,122 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user
              pr_warn("install fd add task_work failed\n");
          }
      }

@@ -1,9 +1,9 @@
---- a/fs/namespace.c	2026-01-01 02:09:16.377265000 -0500
-+++ b/fs/namespace.c	2026-01-01 02:28:23.543873062 -0500
-@@ -31,10 +31,23 @@
- #include <uapi/linux/mount.h>
- #include <linux/fs_context.h>
- #include <linux/shmem_fs.h>
+--- a/fs/namespace.c
++++ b/fs/namespace.c
+@@ -36,10 +36,22 @@
+ #ifdef CONFIG_KDP_NS
+ #include <linux/kdp.h>
+ #endif
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +#include <linux/susfs_def.h>
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
@@ -17,10 +17,19 @@
 +
 +static atomic64_t susfs_ksu_mounts = ATOMIC64_INIT(0);
 +
-+
 +#define CL_COPY_MNT_NS BIT(25) /* used by copy_mnt_ns() */
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +
  /* Maximum number of mounts in a mount namespace */
- unsigned int sysctl_mount_max __read_mostly = 100000;
+ static unsigned int sysctl_mount_max __read_mostly = 100000;
  
+@@ -4100,6 +4112,9 @@
+ 	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
+ 	if (user_ns != ns->user_ns)
+ 		copy_flags |= CL_SHARED_TO_SLAVE;
++#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
++	copy_flags |= CL_COPY_MNT_NS;
++#endif
+ #ifdef CONFIG_KDP_NS
+ 	new = copy_tree(old, ((struct kdp_mount *)old)->mnt->mnt_root, copy_flags);
+ #else
