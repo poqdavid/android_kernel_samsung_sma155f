@@ -1,5 +1,5 @@
 diff --git a/kernel/allowlist.c b/kernel/allowlist.c
-index 1007b94f..d7cc0131 100644
+index 7480e1da..ae066d70 100644
 --- a/kernel/allowlist.c
 +++ b/kernel/allowlist.c
 @@ -260,8 +260,10 @@ out:
