@@ -1,15 +1,18 @@
 --- a/fs/namespace.c
 +++ b/fs/namespace.c
-@@ -36,10 +36,22 @@
- #ifdef CONFIG_KDP_NS
- #include <linux/kdp.h>
- #endif
+@@ -32,6 +32,9 @@
+ #include <linux/fs_context.h>
+ #include <linux/shmem_fs.h>
+ #include <linux/mnt_idmapping.h>
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +#include <linux/susfs_def.h>
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
  
  #include "pnode.h"
  #include "internal.h"
+@@ -42,6 +45,15 @@
+ #endif
+ #include <trace/hooks/fs.h>
  
 +#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +extern bool susfs_is_current_ksu_domain(void);
@@ -21,15 +24,5 @@
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
 +
  /* Maximum number of mounts in a mount namespace */
- unsigned int sysctl_mount_max __read_mostly = 100000;
+ static unsigned int sysctl_mount_max __read_mostly = 100000;
  
-@@ -4056,6 +4068,9 @@
- 	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
- 	if (user_ns != ns->user_ns)
- 		copy_flags |= CL_SHARED_TO_SLAVE;
-+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+	copy_flags |= CL_COPY_MNT_NS;
-+#endif
- #ifdef CONFIG_KDP_NS
- 	new = copy_tree(old, ((struct kdp_mount *)old)->mnt->mnt_root, copy_flags);
- #else
