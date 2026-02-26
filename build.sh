@@ -310,7 +310,7 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
             
             # Samsung Specific Patches
             info -n "Applying Samsung device patches..."
-            for file in $(find ../patches/kernel_patches/samsung/SM-A155F -maxdepth 2 -name "*.patch"); do
+            for file in $(find ../patches/kernel_patches/samsung/SM-A155F-Oneui7 -maxdepth 2 -name "*.patch"); do
                 info "Patching $file"
                 patch -p1 --forward < "$file" || true
             done
