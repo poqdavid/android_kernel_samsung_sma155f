@@ -1,0 +1,131 @@
+name: 'Setup Cache'
+description: 'Sets up ccache and Bazel remote cache configuration for the build environment'
+inputs:
+  version:
+    description: 'Kernel config version (e.g., android14-6.1)'
+    required: true
+  kernel_version:
+    description: 'Kernel version (e.g., 6.1)'
+    required: true
+  android_version:
+    description: 'Android version (e.g., android14)'
+    required: true
+  sublevel:
+    description: 'Sublevel of kernel version (e.g., 1)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup ccache
+      shell: bash
+      if: |
+        inputs.version == 'android12-5.10' ||
+        inputs.version == 'android13-5.10' ||
+        inputs.version == 'android13-5.15'
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        # Download and install ccache
+        echo "Installing ccache..."
+        curl -LfsS --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 30 --tcp-fastopen -H "User-Agent: Mozilla/5.0" "https://github.com/WildKernels/kernel_patches/raw/refs/heads/main/ccache/ccache-x86-64" -o ccache || { echo "❌ Failed to download ccache"; exit 1; }
+        sudo cp -f ./ccache /usr/bin/ccache || { echo "❌ Failed to install ccache"; exit 1; }
+        sudo chmod +x /usr/bin/ccache
+        rm -f ./ccache
+        
+        # Verify ccache
+        if ! /usr/bin/ccache --version > /dev/null 2>&1; then
+          echo "❌ ccache installation failed or binary is corrupted"
+          exit 1
+        fi
+        echo "✅ ccache binary verified: $(/usr/bin/ccache --version | head -1)"
+        
+        # Setup cache directories
+        export CCACHE_DIR="/home/runner/.ccache"
+        echo "CCACHE_DIR=$CCACHE_DIR" >> $GITHUB_ENV
+        mkdir -p "$CCACHE_DIR"
+
+        export CCACHE_MAXSIZE="12G"
+        echo CCACHE_MAXSIZE="$CCACHE_MAXSIZE" >> $GITHUB_ENV
+        export CCACHE_COMPILERCHECK="content"
+        echo CCACHE_COMPILERCHECK="$CCACHE_COMPILERCHECK" >> $GITHUB_ENV
+        export CCACHE_BASEDIR="${{ github.workspace }}"
+        echo CCACHE_BASEDIR="${{ github.workspace }}" >> $GITHUB_ENV
+        export CCACHE_NOHASHDIR="true"
+        echo CCACHE_NOHASHDIR="true" >> $GITHUB_ENV
+        export CCACHE_IGNOREOPTIONS="--sysroot*"
+        echo CCACHE_IGNOREOPTIONS="--sysroot*" >> $GITHUB_ENV
+        export CCACHE_COMPRESSION="true"
+        echo CCACHE_COMPRESSION="true" >> $GITHUB_ENV
+        export CCACHE_COMPRESSLEVEL="3"
+        echo CCACHE_COMPRESSION_LEVEL="3" >> $GITHUB_ENV
+        export CCACHE_DIRECT="true"
+        echo CCACHE_DIRECT="true" >> "$GITHUB_ENV"
+        export CCACHE_FILE_CLONE="true"
+        echo CCACHE_FILE_CLONE="true" >> "$GITHUB_ENV"
+        export CCACHE_INODE_CACHE="true"
+        echo CCACHE_INODE_CACHE="true" >> "$GITHUB_ENV"
+        export CCACHE_IS_KERNEL_COMPILING="true"
+        echo CCACHE_IS_KERNEL_COMPILING="true" >> $GITHUB_ENV
+        export CCACHE_UMASK="002"
+        echo CCACHE_UMASK="002" >> $GITHUB_ENV
+        export CCACHE_SLOPPINESS="file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale"
+        echo CCACHE_SLOPPINESS="file_macro,time_macros,include_file_mtime,include_file_ctime,pch_defines,system_headers,locale" >> $GITHUB_ENV
+        #export CCACHE_HARDLINK="true"
+        #echo CCACHE_HARDLINK="$CCACHE_HARDLINK" >> $GITHUB_ENV
+
+        if ccache --help 2>&1 | grep -q 'depend_mode'; then
+          export CCACHE_DEPEND=true
+          echo "CCACHE_DEPEND=true" >> "$GITHUB_ENV"
+        fi
+        
+        echo "=== ccache config ==="
+        echo "====================="
+        ccache -p
+        echo "====================="
+
+        echo "✅ ccache ready"
+        echo "CCACHE_DIR: $CCACHE_DIR"
+
+    - name: Setup Bazel Cache
+      shell: bash
+      if: |
+        inputs.version == 'android14-5.15' ||
+        inputs.version == 'android14-6.1' ||
+        inputs.version == 'android15-6.6' ||
+        inputs.version == 'android16-6.12'
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        export BAZEL_CACHE_DIR="/home/runner/.cache/bazel"
+        mkdir -p "$BAZEL_CACHE_DIR"
+        
+        # Set bazel disk cache size limit to 8GB
+        #export BAZEL_DISK_CACHE_SIZE="8589934592"
+        #echo "BAZEL_DISK_CACHE_SIZE=$BAZEL_DISK_CACHE_SIZE" >> $GITHUB_ENV
+
+        #echo "✅ Bazel Cache ready (max 8GB)"
+        echo "BAZEL_CACHE_DIR: $BAZEL_CACHE_DIR"
+
+    - name: Setup ld cache
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        export LDCACHE_DIR="/home/runner/.ld_cache"
+        echo "LDCACHE_DIR=$LDCACHE_DIR" >> $GITHUB_ENV
+        mkdir -p "$LDCACHE_DIR"
+          
+        # Create LD wrapper for thin-LTO caching
+        cat > "${{ github.workspace }}/kernel/common/ld-wrapper" << 'EOF'
+        #!/bin/bash
+        ld.lld "$@" --thinlto-cache-dir="$LDCACHE_DIR" --thinlto-jobs="$(nproc --all)"
+        EOF
+        chmod +x "${{ github.workspace }}/kernel/common/ld-wrapper"
+
+        # Set size limit via environment (4GB)
+        echo "LDCACHE_MAX_SIZE=4294967296" >> "$GITHUB_ENV"
+
+        echo "✅ LD Cache ready (max 4GB)"
+        echo "LDCACHE_DIR: $LDCACHE_DIR"
+        

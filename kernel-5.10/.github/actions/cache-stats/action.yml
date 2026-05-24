@@ -1,0 +1,141 @@
+name: 'Show Cache Stats'
+description: 'Displays statistics for ccache and Bazel remote cache to help analyze cache performance and hit rates'
+inputs:
+  clear_stats:
+    description: 'Whether to clear ccache stats after displaying (default: true)'
+    required: true
+    type: boolean
+    default: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Define cache summary helper
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        cat > /tmp/cache_summary.sh <<'EOF'
+        summarize_dir() {
+          local path="$1"
+          local top_n=${2:-10}
+          local sub_n=${3:-5}
+          if [ ! -e "$path" ]; then
+            echo "Path $path not found"
+            return
+          fi
+          echo "---------------"
+          echo "Summary: $path"
+          du -sh "$path" || true
+          echo "Top ${top_n} entries at top level:"
+          du -h --max-depth=1 "$path" 2>/dev/null | sort -hr | head -n "$top_n" || true
+          echo "Showing up to ${sub_n} entries one level deeper for the largest top-level items:"
+          while read -r line; do
+            entry_path=$(echo "$line" | awk '{print $2}')
+            [ -z "$entry_path" ] && continue
+            if [ "$entry_path" = "$path" ]; then
+              continue
+            fi
+            echo "-> $entry_path :"
+            du -h --max-depth=1 "$entry_path" 2>/dev/null | sort -hr | head -n "$sub_n" || true
+          done < <(du -h --max-depth=1 "$path" 2>/dev/null | sort -hr | head -n "$top_n")
+          echo "---------------"
+        }
+        EOF
+
+    - name: Show ccache Stats
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        echo "===================="
+        echo "=== ccache stats ==="
+        echo "===================="
+        
+        if ! command -v ccache >/dev/null 2>&1; then
+          echo "⚠️  ccache not installed, skipping ccache stats"
+          echo "===================="
+          exit 0
+        fi
+        
+        ccache -s || true
+        echo "====================="
+        echo "=== ccache config ==="
+        echo "====================="
+        ccache -p || true
+        echo "====================="
+
+        STATS="$(ccache -s)"
+        
+        CACHEABLE=$(echo "$STATS" | awk '/Cacheable calls:/ {
+          match($0, /[0-9]+/); 
+          print substr($0, RSTART, RLENGTH)
+        }' | head -n1)
+        
+        HITS=$(echo "$STATS" | awk '/^[[:space:]]*Hits:/ {
+          match($0, /[0-9]+/); 
+          print substr($0, RSTART, RLENGTH)
+        }' | head -n1)
+        
+        DIRECT=$(echo "$STATS" | awk '/Direct:/ {
+          match($0, /[0-9]+/); 
+          print substr($0, RSTART, RLENGTH)
+        }' | head -n1)
+        
+        if [ "${CACHEABLE:-0}" -gt 0 ]; then
+          HIT_RATE=$(awk -v h="${HITS:-0}" -v c="$CACHEABLE" 'BEGIN{printf "%.1f", (h/c)*100}')
+          DIRECT_RATE=$(awk -v d="${DIRECT:-0}" -v c="$CACHEABLE" 'BEGIN{printf "%.1f", (d/c)*100}')
+        else
+          HIT_RATE="0.0"
+          DIRECT_RATE="0.0"
+        fi
+        
+        echo "hit_rate=${HIT_RATE}%"
+        echo "direct_rate=${DIRECT_RATE}%"
+
+        if [ "${{ inputs.clear_stats }}" = "true" ]; then
+          echo "=== ccache reset ==="
+          echo "====================="
+          ccache -z || true
+          echo "====================="
+        else
+          echo "Keeping ccache stats for next run"
+        fi
+
+    - name: Show ccache folder Stats
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        # shellcheck disable=SC1091
+        source /tmp/cache_summary.sh
+
+        echo "==============="
+        echo "=== .ccache ==="
+        echo "==============="
+        summarize_dir /home/runner/.ccache 10 5 || true
+
+    - name: Show Bazel Cache folder Stats
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        # shellcheck disable=SC1091
+        source /tmp/cache_summary.sh
+        echo "===================="
+        echo "=== .cache/bazel ==="
+        echo "===================="
+        summarize_dir /home/runner/.cache/bazel 10 5 || true
+        
+    - name: Show ld cache folder Stats
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        set -euo pipefail
+        # shellcheck disable=SC1091
+        source /tmp/cache_summary.sh
+        echo "================="
+        echo "=== .ld_cache ==="
+        echo "================="
+        summarize_dir /home/runner/.ld_cache 10 5 || true
+        

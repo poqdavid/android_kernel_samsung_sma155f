@@ -1,0 +1,404 @@
+name: Kernel Build Process
+permissions:
+  contents: write
+  actions: write
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      android_version:
+        required: true
+        type: string
+      kernel_version:
+        required: true
+        type: string
+      sublevel:
+        required: true
+        type: string
+      os_patch_level:
+        required: true
+        type: string
+      variant:
+        required: false
+        type: string
+      feature_set:
+        required: true
+        type: string
+      use_repo:
+        required: false
+        type: boolean
+
+jobs:
+  build-gki:
+    name: "${{ inputs.kernel_version }}.${{ inputs.sublevel }}-${{ inputs.android_version }}-${{ inputs.os_patch_level }} (${{ inputs.variant }})"
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v5
+
+
+    - name: 🧹 Emergency Disk Cleanup
+      uses: ./.github/actions/disk-cleanup
+
+    - name: Free Disk Space
+      if: false
+      uses: endersonmenezes/free-disk-space@v3  # Use @main for latest, @v3 for stable
+      with:
+        remove_android: true
+        remove_dotnet: true
+        remove_haskell: true
+        remove_tool_cache: true
+        #remove_packages: "azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox postgresql* temurin-* *llvm* mysql* dotnet-sdk-*"
+        #remove_packages_one_command: true
+        remove_folders: "/usr/share/swift /usr/share/miniconda /usr/share/az* /usr/local/lib/node_modules /usr/local/share/chromium /usr/local/share/powershell /usr/local/julia /usr/local/aws-cli /usr/local/aws-sam-cli /usr/share/gradle"
+        rm_cmd: "rmz"  # Use 'rmz' for faster deletion (default: 'rm')
+        rmz_version: "3.1.1"  # Required when rm_cmd is 'rmz'
+        testing: false
+
+    - name: Setup more Swap (for LTO)
+      uses: thejerrybao/setup-swap-space@v1   # or pierotofy/set-swap-space
+      with:
+        swap-size-gb: 16          # 10-24 GB is common for heavy LTO
+        # swap-space-path: /mnt/swapfile   # optional
+
+    - name: Setup Build Environment
+      uses: ./.github/actions/setup-build-environment
+      env:
+        BOOT_SIGN_KEY: ${{ secrets.BOOT_SIGN_KEY }}
+          
+    - name: Download Kernel Repository
+      uses: ./.github/actions/download-kernel
+      with:
+        version: ${{ inputs.version }}
+        android_version: ${{ inputs.android_version }}
+        kernel_version: ${{ inputs.kernel_version }}
+        os_patch_level: ${{ inputs.os_patch_level }}
+        use_repo: ${{ inputs.use_repo }}
+
+    - name: Set Build Timestamp from Kernel Commit
+      shell: bash
+      run: |
+        set -x
+        
+        # Verify kernel/common exists and is a git repo
+        if [ ! -d "${{ github.workspace }}/kernel/common" ]; then
+          echo "ERROR: kernel/common directory does not exist!"
+          echo "Contents of kernel/:"
+          ls -la "${{ github.workspace }}/kernel/" || true
+          exit 1
+        fi
+        
+        if [ ! -d "${{ github.workspace }}/kernel/common/.git" ]; then
+          echo "ERROR: kernel/common is not a git repository!"
+          exit 1
+        fi
+        
+        # Try to get commit timestamp
+        SOURCE_DATE_EPOCH=$(git -C "${{ github.workspace }}/kernel/common" log -1 --format=%ct 2>&1)
+        if [ -z "$SOURCE_DATE_EPOCH" ] || [ "$SOURCE_DATE_EPOCH" = "0" ]; then
+          echo "WARNING: Failed to get commit timestamp from kernel/common, using current time"
+          SOURCE_DATE_EPOCH=$(date -u +%s)
+        fi
+        
+        echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >> $GITHUB_ENV
+        KBUILD_TS=$(date -u -d @${SOURCE_DATE_EPOCH} '+%a %b %d %H:%M:%S UTC %Y')
+        echo "KBUILD_BUILD_TIMESTAMP=${KBUILD_TS}" >> $GITHUB_ENV
+        # Set git author/committer date so any commits done by actions use this timestamp
+        GIT_DATE=$(date -u -d @${SOURCE_DATE_EPOCH} '+%Y-%m-%dT%H:%M:%SZ')
+        echo "GIT_COMMITTER_DATE=${GIT_DATE}" >> $GITHUB_ENV
+        echo "GIT_AUTHOR_DATE=${GIT_DATE}" >> $GITHUB_ENV
+        echo "Build timestamp set to: $(date -u -d @${SOURCE_DATE_EPOCH} '+%Y-%m-%d %H:%M:%S UTC') (epoch: $SOURCE_DATE_EPOCH)"
+
+    - name: Extract Sublevel and Set File Name
+      id: extract
+      uses: ./.github/actions/extract-sublevel-file-name
+      with:
+        android_version: ${{ inputs.android_version }}
+        kernel_version: ${{ inputs.kernel_version }}
+        sublevel: ${{ inputs.sublevel }}
+        os_patch_level: ${{ inputs.os_patch_level }}
+        variant: ${{ inputs.variant }}
+
+    - name: Kernel Fixes
+      uses: ./.github/actions/kernel-fixes
+      with:
+        version: ${{ inputs.version }}
+        android_version: ${{ inputs.android_version }}
+        kernel_version: ${{ inputs.kernel_version }}
+        sublevel: ${{ steps.extract.outputs.sublevel }}
+        os_patch_level: ${{ inputs.os_patch_level }}
+
+    - name: Setup KernelSU-Next
+      if: contains(inputs.feature_set, 'KSUN') || inputs.feature_set == 'FULL'
+      uses: ./.github/actions/kernelsu
+
+    - name: SUSFS
+      if: contains(inputs.feature_set, 'SUSFS') || inputs.feature_set == 'FULL'
+      uses: ./.github/actions/susfs
+      with:
+        version: ${{ inputs.version }}
+        android_version: ${{ inputs.android_version }}
+        kernel_version: ${{ inputs.kernel_version }}
+        os_patch_level: ${{ inputs.os_patch_level }}
+        sublevel: ${{ steps.extract.outputs.sublevel }}
+
+    - name: Baseband Guard
+      if: (contains(inputs.feature_set, 'BBG') || inputs.feature_set == 'FULL')
+      uses: ./.github/actions/bbg
+
+    - name: Setup Networking
+      if: contains(inputs.feature_set, 'NET') || inputs.feature_set == 'FULL'
+      uses: ./.github/actions/networking
+      with:
+        kernel_version: ${{ inputs.kernel_version }}
+        android_version: ${{ inputs.android_version }}
+
+    - name: DroidSpaces-OSS Patches
+      if: contains(inputs.feature_set, 'DS') || inputs.feature_set == 'FULL'
+      uses: ./.github/actions/droidspaces
+      with:
+        version: ${{ inputs.version }}
+        kernel_version: ${{ inputs.kernel_version }}
+
+    - name: Setup Misc Configs
+      uses: ./.github/actions/misc
+      with:
+        version: ${{ inputs.version }}
+        kernel_version: ${{ inputs.kernel_version }}
+        android_version: ${{ inputs.android_version }}
+        sublevel: ${{ steps.extract.outputs.sublevel }}
+        variant: ${{ inputs.variant }}
+
+    - name: Apply Device-Specific Patches
+      uses: ./.github/actions/apply-device-patches
+      with:
+        version: ${{ inputs.version }}
+        kernel_version: ${{ inputs.kernel_version }}
+
+    - name: Apply ABI Compare Bypass
+      if: false
+      working-directory: ${{ github.workspace }}/kernel
+      run: |
+        # ABI compare bypass per kernel/android version
+        # Edit each block as needed per version
+        if [[ "$ANDROID_VERSION" == "android12" && "$KERNEL_VERSION" == "5.10" ]]; then
+          sed -i 's/^\s*exit 1$/    echo "Who Cares? Bypassing Now!"/' build/abi/compare_to_symbol_list
+        elif [[ "$ANDROID_VERSION" == "android13" && "$KERNEL_VERSION" == "5.10" ]]; then
+          sed -i 's/^\s*exit 1$/    echo "Who Cares? Bypassing Now!"/' build/kernel/abi/compare_to_symbol_list
+        elif [[ "$ANDROID_VERSION" == "android13" && "$KERNEL_VERSION" == "5.15" ]]; then
+          sed -i 's/^\s*exit 1$/    echo "Who Cares? Bypassing Now!"/' build/kernel/abi/compare_to_symbol_list
+        elif [[ "$ANDROID_VERSION" == "android14" && "$KERNEL_VERSION" == "5.15" ]]; then
+          perl -i -pe 's/^(\s*)return 1$/$1print("Who Cares? Bypassing Now!")\n$1return 0/g if /if missing_symbols:/../return 1/' build/kernel/abi/check_buildtime_symbol_protection.py
+        elif [[ "$ANDROID_VERSION" == "android14" && "$KERNEL_VERSION" == "6.1" ]]; then
+          perl -i -pe 's/^(\s*)return 1$/$1print("Who Cares? Bypassing Now!")\n$1return 0/g if /if missing_symbols:/../return 1/' build/kernel/abi/check_buildtime_symbol_protection.py
+        elif [[ "$ANDROID_VERSION" == "android15" && "$KERNEL_VERSION" == "6.6" ]]; then
+          perl -i -pe 's/^(\s*)return 1$/$1print("Who Cares? Bypassing Now!")\n$1return 0/g if /if missing_symbols:/../return 1/' build/kernel/abi/check_buildtime_symbol_protection.py
+        fi
+
+    - name: Apply Kernel Branding
+      uses: ./.github/actions/apply-kernel-branding
+      with:
+        variant: ${{ inputs.variant }}
+        kernel_version: ${{ inputs.kernel_version }}
+        android_version: ${{ inputs.android_version }}
+        sublevel: ${{ steps.extract.outputs.sublevel }}
+
+    - name: Remove Protected Exports
+      uses: ./.github/actions/remove-protected-exports
+
+    - name: Clean Kernel Flags
+      uses: ./.github/actions/clean-kernel-flags
+
+    - name: Scan and collect patch rejects
+      id: scan
+      if: ${{ always() && inputs.variant == 'Normal' }}
+      uses: ./.github/actions/scan-patch-rejects
+        
+    - name: Upload Rejects
+      if: ${{ always() && inputs.variant == 'Normal' }}
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.extract.outputs.file_name }}-Rejects
+        path: patch-rejects/
+        if-no-files-found: ignore
+        compression-level: 9
+
+    - name: 'Setup Cache and Build Environment'
+      uses: ./.github/actions/cache-setup
+      with:
+        version: ${{ inputs.version }}
+        android_version: ${{ inputs.android_version }}
+        kernel_version: ${{ inputs.kernel_version }}
+        sublevel: ${{ steps.extract.outputs.sublevel }}
+
+    - name: Restore ccache
+      id: restore-ccache
+      if: |
+        inputs.version == 'android12-5.10' ||
+        inputs.version == 'android13-5.10' ||
+        inputs.version == 'android13-5.15'
+      uses: ./.github/actions/cache-restore
+      with:
+        cache_path: /home/runner/.ccache
+        cache_key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-${{ inputs.os_patch_level }}
+        cache_bucket: ccache-cache
+        compression_level: 9
+        restore_keys: |
+          ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-
+          ${{ inputs.android_version }}-${{ inputs.kernel_version }}-
+
+    - name: Restore lto-cache (ccache versions)
+      id: restore-lto-ccache
+      if: |
+        inputs.version == 'android12-5.10' ||
+        inputs.version == 'android13-5.10' ||
+        inputs.version == 'android13-5.15'
+      uses: ./.github/actions/cache-restore
+      with:
+        cache_path: /home/runner/.ld_cache
+        cache_key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-${{ inputs.os_patch_level }}
+        cache_bucket: lto-cache
+        compression_level: 9
+        restore_keys: |
+          ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-
+          ${{ inputs.android_version }}-${{ inputs.kernel_version }}-
+
+    - name: Restore bazel-cache
+      id: restore-bazel
+      if: |
+        inputs.version == 'android14-5.15' ||
+        inputs.version == 'android14-6.1' ||
+        inputs.version == 'android15-6.6' ||
+        inputs.version == 'android16-6.12'
+      uses: ./.github/actions/cache-restore
+      with:
+        cache_path: /home/runner/.cache/bazel
+        cache_key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-${{ inputs.os_patch_level }}
+        cache_bucket: bazel-cache
+        compression_level: 9
+        restore_keys: |
+          ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-
+          ${{ inputs.android_version }}-${{ inputs.kernel_version }}-
+
+    - name: Restore lto-cache (bazel versions)
+      id: restore-lto-bazel
+      if: |
+        inputs.version == 'android14-5.15' ||
+        inputs.version == 'android14-6.1' ||
+        inputs.version == 'android15-6.6' ||
+        inputs.version == 'android16-6.12'
+      uses: ./.github/actions/cache-restore
+      with:
+        cache_path: /home/runner/.ld_cache
+        cache_key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-${{ inputs.os_patch_level }}
+        cache_bucket: lto-cache
+        compression_level: 9
+        restore_keys: |
+          ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-
+          ${{ inputs.android_version }}-${{ inputs.kernel_version }}-
+
+    - name: Check cache hit
+      run: |
+        echo "Cache restore status:"        CCACHE_HIT="${{ steps.restore-ccache.outputs.cache-hit || 'skipped' }}"
+        LTO_CCACHE_HIT="${{ steps.restore-lto-ccache.outputs.cache-hit || 'skipped' }}"
+        BAZEL_HIT="${{ steps.restore-bazel.outputs.cache-hit || 'skipped' }}"
+        LTO_BAZEL_HIT="${{ steps.restore-lto-bazel.outputs.cache-hit || 'skipped' }}"
+        echo "  ccache: $CCACHE_HIT"
+        echo "  lto (ccache versions): $LTO_CCACHE_HIT"
+        echo "  bazel: $BAZEL_HIT"
+        echo "  lto (bazel versions): $LTO_BAZEL_HIT"
+
+    - name: Get Cache Stats
+      uses: ./.github/actions/cache-stats
+      with:
+        clear_stats: true
+
+    - name: Build Normal Kernel
+      env:
+        SOURCE_DATE_EPOCH: ${{ env.SOURCE_DATE_EPOCH }}
+        KBUILD_BUILD_TIMESTAMP: ${{ env.KBUILD_BUILD_TIMESTAMP }}
+      uses: ./.github/actions/build-kernel
+      with:
+        version: ${{ inputs.version }}
+        bypass: false
+
+    - name: Get Cache Stats
+      uses: ./.github/actions/cache-stats
+      with:
+        clear_stats: false
+
+    - name: Save ccache
+      if: |
+        inputs.version == 'android12-5.10' ||
+        inputs.version == 'android13-5.10' ||
+        inputs.version == 'android13-5.15'
+      uses: ./.github/actions/cache-save
+      with:
+        cache_path: /home/runner/.ccache
+        cache_key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-${{ inputs.os_patch_level }}
+        cache_bucket: ccache-cache
+        compression_level: 9
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Save lto-cache (ccache versions)
+      if: |
+        inputs.version == 'android12-5.10' ||
+        inputs.version == 'android13-5.10' ||
+        inputs.version == 'android13-5.15'
+      uses: ./.github/actions/cache-save
+      with:
+        cache_path: /home/runner/.ld_cache
+        cache_key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-${{ inputs.os_patch_level }}
+        cache_bucket: lto-cache
+        compression_level: 9
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Save bazel-cache
+      if: |
+        inputs.version == 'android14-5.15' ||
+        inputs.version == 'android14-6.1' ||
+        inputs.version == 'android15-6.6' ||
+        inputs.version == 'android16-6.12'
+      uses: ./.github/actions/cache-save
+      with:
+        cache_path: /home/runner/.cache/bazel
+        cache_key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-${{ inputs.os_patch_level }}
+        cache_bucket: bazel-cache
+        compression_level: 9
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Save lto-cache (bazel versions)
+      if: |
+        inputs.version == 'android14-5.15' ||
+        inputs.version == 'android14-6.1' ||
+        inputs.version == 'android15-6.6' ||
+        inputs.version == 'android16-6.12'
+      uses: ./.github/actions/cache-save
+      with:
+        cache_path: /home/runner/.ld_cache
+        cache_key: ${{ inputs.android_version }}-${{ inputs.kernel_version }}.${{ steps.extract.outputs.sublevel }}-${{ inputs.os_patch_level }}
+        cache_bucket: lto-cache
+        compression_level: 9
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build Bypass Kernel
+      env:
+        SOURCE_DATE_EPOCH: ${{ env.SOURCE_DATE_EPOCH }}
+        KBUILD_BUILD_TIMESTAMP: ${{ env.KBUILD_BUILD_TIMESTAMP }}
+      uses: ./.github/actions/build-kernel
+      with:
+        bypass: true
+        version: ${{ inputs.version }}
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v7
+      with:
+        name: ${{ steps.extract.outputs.file_name }}-AnyKernel3
+        path: ${{ github.workspace }}/AnyKernel3/**
+        if-no-files-found: ignore
+        compression-level: 9

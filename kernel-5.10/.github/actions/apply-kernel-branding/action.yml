@@ -1,0 +1,68 @@
+name: 'Apply Kernel Branding & Timestamp'
+description: 'Apply Wild kernel branding to kernel version string'
+inputs:
+  variant:
+    description: 'Variant of kernel to apply branding to'
+    required: true
+  kernel_version:
+    description: 'Kernel version (e.g., 6.1)'
+    required: true
+  android_version:
+    description: 'Android version (e.g., android14)'
+    required: true
+  version:
+    description: 'Combined version (e.g., android14-6.1)'
+    required: true
+  sublevel:
+    description: 'Sublevel of kernel version (e.g., 1)'
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Apply Kernel Name Branding
+      shell: bash
+      if: false
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        CONFIG_FRAGMENT="${{ github.workspace }}/wild_gki.fragment"
+        touch "$CONFIG_FRAGMENT"
+
+        DEFCONFIG="${{ github.workspace }}/kernel/common/arch/arm64/configs/gki_defconfig"
+
+        #VERSION="${{ inputs.version }}"
+        #ANDROID_PART=$(echo "$VERSION" | cut -d- -f1)
+        #KERNEL_PART=$(echo "$VERSION" | cut -d- -f2)
+
+        #if [ "${{ inputs.variant }}" == "Wild" ]; then
+        #  tac scripts/setlocalversion | awk '!seen && /^echo / {seen=1; next} 1' | tac > scripts/setlocalversion.tmp
+        #  mv scripts/setlocalversion.tmp scripts/setlocalversion
+        #  if [[ "$KERNEL_PART" == "6.6" || "$KERNEL_PART" == "6.12" ]]; then
+        #    KERNEL_STRING="$KERNEL_PART.${{ inputs.sublevel }}-$ANDROID_PART"
+        #    echo "echo \"$KERNEL_STRING-Wild\"" >> scripts/setlocalversion
+        #  else
+        #    echo 'echo "-Wild"' >> scripts/setlocalversion
+        #  fi
+        #  chmod +x scripts/setlocalversion
+        #else
+        #  if grep -q '^CONFIG_LOCALVERSION=' "$DEFCONFIG"; then
+        #   LOCALVERSION_VALUE="$(grep -m1 '^CONFIG_LOCALVERSION=' "$DEFCONFIG" | sed -E 's/^CONFIG_LOCALVERSION="?([^"]*)"?$/\1/')"
+        #   echo "CONFIG_LOCALVERSION=\"${LOCALVERSION_VALUE}-Wild\"" >> "$CONFIG_FRAGMENT"
+        #  else
+        #    echo 'CONFIG_LOCALVERSION="-Wild"' >> "$CONFIG_FRAGMENT"
+        #  fi
+        #fi
+
+    - name: Apply Kernel Configuration
+      shell: bash
+      working-directory: ${{ github.workspace }}/kernel/common
+      run: |
+        CONFIG_FRAGMENT="${{ github.workspace }}/wild_gki.fragment"
+        touch "$CONFIG_FRAGMENT"
+
+        DEFCONFIG="${{ github.workspace }}/kernel/common/arch/arm64/configs/gki_defconfig"
+        
+        cat >> "${{ github.workspace }}/wild_gki.fragment" << 'EOF'
+        CONFIG_LOCALVERSION="-Wild"
+        # CONFIG_LOCALVERSION_AUTO is not set
+        EOF

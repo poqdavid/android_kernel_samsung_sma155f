@@ -1,150 +1,127 @@
-# How do I submit patches to Android Common Kernels
+<div align="center">
 
-1. BEST: Make all of your changes to upstream Linux. If appropriate, backport to the stable releases.
-   These patches will be merged automatically in the corresponding common kernels. If the patch is already
-   in upstream Linux, post a backport of the patch that conforms to the patch requirements below.
-   - Do not send patches upstream that contain only symbol exports. To be considered for upstream Linux,
-additions of `EXPORT_SYMBOL_GPL()` require an in-tree modular driver that uses the symbol -- so include
-the new driver or changes to an existing driver in the same patchset as the export.
-   - When sending patches upstream, the commit message must contain a clear case for why the patch
-is needed and beneficial to the community. Enabling out-of-tree drivers or functionality is not
-not a persuasive case.
+# 🔥 Wild Kernels for Android
 
-2. LESS GOOD: Develop your patches out-of-tree (from an upstream Linux point-of-view). Unless these are
-   fixing an Android-specific bug, these are very unlikely to be accepted unless they have been
-   coordinated with kernel-team@android.com. If you want to proceed, post a patch that conforms to the
-   patch requirements below.
+[![KernelSU](https://img.shields.io/badge/KernelSU-Supported-green)](https://kernelsu.org/)
+[![SUSFS](https://img.shields.io/badge/SUSFS-Integrated-orange)](https://gitlab.com/simonpunk/susfs4ksu)
 
-# Common Kernel patch requirements
+</div>
 
-- All patches must conform to the Linux kernel coding standards and pass `script/checkpatch.pl`
-- Patches shall not break gki_defconfig or allmodconfig builds for arm, arm64, x86, x86_64 architectures
-(see  https://source.android.com/setup/build/building-kernels)
-- If the patch is not merged from an upstream branch, the subject must be tagged with the type of patch:
-`UPSTREAM:`, `BACKPORT:`, `FROMGIT:`, `FROMLIST:`, or `ANDROID:`.
-- All patches must have a `Change-Id:` tag (see https://gerrit-review.googlesource.com/Documentation/user-changeid.html)
-- If an Android bug has been assigned, there must be a `Bug:` tag.
-- All patches must have a `Signed-off-by:` tag by the author and the submitter
+## ⚠️ Your warranty is no longer valid!
 
-Additional requirements are listed below based on patch type
+I am **not responsible** for bricked devices, damaged hardware, or any issues that arise from using this kernel.
 
-## Requirements for backports from mainline Linux: `UPSTREAM:`, `BACKPORT:`
+**Please** do thorough research and fully understand the features included in this kernel before flashing it!
 
-- If the patch is a cherry-pick from Linux mainline with no changes at all
-    - tag the patch subject with `UPSTREAM:`.
-    - add upstream commit information with a `(cherry picked from commit ...)` line
-    - Example:
-        - if the upstream commit message is
-```
-        important patch from upstream
+By flashing this kernel, **YOU** are choosing to make these modifications. If something goes wrong, **do not blame me**!
 
-        This is the detailed description of the important patch
+---
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
-```
->- then Joe Smith would upload the patch for the common kernel as
-```
-        UPSTREAM: important patch from upstream
+### 🚨 Proceed at your own risk!
 
-        This is the detailed description of the important patch
+---
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
+## 🔧 Available Kernels
 
-        Bug: 135791357
-        Change-Id: I4caaaa566ea080fa148c5e768bb1a0b6f7201c01
-        (cherry picked from commit c31e73121f4c1ec41143423ac6ce3ce6dafdcec1)
-        Signed-off-by: Joe Smith <joe.smith@foo.org>
-```
+| Kernel | Repository | Status |
+|--------|------------|--------|
+| 🏗️ **GKI** | [GKI_KernelSU_SUSFS](https://github.com/WildKernels/GKI_KernelSU_SUSFS) | ✅ Active |
+| 👑 **Sultan** | [Sultan_KernelSU_SUSFS](https://github.com/WildKernels/Sultan_KernelSU_SUSFS) | ✅ Active |
+| 📱 **OnePlus** | [OnePlus_KernelSU_SUSFS](https://github.com/WildKernels/OnePlus_KernelSU_SUSFS) | ✅ Active |
 
-- If the patch requires any changes from the upstream version, tag the patch with `BACKPORT:`
-instead of `UPSTREAM:`.
-    - use the same tags as `UPSTREAM:`
-    - add comments about the changes under the `(cherry picked from commit ...)` line
-    - Example:
-```
-        BACKPORT: important patch from upstream
+---
 
-        This is the detailed description of the important patch
+## 🔗 Additional Resources
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
+- 🩹 [Kernel Patches](https://github.com/WildKernels/kernel_patches)
+- 📜 [Old Build Scripts](https://github.com/TheWildJames/kernel_build_scripts)
+- ⚡ [Kernel Flasher](https://github.com/fatalcoder524/KernelFlasher)
 
-        Bug: 135791357
-        Change-Id: I4caaaa566ea080fa148c5e768bb1a0b6f7201c01
-        (cherry picked from commit c31e73121f4c1ec41143423ac6ce3ce6dafdcec1)
-        [joe: Resolved minor conflict in drivers/foo/bar.c ]
-        Signed-off-by: Joe Smith <joe.smith@foo.org>
-```
+---
 
-## Requirements for other backports: `FROMGIT:`, `FROMLIST:`,
+## 📋 Installation Instructions
 
-- If the patch has been merged into an upstream maintainer tree, but has not yet
-been merged into Linux mainline
-    - tag the patch subject with `FROMGIT:`
-    - add info on where the patch came from as `(cherry picked from commit <sha1> <repo> <branch>)`. This
-must be a stable maintainer branch (not rebased, so don't use `linux-next` for example).
-    - if changes were required, use `BACKPORT: FROMGIT:`
-    - Example:
-        - if the commit message in the maintainer tree is
-```
-        important patch from upstream
+For GKI installation, please follow the official guide:
 
-        This is the detailed description of the important patch
+📖 **[KernelSU Installation Guide](https://kernelsu.org/guide/installation.html)**
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
-```
->- then Joe Smith would upload the patch for the common kernel as
-```
-        FROMGIT: important patch from upstream
+---
 
-        This is the detailed description of the important patch
+## ✨ Features
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
+- 🔐 **KernelSU**: A root solution for Android GKI devices that works in kernel mode and grants root permission to userspace applications directly in kernel space
+- 🛡️ **SUSFS**: An addon root hiding kernel patches and userspace module for KernelSU
 
-        Bug: 135791357
-        (cherry picked from commit 878a2fd9de10b03d11d2f622250285c7e63deace
-         https://git.kernel.org/pub/scm/linux/kernel/git/foo/bar.git test-branch)
-        Change-Id: I4caaaa566ea080fa148c5e768bb1a0b6f7201c01
-        Signed-off-by: Joe Smith <joe.smith@foo.org>
-```
+---
 
+## 🏆 Credits
 
-- If the patch has been submitted to LKML, but not accepted into any maintainer tree
-    - tag the patch subject with `FROMLIST:`
-    - add a `Link:` tag with a link to the submittal on lore.kernel.org
-    - add a `Bug:` tag with the Android bug (required for patches not accepted into
-a maintainer tree)
-    - if changes were required, use `BACKPORT: FROMLIST:`
-    - Example:
-```
-        FROMLIST: important patch from upstream
+- 🔐 **KernelSU**: Developed by [tiann](https://github.com/tiann/KernelSU)
+- 🚀 **KernelSU-Next**: Developed by [rifsxd](https://github.com/KernelSU-Next/KernelSU-Next)
+- ✨ **Magic-KSU**: Developed by [5ec1cff](https://github.com/5ec1cff/KernelSU)
+- 🛡️ **SUSFS**: Developed by [simonpunk](https://gitlab.com/simonpunk/susfs4ksu.git)
+- 🛡️ **Baseband-guard (BBG)**: Developed by [vc-teahouse](https://github.com/vc-teahouse/Baseband-guard)
+- 📦 **SUSFS Module**: Developed by [sidex15](https://github.com/sidex15)
+- 👑 **Sultan Kernels**: Developed by [kerneltoast](https://github.com/kerneltoast)
+- 🔧 **Device Boot Fix**: [Boot fix commit](https://github.com/Anything-at-25-00/android_kernel_common_android12-5.10/commit/2476d262b597fe8af82cfb7aaf96676f51c6b4ed) for fixing some devices not booting
 
-        This is the detailed description of the important patch
+🙏 Special thanks to the open-source community for their contributions!
 
-        Signed-off-by: Fred Jones <fred.jones@foo.org>
+---
 
-        Bug: 135791357
-        Link: https://lore.kernel.org/lkml/20190619171517.GA17557@someone.com/
-        Change-Id: I4caaaa566ea080fa148c5e768bb1a0b6f7201c01
-        Signed-off-by: Joe Smith <joe.smith@foo.org>
-```
+## 💬 Support
 
-## Requirements for Android-specific patches: `ANDROID:`
+If you encounter any issues or need help, feel free to:
+- 🐛 Open an issue in this repository
+- 💬 Reach out to me directly
 
-- If the patch is fixing a bug to Android-specific code
-    - tag the patch subject with `ANDROID:`
-    - add a `Fixes:` tag that cites the patch with the bug
-    - Example:
-```
-        ANDROID: fix android-specific bug in foobar.c
+---
 
-        This is the detailed description of the important fix
+## ⚠️ Disclaimer
 
-        Fixes: 1234abcd2468 ("foobar: add cool feature")
-        Change-Id: I4caaaa566ea080fa148c5e768bb1a0b6f7201c01
-        Signed-off-by: Joe Smith <joe.smith@foo.org>
-```
+Flashing this kernel will void your warranty, and there is always a risk of bricking your device. Please make sure to:
+- 💾 Back up your data
+- 🧠 Understand the risks before proceeding
 
-- If the patch is a new feature
-    - tag the patch subject with `ANDROID:`
-    - add a `Bug:` tag with the Android bug (required for android-specific features)
+**🚨 Proceed at your own risk!**
 
+---
+
+<div align="center">
+
+## 📱 Connect With Us
+
+[![Telegram](https://img.shields.io/badge/Telegram-TheWildJames-blue?logo=telegram)](https://t.me/TheWildJames)
+[![Telegram Group](https://img.shields.io/badge/Telegram-Wild__Kernels-blue?logo=telegram)](https://t.me/WildKernels)
+
+</div>
+
+---
+
+## 🌟 Special Thanks
+
+**These amazing people help make this project possible! ❤️**
+
+| Contributor | Contribution |
+|-------------|-------------|
+| 🛡️ [simonpunk](https://gitlab.com/simonpunk/susfs4ksu.git) | Created SUSFS! |
+| 📦 [sidex15](https://github.com/sidex15) | Created module! |
+| 🩹 [backslashxx](https://github.com/backslashxx) | Helped with patches! |
+| 🔧 [Teemo](https://github.com/liqideqq) | Helped with patches! |
+| 💝 [幕落](https://github.com/MuLuo688) | Donation! |
+| 🛡️ [vc-teahouse](https://github.com/vc-teahouse) | Created Baseband-guard (BBG)! |
+
+*If you have contributed and are not listed here, please remind me!* 🙏
+
+---
+
+## 💝 Donations
+
+Any and all donations are appreciated!
+
+- PayPal: [bauhd@outlook.com](mailto:bauhd@outlook.com)
+- Card: <https://buy.stripe.com/5kQ28sdi08Nr0Xc2fU5os00>
+- LTC: MVaN1ToSuks2cdK9mB3M8EHCfzQSyEMf6h
+- BTC: 3BBXAMS4ZuCZwfbTXxWGczxHF4isymeyxG
+- ETH: 0x2b9C846c84d58717e784458406235C09a834274e
+- Patreon: <https://patreon.com/WildKernels>

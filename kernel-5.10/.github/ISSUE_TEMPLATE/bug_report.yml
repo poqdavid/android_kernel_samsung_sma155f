@@ -1,0 +1,116 @@
+name: Bug Report
+description: Create a bug report
+labels: [Bug]
+
+body:
+  - type: input
+    attributes:
+        label: Device Model
+        description: Your device model
+        placeholder: "e.g., Google Pixel 8"
+    validations:
+        required: true
+
+  - type: input
+    attributes:
+        label: Android Version
+        description: Your Android version
+        placeholder: "e.g., Android 16"
+    validations:
+        required: true
+
+  - type: input
+    attributes:
+        label: Stock Kernel Version
+        description: The original kernel version on your device
+        placeholder: "e.g., 6.1.134-android14"
+    validations:
+        required: true
+
+  - type: input
+    attributes:
+        label: Kernel Flashed Version
+        description: The kernel version you flashed
+        placeholder: "e.g., 6.1.134-android14"
+    validations:
+        required: true
+
+  - type: input
+    attributes:
+        label: KSUN Kernel Version
+        description: Your KSUN kernel version number
+        placeholder: "e.g., 13971"
+    validations:
+        required: true
+
+  - type: dropdown
+    attributes:
+        label: Manager
+        description: Which KernelSU manager you're using
+        options:
+          - Wild KSU
+          - KernelSU Next
+          - KernelSU
+          - MKSU
+          - KowSU
+          - RKSU
+          - SukiSU
+    validations:
+        required: true
+
+  - type: input
+    attributes:
+        label: Manager Version
+        description: Your manager version
+        placeholder: "e.g., v0.0.165(13974)"
+    validations:
+        required: true
+
+  - type: input
+    attributes:
+        label: Release Flashed
+        description: Which release version you flashed
+        placeholder: "e.g., v1.5.12-r2"
+    validations:
+        required: true
+
+  - type: input
+    attributes:
+        label: Full File Name
+        description: The complete filename of the kernel you flashed
+        placeholder: "e.g., KSUN-13971-android14-6.1.134-2025-05-AnyKernel3.zip"
+    validations:
+        required: true
+
+  - type: checkboxes
+    attributes:
+        label: Have you tested both build variants?
+        description: You must test both Normal and Module Check Bypass variants before reporting
+        options:
+          - label: "Yes, I have tried both Normal and Module Check Bypass variants"
+            required: true
+    validations:
+        required: true
+
+  - type: input
+    attributes:
+        label: Last Working Release
+        description: The last release version that worked (if any)
+        placeholder: "e.g., v1.5.9-r11"
+    validations:
+        required: false
+
+  - type: input
+    attributes:
+        label: Last Working File Name
+        description: The filename of the last working kernel (if any)
+        placeholder: "e.g., KSUN-13970-android14-6.1.134-2025-05-AnyKernel3.zip"
+    validations:
+        required: false
+
+  - type: textarea
+    attributes:
+        label: Describe the bug and attach any screenshots*
+        description: A clear and concise description of what the bug is. Please get log from /data/adb/ksu/logs/dmesg.log
+    validations:
+        required: true

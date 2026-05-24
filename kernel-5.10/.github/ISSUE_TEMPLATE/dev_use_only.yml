@@ -1,0 +1,30 @@
+name: "🔧 Developer Use Only"
+description: "This template is reserved for developer use only. Do not use for regular bug reports or feature requests."
+title: "[DEV] "
+labels: ["dev-only"]
+assignees: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ⚠️ Developer Use Only
+        
+        This issue template is reserved for internal development purposes only.
+        
+        **For regular users:**
+        - Use the [Bug Report](bug_report.yml) template for bugs
+        - Use the [Feature Request](feature_request.yml) template for new features
+        
+        ---
+        
+        **Developer Instructions:**
+        This is a blank template for consolidating issues, tracking internal tasks, or other development purposes.
+        
+  - type: textarea
+    id: content
+    attributes:
+      label: "Content"
+      description: "Add your content here"
+      placeholder: "Enter your issue content..."
+    validations:
+      required: true

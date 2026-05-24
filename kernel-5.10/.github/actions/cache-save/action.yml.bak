@@ -1,0 +1,258 @@
+name: 'Save Cache'
+description: 'Archives and uploads cache to GitHub Releases. Supports both single and multiple cache paths/keys/buckets.'
+
+inputs:
+  cache_path:
+    description: 'Single path where cache is saved (use cache_paths for multiple)'
+    required: false
+    type: string
+  cache_paths:
+    description: 'Multiline list of paths where caches are saved (one per line)'
+    required: false
+    type: string
+    default: ""
+  cache_key:
+    description: 'Unique key for the cache (use cache_keys for multiple)'
+    required: false
+    type: string
+  cache_keys:
+    description: 'Multiline list of unique keys for caches (one per line, must match cache_paths)'
+    required: false
+    type: string
+    default: ""
+  cache_bucket:
+    description: 'Single tag name for the release (use cache_buckets for multiple)'
+    required: false
+    default: 'general-cache'
+  cache_buckets:
+    description: 'Multiline list of tag names for releases (one per line, must match cache_paths)'
+    required: false
+    type: string
+    default: ""
+  compression_level:
+    description: 'Compression level (0-9). 0 = No compression, 1 = Fast, 19 = Best.'
+    required: false
+    type: number
+    default: 6
+  github_token:
+    description: 'GitHub token for release upload authentication'
+    required: true
+    type: string
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Archive, Split, and Upload Cache
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        GH_TOKEN: ${{ inputs.github_token }}
+        TARGET_REPO: "${{ github.repository }}"
+      run: |
+        set -euo pipefail
+
+        # Validate and parse inputs
+        PATHS_INPUT="${{ inputs.cache_paths }}"
+        KEYS_INPUT="${{ inputs.cache_keys }}"
+        BUCKETS_INPUT="${{ inputs.cache_buckets }}"
+        
+        # If multiple inputs are empty, fall back to single inputs
+        if [ -z "$PATHS_INPUT" ]; then
+          PATHS_INPUT="${{ inputs.cache_path }}"
+        fi
+        if [ -z "$KEYS_INPUT" ]; then
+          KEYS_INPUT="${{ inputs.cache_key }}"
+        fi
+        if [ -z "$BUCKETS_INPUT" ]; then
+          BUCKETS_INPUT="${{ inputs.cache_bucket }}"
+        fi
+        
+        # Split inputs into arrays
+        IFS=$'\n' read -rd '' -a PATHS_ARRAY <<<"$PATHS_INPUT" || true
+        IFS=$'\n' read -rd '' -a KEYS_ARRAY <<<"$KEYS_INPUT" || true
+        IFS=$'\n' read -rd '' -a BUCKETS_ARRAY <<<"$BUCKETS_INPUT" || true
+        
+        # Validate array lengths match
+        if [[ ${#PATHS_ARRAY[@]} -ne ${#KEYS_ARRAY[@]} ]] || [[ ${#PATHS_ARRAY[@]} -ne ${#BUCKETS_ARRAY[@]} ]]; then
+          echo "::error::Mismatch in array lengths: paths=${#PATHS_ARRAY[@]}, keys=${#KEYS_ARRAY[@]}, buckets=${#BUCKETS_ARRAY[@]}"
+          exit 1
+        fi
+        
+        # Git configuration for releases
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        TARGET_COMMIT=$(git rev-parse HEAD)
+        
+        # Helper function to handle release creation
+        ensure_release() {
+          local tag_name="$1"
+          local attempts=0
+          
+          if gh release view "$tag_name" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            echo "Release '$tag_name' already exists. Ready for upload."
+            gh release edit "$tag_name" --latest=false --repo "$TARGET_REPO" >/dev/null 2>&1 || true
+            return 0
+          fi
+
+          echo "Tag '$tag_name' not found or release is missing. Creating release..."
+          gh release create "$tag_name" \
+            --target "$TARGET_COMMIT" \
+            --title "Build Cache" \
+            --notes "Automated storage for build assets" \
+            --latest=false \
+            --repo "$TARGET_REPO"
+
+          until gh release view "$tag_name" --repo "$TARGET_REPO" >/dev/null 2>&1; do
+            attempts=$((attempts + 1))
+            if [ "$attempts" -ge 5 ]; then
+              echo "::error::Release '$tag_name' is still not visible after creation."
+              return 1
+            fi
+            sleep 3
+          done
+
+          gh release edit "$tag_name" --latest=false --repo "$TARGET_REPO" >/dev/null 2>&1 || true
+        }
+        
+        upload_with_retry() {
+          local file=$1
+          local tag_name=$2
+          local max_attempts=3
+          local timeout_duration="30m"  # Increased timeout for large files
+          
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "  Attempt $i for $file..."
+            
+            if timeout $timeout_duration gh release upload "$tag_name" "$file" --clobber --repo "$TARGET_REPO"; then
+              echo "  ✅ Successfully uploaded $file"
+              return 0
+            else
+              local exit_code=$?
+              if [ $exit_code -eq 124 ]; then
+                echo "  ⚠ Attempt $i timed out (timeout after $timeout_duration). Retrying..."
+              else
+                echo "  ⚠ Attempt $i failed with exit code $exit_code. Retrying..."
+              fi
+            fi
+            
+            if [ $i -lt $max_attempts ]; then
+              sleep 5
+            fi
+          done
+          return 1
+        }
+        
+        # Process each cache entry
+        for ((idx=0; idx<${#PATHS_ARRAY[@]}; idx++)); do
+          CACHE_PATH="${PATHS_ARRAY[$idx]}"
+          CACHE_KEY="${KEYS_ARRAY[$idx]}"
+          CACHE_BUCKET="${BUCKETS_ARRAY[$idx]}"
+          
+          [ -z "$CACHE_PATH" ] && continue
+          
+          TAG_NAME="$CACHE_BUCKET"
+          BASE_FILENAME="cache-$CACHE_KEY"
+          
+          if [ "${{ inputs.compression_level }}" -eq 0 ]; then
+            FILENAME="$BASE_FILENAME.tar"
+          else
+            FILENAME="$BASE_FILENAME.tzst"
+          fi
+          
+          echo "::group:: [$((idx+1))/${#PATHS_ARRAY[@]}] Checking Release State ($CACHE_BUCKET)"
+          ensure_release "$TAG_NAME"
+          echo "::endgroup::"
+          
+          echo "::group:: [$((idx+1))/${#PATHS_ARRAY[@]}] Archiving Path: $CACHE_PATH"
+          
+          if [ ! -d "$CACHE_PATH" ] && [ ! -f "$CACHE_PATH" ]; then
+            echo "⚠️ Target path not found. Skipping cache save."
+            echo "::endgroup::"
+            continue
+          fi
+
+          # Print concise summary: total size, top-level entries, and one-level-deep for largest entries
+          summarize_dir() {
+            local path="$1"
+            local top_n=${2:-10}
+            local sub_n=${3:-5}
+            if [ ! -e "$path" ]; then
+              echo "Path $path not found"
+              return
+            fi
+            echo "--- Cache save summary for: $path ---"
+            du -sh "$path" || true
+            du -h --max-depth=1 "$path" 2>/dev/null | sort -hr | head -n $top_n || true
+            echo "Showing one-level-deep details for top entries (up to $sub_n each):"
+            while read -r line; do
+              entry_path=$(echo "$line" | awk '{print $2}')
+              [ -z "$entry_path" ] && continue
+              if [ "$entry_path" = "$path" ]; then
+                continue
+              fi
+              echo "-> $entry_path :"
+              du -h --max-depth=1 "$entry_path" 2>/dev/null | sort -hr | head -n $sub_n || true
+            done < <(du -h --max-depth=1 "$path" 2>/dev/null | sort -hr | head -n $top_n)
+            echo "-------------------------------------"
+          }
+
+          summarize_dir "$CACHE_PATH" 10 5 || true
+          
+          DIR_NAME=$(dirname "$CACHE_PATH")
+          BASE_NAME=$(basename "$CACHE_PATH")
+          
+          if [ "${{ inputs.compression_level }}" -eq 0 ]; then
+            tar --posix -h -cvf "$FILENAME" -C "$DIR_NAME" "$BASE_NAME" > /dev/null 2>&1
+          else
+            tar --posix -h -I "zstd -T0 -${{ inputs.compression_level }}" -cvf "$FILENAME" -C "$DIR_NAME" "$BASE_NAME" > /dev/null 2>&1
+          fi
+          
+          FILE_SIZE=$(stat -c%s "$FILENAME")
+          echo "Archive created: $FILENAME ($FILE_SIZE bytes)"
+          echo "::endgroup::"
+          
+          echo "::group:: [$((idx+1))/${#PATHS_ARRAY[@]}] Uploading Assets ($CACHE_BUCKET)"
+          MAX_SIZE=2000000000 # ~1.86GB
+          
+          # Check if cache has changed by comparing with previous release asset
+          SKIP_UPLOAD=false
+          if gh release view "$TAG_NAME" --repo "$TARGET_REPO" >/dev/null 2>&1; then
+            echo "Checking if cache has changed..."
+            # Try to get the size of the previous asset with the same name
+            PREV_SIZE=$(gh release view "$TAG_NAME" --repo "$TARGET_REPO" --json assets --jq ".assets[] | select(.name == \"$FILENAME\") | .size" 2>/dev/null || echo "0")
+            if [ "$PREV_SIZE" = "$FILE_SIZE" ]; then
+              echo "⚠️ Cache size unchanged ($FILE_SIZE bytes). Skipping upload to save bandwidth."
+              SKIP_UPLOAD=true
+            fi
+          fi
+          
+          if [ "$SKIP_UPLOAD" = "true" ]; then
+            rm -f "$FILENAME"
+            echo "::endgroup::"
+            continue
+          fi
+          
+          if [ "$FILE_SIZE" -gt "$MAX_SIZE" ]; then
+            echo "⚠️ File > 2GB. Splitting into 1.5GB chunks..."
+            split -b 1500M -a 2 "$FILENAME" "${FILENAME}.part"
+            for part in "${FILENAME}".part*; do
+              echo "  Uploading $part..."
+              if ! upload_with_retry "$part" "$TAG_NAME"; then
+                echo "::error::Failed to upload part $part after 3 attempts."
+                exit 1
+              fi
+              rm -f "$part"
+            done
+            rm -rf "$FILENAME"
+          else
+            echo "  File size: $((FILE_SIZE / 1024 / 1024))MB"
+            echo "  Uploading $FILENAME..."
+            if ! upload_with_retry "$FILENAME" "$TAG_NAME"; then
+              echo "::error::Failed to upload $FILENAME after 3 attempts."
+              exit 1
+            fi
+            rm -f "$FILENAME"
+          fi
+          echo "::endgroup::"
+        done
