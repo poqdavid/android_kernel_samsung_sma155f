@@ -1,5 +1,4 @@
-testing/
-AIO-REJ/
-kernel-manifests/
-kernels/
-bbr/
+*.img
+out/
+scripts/bin/certs/
+scripts/bin/workspace/

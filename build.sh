@@ -59,8 +59,8 @@ _print_runtime() {
 KERNEL_DIR="$DEFAULT_KERNEL_DIR"
 OUT_DIR="$DEFAULT_OUT"
 NO_CLEAN=0
-NO_PATCH=1
-NO_SUSFS=1
+NO_PATCH=0
+NO_SUSFS=0
 BUILD_ONLY=0
 CLEAN_ONLY=0
 JOBS=""
@@ -71,8 +71,8 @@ while [[ $# -gt 0 ]]; do
         --kernel-dir) KERNEL_DIR="$2"; shift 2;;
         --out-dir) OUT_DIR="$2"; shift 2;;
         --no-clean) NO_CLEAN=1; shift;;
-        --no-patch) NO_PATCH=1; shift;;
-        --no-susfs) NO_SUSFS=1; shift;;
+        --no-patch) NO_PATCH=0; shift;;
+        --no-susfs) NO_SUSFS=0; shift;;
         --build-only) BUILD_ONLY=1; shift;;
         --clean) CLEAN_ONLY=1; shift;;
         -j*) JOBS="${1#-j}"; [[ -z "$JOBS" ]] && { JOBS="$2"; shift; }; shift;;
