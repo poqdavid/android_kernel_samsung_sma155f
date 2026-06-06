@@ -12,47 +12,46 @@ cat <<EOF >/dev/null
 
 ## This is just an example to add the sus mounts to kernel umount ##
 if [ ! -f "/data/adb/susfs_no_auto_add_kernel_umount" ]; then
-	cat /proc/1/mountinfo | grep -E "^5[0-9]{5,} .*$|KSU" | awk '{print $5}' | while read -r LINE; do /data/adb/ksu/bin/ksud kernel umount add --flags 2 "${LINE}" 2>/dev/null; done
+	cat /proc/1/mountinfo | grep -E "^2[0-9]{9,} .*$|KSU" | awk '{print $5}' | while read -r LINE; do /data/adb/ksu/bin/ksud kernel umount add --flags 2 "${LINE}" 2>/dev/null; done
 fi
 EOF
 
-#### Hide path like /sdcard/<target_root_dir> from all user app processes without root access ####
+#### Hide some sus paths, effective only for processes that are marked umounted with uid >= 10000 ####
 cat <<EOF >/dev/null
 ## First we need to wait until files are accessible in /sdcard ##
-until [ -d "/sdcard/Android" ]; do sleep 1; done
+until [ -d "/sdcard/Android" ]; do sleep 3; done
 
-## Next we need to set the path of /sdcard/ to tell kernel where the actual /sdcard is ##
-ksu_susfs set_sdcard_root_path /sdcard
+## Remove the '..5.u.S' leftover ##
+## THe reason why this sus file is created is because users have grant the MANAGE_EXTERNAL_STORAGE permission for the apps that detecting sus files in /sdcard, or in /sdcard/Android/data where the apps are exploiting the unicode bugs to create files arbitrary.
+## susfs redirects the sus path to a supposed not-existing path named '..5.u.S', and this is the only way to settle the cross check of returned errno from various syscalls, but one disadvantage is that if the path itself can be written/created by the app (MANAGE_EXTERNAL_STORAGE granted), then it is futile to hide it, but at least here we automatically delete them on each boot.
+## The best practise is to revoke MANAGE_EXTERNAL_STORAGE permission for all third party apps.
 
-## Now we can add the path ##
-ksu_susfs add_sus_path /sdcard/TWRP
-ksu_susfs add_sus_path /sdcard/MT2
+[ -e "/sdcard/..5.u.S" ] && rm -rf "/sdcard/..5.u.S"
+[ -e "/sdcard/Android/data/..5.u.S" ] && rm -rf "/sdcard/Android/data/..5.u.S"
+[ -e "/sdcard/Android/media/..5.u.S" ] && rm -rf "/sdcard/Android/media/..5.u.S"
 
-## Please note that sometimes the path needs to be added twice or above to be effective ##
-## Besides, all user apps without root access cannot see the hidden path '/sdcard/<hidden_path>' unless you grant it root access ##
+## For paths that are read-only all the time, add them via 'add_sus_path' ##
+${SUSFS_BIN} add_sus_path /sys/block/loop0
+${SUSFS_BIN} add_sus_path /system/addon.d
+${SUSFS_BIN} add_sus_path /vendor/bin/install-recovery.sh
+${SUSFS_BIN} add_sus_path /system/bin/install-recovery.sh
+
+## For paths that are frequently modified, we can add them via 'add_sus_path_loop' ##
+## path in /sdcard ##
+${SUSFS_BIN} add_sus_path_loop /sdcard/TWRP
+${SUSFS_BIN} add_sus_path_loop /sdcard/MT2
+${SUSFS_BIN} add_sus_path_loop /sdcard/AppManager
+${SUSFS_BIN} add_sus_path_loop /sdcard/Android/data/io.github.muntashirakon.AppManager
+${SUSFS_BIN} add_sus_path_loop /sdcard/Android/media/io.github.muntashirakon.AppManager
+## Be reminded that without HMA's vold app data enabled, added sus_paths are still vulnerable to zwc exploit, so in this case users also have to add its underlying path as well ##
+${SUSFS_BIN} add_sus_path_loop /data/media/0/TWRP
+${SUSFS_BIN} add_sus_path_loop /data/media/0/MT2
+${SUSFS_BIN} add_sus_path_loop /data/media/0/AppManager
+${SUSFS_BIN} add_sus_path_loop /data/media/0/Android/data/io.github.muntashirakon.AppManager
+${SUSFS_BIN} add_sus_path_loop /data/media/0/Android/media/io.github.muntashirakon.AppManager
+## path not in /sdcard ##
+${SUSFS_BIN} add_sus_path_loop /data/local/tmp/main.jar
 EOF
-
-#### Hide the leaking app path like /sdcard/Android/data/<app_package_name> from syscall ####
-cat <<EOF >/dev/null
-## First we need to wait until files are accessible in /sdcard ##
-until [ -d "/sdcard/Android" ]; do sleep 1; done
-
-## Next we need to set the path of /sdcard/ to tell kernel where the actual /sdcard/Android/data is ##
-ksu_susfs set_android_data_root_path /sdcard/Android/data
-
-## Now we can add the path ##
-ksu_susfs add_sus_path /sdcard/Android/data/bin.mt.plus
-EOF
-
-#### For path that needs to be re-flagged as SUS_PATH on each non-root user app / isolated service starts via add_sus_path_loop ####
-cat <<EOF >/dev/null
-## - Path added via add_sus_path_loop will be re-flagged as SUS_PATH on each non-root process / isolated service starts ##
-## - This can help ensure some path that keep its inode status reset for whatever reason to be flagged as SUS_PATH again ##
-## - Please also note that only paths NOT inside '/sdcard/' or '/storage/' can be added via add_sus_path_loop ##
-## - ONLY USE THIS WHEN NECCESSARY !!! ##
-ksu_susfs add_sus_path_loop /sys/block/loop0
-EOF
-
 
 #### Hide the mmapped real file from various maps in /proc/self/ ####
 cat <<EOF >/dev/null
