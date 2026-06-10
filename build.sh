@@ -297,10 +297,11 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
             SUSFS_VER=$(grep '#define SUSFS_VERSION' ./include/linux/susfs.h | awk -F'"' '{print $2}' || echo "unknown")
             info -n "Detected SUSFS Version: $SUSFS_VER"
             
+            # Note: The SUSFS patches for KernelSU-Next should ideally be applied for the main KernelSU-Next repository so for now we disable it for the pershoot's fork.
             # Patch KernelSU-Next internal
             pushd "./KernelSU-Next" > /dev/null
             info -n "Patching SUSFS into KernelSU-Next..."
-            patch -p1 --forward < ../../patches/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
+            patch -p1 --forward < ../../patches/10_pershoot_enable_susfs_for_ksun.patch || true
             popd > /dev/null
             
             
@@ -310,30 +311,63 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
             
             # Samsung Specific Patches
             info -n "Applying Samsung device patches..."
-            for file in $(find ../patches/kernel_patches/samsung/SM-A155F-Oneui7 -maxdepth 2 -name "*.patch"); do
-                info "Patching $file"
-                patch -p1 --forward < "$file" || true
-            done
-            
-            pushd "./KernelSU-Next" > /dev/null
-            info -n "Patching .rej fixes in KernelSU Next..."
-            for rej in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
-                FIX_PATCH="../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/fix_$rej.patch"
+            for rej in $(find ./ -maxdepth 8 -name "*.rej" -exec basename {} .rej \;); do
+                FIX_PATCH="../patches/kernel_patches/samsung/SM-A155F-Oneui7/fix_$rej.patch"
                 if [[ -f "$FIX_PATCH" ]]; then
                     info "Patching $rej"
                     patch -p1 --forward < "$FIX_PATCH" || true
+                else
+                    warn -n "No fix patch found for $rej; skipping. You may need to resolve this manually or update the build script with a new fix patch if it is a common issue."
                 fi
             done
             
+            pushd "./KernelSU-Next" > /dev/null
+            
+            REJ_FILES=$(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;)
+            
+            if [[ -z "$REJ_FILES" ]]; then
+                info -n "No .rej files found. Nothing to patch."
+            else
+                info -n "Patching .rej fixes in KernelSU Next..."
+                for rej in $REJ_FILES; do
+                    FIX_PATCH="../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/fix_$rej.patch"
+                    
+                    if [[ -f "$FIX_PATCH" ]]; then
+                        info -n "Patching $rej"
+                        patch -p1 --forward < "$FIX_PATCH" || true
+                    else
+                        warn -n "No fix patch found for $rej; skipping. You may need to resolve this manually or update the build script with a new fix patch if it is a common issue."
+                    fi
+                done
+            fi
+            
             # Final KSU patches
-            info -n "Patching Hook Mode!"
-            patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/overwrite_hook_mode.patch" || true
+            # Note: The Hook Mode patch for KernelSU-Next should ideally be applied for the main KernelSU-Next repository so for now we disable it for the pershoot's fork.
+            #info -n "Patching Hook Mode!"
+            #patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/overwrite_hook_mode.patch" || true
             
-            info -n "Patching KSU_TOOLKIT Support for SusFS kernel!"
-            patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/ksu_toolkit.patch" || true
+            if [ "$KSU_VERSION" -le 33095 ]; then
+                info -n "Patching KSU_TOOLKIT Support for SusFS kernel!"
+                patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/ksu_toolkit.patch" || true
+            else
+                info -n "Skipping KSU_TOOLKIT patch for newer KernelSU versions (>= 33096) as it should be included in mainline already."
+            fi
             
-            info -n "Patching Multi-manager Support for SusFS kernel!"
-            patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/multi_manager.patch" ||true
+            if [ "$KSU_VERSION" -le 33095 ]; then
+                info -n "Patching Multi-manager Support for SusFS kernel!"
+                patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/multi_manager.patch" ||true
+            else
+                info -n "Skipping Multi-manager patch for newer KernelSU versions (>= 33096) as it should be included in mainline already."
+            fi
+            
+            if [ "$KSU_VERSION" -ge 33068 ] && [ "$KSU_VERSION" -lt 33070 ]; then
+                echo ""
+                info -n "Patching Multi-manager sepolicy Support for SusFS kernel!"
+                patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/multi_sepolicy_fix.patch" ||true
+            else
+                info -n "Skipping Multi-manager sepolicy patch for KernelSU versions outside 33068-33069 as it should be included in mainline already or the affected code may have been refactored."
+            fi
+            
             popd > /dev/null
             
         else
