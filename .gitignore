@@ -1,3 +1,4 @@
-ksu_susfs/obj
-ksu_susfs/libs
-*.zip
+*.img
+out/
+scripts/bin/certs/
+scripts/bin/workspace/
