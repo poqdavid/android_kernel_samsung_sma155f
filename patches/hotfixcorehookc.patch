@@ -1,0 +1,33 @@
+From 1ac3a3a112abae73801fd52fe32ea8749407ff8d Mon Sep 17 00:00:00 2001
+From: sidex15 <24408329+sidex15@users.noreply.github.com>
+Date: Mon, 19 May 2025 12:48:22 +0800
+Subject: [PATCH] kernel: contain CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS code
+ with ifdef
+
+Since this SUSFS feature `CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS` is only for newer commits of SUSFS 6.1 kernel (and possibly the v1.5.8 version),
+Contain it with `#ifdef CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS`. So it doesn't lead to compilation issues for SUSFS v1.5.5 and some v1.5.7 kernels.
+The code will compile if `CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS` feature is included in the kernel (Either backport of the last public release of SUSFS v1.5.7 or the fix backport comment in the previous commit).
+---
+ kernel/core_hook.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/kernel/core_hook.c b/kernel/core_hook.c
+index 6343b8434..8e814a3e9 100644
+--- a/kernel/core_hook.c
++++ b/kernel/core_hook.c
+@@ -551,6 +551,7 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+ 				pr_info("susfs: copy_to_user() failed\n");
+ 			return 0;
+ 		}
++#ifdef CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS
+ 		if (arg2 == CMD_SUSFS_HIDE_SUS_MNTS_FOR_ALL_PROCS) {
+ 			int error = 0;
+ 			if (arg3 != 0 && arg3 != 1) {
+@@ -563,6 +564,7 @@ int ksu_handle_prctl(int option, unsigned long arg2, unsigned long arg3,
+ 				pr_info("susfs: copy_to_user() failed\n");
+ 			return 0;
+ 		}
++#endif
+ #endif //#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+ #ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+ 		if (arg2 == CMD_SUSFS_ADD_SUS_KSTAT) {
