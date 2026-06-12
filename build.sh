@@ -308,21 +308,36 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
             patch -p1 < ../patches/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch || true
             
             # Samsung Specific Patches
-            info -n "Applying Samsung device patches..."
-            for file in $(find ../patches/kernel_patches/samsung/SM-A155F -maxdepth 2 -name "*.patch"); do
-                info "Patching $file"
-                patch -p1 --forward < "$file" || true
-            done
-            
-            pushd "./KernelSU" > /dev/null
-            info -n "Patching .rej fixes in KernelSU..."
-            for rej in $(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;); do
-                FIX_PATCH="../../patches/kernel_patches/ksu/susfs_fix_patches/$SUSFS_VER/fix_$rej.patch"
+            for rej in $(find ./ -maxdepth 8 -name "*.rej" -exec basename {} .rej \;); do
+                FIX_PATCH="../patches/kernel_patches/samsung/SM-A155F-Oneui7/fix_$rej.patch"
                 if [[ -f "$FIX_PATCH" ]]; then
                     info "Patching $rej"
                     patch -p1 --forward < "$FIX_PATCH" || true
+                else
+                    warn -n "No fix patch found for $rej; skipping. You may need to resolve this manually or update the build script with a new fix patch if it is a common issue."
                 fi
             done
+            
+            pushd "./KernelSU" > /dev/null
+
+            REJ_FILES=$(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;)
+            
+            if [[ -z "$REJ_FILES" ]]; then
+                info -n "No .rej files found. Nothing to patch."
+            else
+                info -n "Patching .rej fixes in KernelSU Next..."
+                for rej in $REJ_FILES; do
+                    FIX_PATCH="../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/fix_$rej.patch"
+                    
+                    if [[ -f "$FIX_PATCH" ]]; then
+                        info -n "Patching $rej"
+                        patch -p1 --forward < "$FIX_PATCH" || true
+                    else
+                        warn -n "No fix patch found for $rej; skipping. You may need to resolve this manually or update the build script with a new fix patch if it is a common issue."
+                    fi
+                done
+            fi
+            
             popd > /dev/null
         else
             warn -n "SUSFS support is disabled; skipping SUSFS-related patches. If you want SUSFS, remove the --no-susfs flag."
