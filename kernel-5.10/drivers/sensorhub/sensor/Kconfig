@@ -1,5 +1,0 @@
-config SENSORS_SSP_LIGHT_JPNCONCEPT
-	tristate "Light sensor JPN concept"
-	default n
-	help
-	  light sensor JPN concept. send region to Sensor Hub.
