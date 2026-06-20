@@ -297,14 +297,6 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
             SUSFS_VER=$(grep '#define SUSFS_VERSION' ./include/linux/susfs.h | awk -F'"' '{print $2}' || echo "unknown")
             info -n "Detected SUSFS Version: $SUSFS_VER"
             
-            # Note: The SUSFS patches for KernelSU-Next should ideally be applied for the main KernelSU-Next repository so for now we disable it for the pershoot's fork.
-            # Patch KernelSU-Next internal
-            pushd "./KernelSU-Next" > /dev/null
-            info -n "Patching SUSFS into KernelSU-Next..."
-            patch -p1 --forward < ../../patches/10_pershoot_enable_susfs_for_ksun.patch || true
-            popd > /dev/null
-            
-            
             # Patch Main Kernel
             info -n "Patching SUSFS into Kernel..."
             patch -p1 < ../patches/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch || true
@@ -321,7 +313,12 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                 fi
             done
             
+            # Note: The SUSFS patches for KernelSU-Next should ideally be applied for the main KernelSU-Next repository so for now we disable it for the pershoot's fork.
+            # Patch KernelSU-Next internal
             pushd "./KernelSU-Next" > /dev/null
+            info -n "Patching SUSFS into KernelSU-Next..."
+            #patch -p1 --forward < ../../patches/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
+            patch -p1 --forward < ../../patches/10_pershoot_enable_susfs_for_ksun.patch || true
             
             REJ_FILES=$(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;)
             
@@ -346,12 +343,8 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
             #info -n "Patching Hook Mode!"
             #patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/overwrite_hook_mode.patch" || true
             
-            if [ "$KSU_VERSION" -le 33095 ]; then
-                info -n "Patching KSU_TOOLKIT Support for SusFS kernel!"
-                patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/ksu_toolkit.patch" || true
-            else
-                info -n "Skipping KSU_TOOLKIT patch for newer KernelSU versions (>= 33096) as it should be included in mainline already."
-            fi
+            #info -n "Patching KSU_TOOLKIT Support for SusFS kernel!"
+            #patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/ksu_toolkit.patch" || true
             
             if [ "$KSU_VERSION" -le 33095 ]; then
                 info -n "Patching Multi-manager Support for SusFS kernel!"
@@ -374,8 +367,8 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
             warn -n "SUSFS support is disabled; skipping SUSFS-related patches. If you want SUSFS, remove the --no-susfs flag."
         fi
     else
-        error "KernelSU setup failed! Please check the output above for errors. If you want to skip KernelSU setup, use the --no-patch flag."
-        error "KernelSU Not found in expected location: ./KernelSU"
+        error "KernelSU Next setup failed! Please check the output above for errors. If you want to skip KernelSU setup, use the --no-patch flag."
+        error "KernelSU Next Not found in expected location: ./KernelSU"
         exit 1
     fi
     
