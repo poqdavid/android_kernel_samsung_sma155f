@@ -3,11 +3,19 @@ set -euo pipefail
 
 # -------- Configuration / defaults --------
 SCRIPT_NAME="$(basename "$0")"
-DEFAULT_KERNEL_DIR="kernel-5.10"
+DEFAULT_KERNEL_DIR="$(find . -maxdepth 1 -type d -name "kernel-*" | head -n1)"
 DEFAULT_DEFCONFIG="arch/arm64/configs/a15_00_defconfig"
+OTHER_DEFCONFIG="arch/arm64/configs/a15_defconfig"
 DEFAULT_OUT="../out/target/product/a15/obj/KERNEL_OBJ"
 KERNELSU_SETUP_URL="https://raw.githubusercontent.com/poqdavid/KernelSU-Next/dev/kernel/setup.sh"
 BASE_KSU_VERSION=30000
+
+pushd "$DEFAULT_KERNEL_DIR" > /dev/null
+KERNELVERSION="$(make -s kernelversion)"
+android_version=$(grep -m1 '^BRANCH=' ./build.config.common | awk -F= '{print $2}' | awk -F- '{print $1}')
+popd > /dev/null
+
+kernel_version=$(echo "$KERNELVERSION" | cut -d. -f1,2)
 
 # -------- Colors & logging --------
 RED="\e[1;31m"
@@ -65,6 +73,12 @@ BUILD_ONLY=0
 CLEAN_ONLY=0
 JOBS=""
 VERBOSE=0
+
+info -n "Using kernel source: $KERNEL_DIR"
+info -n "Using output directory: $OUT_DIR"
+
+info -n "Kernel version: $kernel_version"
+info -n "Android version: $android_version"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -151,6 +165,7 @@ if [[ $NO_CLEAN -eq 0 ]]; then
     git clean -fd kernel-5.10/
     rm -rf kernel-5.10/KernelSU
     rm -rf kernel-5.10/KernelSU-Next
+    rm -rf kernel-5.10/Baseband-guard
     rm -rf out
     
     info "Finsished cleaning up..."
@@ -165,89 +180,121 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
     CONFIG_START=$(_ts)
     info -n "Modifying configs..."
     CONFIG_TOOL="./${KERNEL_DIR}/scripts/config"
-    DEFCONFIG="./${KERNEL_DIR}/${DEFAULT_DEFCONFIG}"
+    DEFAULTDEFCONFIG="./${KERNEL_DIR}/${DEFAULT_DEFCONFIG}"
+    OTHERDEFCONFIG="./${KERNEL_DIR}/${OTHER_DEFCONFIG}"
     
-    # Samsung & Security
-    $CONFIG_TOOL --file $DEFCONFIG \
-    --set-val UH n \
-    --set-val RKP n \
-    --set-val KDP n \
-    --set-val SECURITY_DEFEX n \
-    --set-val INTEGRITY n \
-    --set-val FIVE n \
-    --set-val TRIM_UNUSED_KSYMS n \
-    --set-val PROCA n \
-    --set-val PROCA_GKI_10 n \
-    --set-val PROCA_S_OS n \
-    --set-val PROCA_CERTIFICATES_XATTR n \
-    --set-val PROCA_CERT_ENG n \
-    --set-val PROCA_CERT_USER n \
-    --set-val GAF_V6 n \
-    --set-val FIVE n \
-    --set-val FIVE_CERT_USER n \
-    --set-val FIVE_DEFAULT_HASH n \
-    --set-val UH_RKP n \
-    --set-val UH_LKMAUTH n \
-    --set-val UH_LKM_BLOCK n \
-    --set-val RKP_CFP_JOPP n \
-    --set-val RKP_CFP n \
-    --set-val KDP_CRED n \
-    --set-val KDP_NS n \
-    --set-val KDP_TEST n \
-    --set-val RKP_CRED n \
-    --set-val MODULES y \
-    --set-val MODULE_FORCE_LOAD y \
-    --set-val MODULE_UNLOAD y \
-    --set-val MODULE_FORCE_UNLOAD y \
-    --set-val MODVERSIONS y \
-    --set-val MODULE_SRCVERSION_ALL n \
-    --set-val MODULE_SIG n \
-    --set-val MODULE_COMPRESS n
-    
-    # Optimizations (BBR, etc)
-    $CONFIG_TOOL --file $DEFCONFIG \
-    --set-val IP_NF_TARGET_TTL y \
-    --set-val IP6_NF_TARGET_HL y \
-    --set-val IP6_NF_MATCH_HL y \
-    --set-val TCP_CONG_ADVANCED y \
-    --set-val TCP_CONG_BBR y \
-    --set-val NET_SCH_FQ y \
-    --set-val TCP_CONG_BIC n \
-    --set-val TCP_CONG_WESTWOOD n \
-    --set-val TCP_CONG_HTCP n \
-    --set-val DEFAULT_BBR y \
-    --set-val DEFAULT_BIC n \
-    --set-str DEFAULT_TCP_CONG "bbr" \
-    --set-val DEFAULT_RENO n \
-    --set-val DEFAULT_CUBIC n \
-    --set-val IP6_NF_NAT y \
-    --set-val IP6_NF_TARGET_MASQUERADE y \
-    --set-val NF_NAT_IPV6 y
-    
-    # KernelSU Next & SUSFS
-    $CONFIG_TOOL --file $DEFCONFIG \
-    --set-val KSU y \
-    --set-val KSU_KPROBES_HOOK n \
-    --set-val KSU_SUSFS y \
-    --set-val KSU_SUSFS_HAS_MAGIC_MOUNT y \
-    --set-val KSU_SUSFS_SUS_PATH y \
-    --set-val KSU_SUSFS_SUS_MOUNT y \
-    --set-val KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT y \
-    --set-val KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT y \
-    --set-val KSU_SUSFS_SUS_KSTAT y \
-    --set-val KSU_SUSFS_SUS_OVERLAYFS n \
-    --set-val KSU_SUSFS_TRY_UMOUNT y \
-    --set-val KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT y \
-    --set-val KSU_SUSFS_SPOOF_UNAME y \
-    --set-val KSU_SUSFS_ENABLE_LOG y \
-    --set-val KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y \
-    --set-val KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y \
-    --set-val KSU_SUSFS_OPEN_REDIRECT y \
-    --set-val KSU_SUSFS_SUS_MAP y \
-    --set-val KSU_SUSFS_SUS_SU n \
-    --set-val OVERLAY_FS y \
-    --set-val TMPFS_XATTR y \
-    --set-val TMPFS_POSIX_ACL y
+    for DEFCONFIG in "$DEFAULTDEFCONFIG" "$OTHERDEFCONFIG"; do
+        info -n "$DEFCONFIG"
+        
+        info -n "Settings Samsung & Security configs..."
+        # Samsung & Security
+        $CONFIG_TOOL --file $DEFCONFIG \
+        --set-val UH n \
+        --set-val RKP n \
+        --set-val KDP n \
+        --set-val SECURITY_DEFEX n \
+        --set-val INTEGRITY n \
+        --set-val FIVE n \
+        --set-val TRIM_UNUSED_KSYMS n \
+        --set-val PROCA n \
+        --set-val PROCA_GKI_10 n \
+        --set-val PROCA_S_OS n \
+        --set-val PROCA_CERTIFICATES_XATTR n \
+        --set-val PROCA_CERT_ENG n \
+        --set-val PROCA_CERT_USER n \
+        --set-val GAF_V6 n \
+        --set-val FIVE n \
+        --set-val FIVE_CERT_USER n \
+        --set-val FIVE_DEFAULT_HASH n \
+        --set-val UH_RKP n \
+        --set-val UH_LKMAUTH n \
+        --set-val UH_LKM_BLOCK n \
+        --set-val RKP_CFP_JOPP n \
+        --set-val RKP_CFP n \
+        --set-val KDP_CRED n \
+        --set-val KDP_NS n \
+        --set-val KDP_TEST n \
+        --set-val RKP_CRED n \
+        --set-val MODULES y \
+        --set-val MODULE_FORCE_LOAD y \
+        --set-val MODULE_UNLOAD y \
+        --set-val MODULE_FORCE_UNLOAD y \
+        --set-val MODVERSIONS y \
+        --set-val MODULE_SRCVERSION_ALL n \
+        --set-val MODULE_SIG n \
+        --set-val MODULE_COMPRESS n
+        
+        info -n "Setting optimization configs..."
+        # Optimizations (BBR, etc)
+        $CONFIG_TOOL --file $DEFCONFIG \
+        --set-val IP_NF_TARGET_TTL y \
+        --set-val IP6_NF_TARGET_HL y \
+        --set-val IP6_NF_MATCH_HL y \
+        --set-val TCP_CONG_ADVANCED y \
+        --set-val TCP_CONG_BBR y \
+        --set-val TCP_CONG_CUBIC y \
+        --set-val NET_SCH_FQ y \
+        --set-val TCP_CONG_WESTWOOD n \
+        --set-val TCP_CONG_HTCP n \
+        --set-val DEFAULT_BBR y \
+        --set-val DEFAULT_BIC n \
+        --set-str DEFAULT_TCP_CONG "bbr" \
+        --set-val DEFAULT_RENO n \
+        --set-val DEFAULT_CUBIC n \
+        -d TCP_CONG_BIC \
+        -d TCP_CONG_WESTWOOD \
+        -d TCP_CONG_HTCP \
+        --set-val IP6_NF_NAT y \
+        --set-val IP6_NF_TARGET_MASQUERADE y \
+        --set-val NF_NAT_IPV6 y \
+        --set-val BBG y \
+        --set-val SYSVIPC y \
+        --set-val POSIX_MQUEUE y \
+        --set-val IPC_NS y \
+        --set-val PID_NS y \
+        --set-val DEVTMPFS y \
+        --set-val NETFILTER_XT_MATCH_ADDRTYPE y \
+        --set-val NETFILTER_XT_TARGET_REJECT y \
+        --set-val NETFILTER_XT_TARGET_LOG y \
+        --set-val NETFILTER_XT_MATCH_RECENT y \
+        --set-val IP_SET y \
+        --set-val IP_SET_HASH_IP y \
+        --set-val IP_SET_HASH_NET y \
+        --set-val NETFILTER_XT_SET y \
+        --set-val NTSYNC y
+        
+        info -n "Setting KernelSU Next & SUSFS configs..."
+        # KernelSU Next & SUSFS
+        $CONFIG_TOOL --file $DEFCONFIG \
+        --set-val KSU y \
+        --set-val KSU_KPROBES_HOOK n \
+        --set-val KSU_SUSFS y \
+        --set-val KSU_SUSFS_HAS_MAGIC_MOUNT y \
+        --set-val KSU_SUSFS_SUS_PATH y \
+        --set-val KSU_SUSFS_SUS_MOUNT y \
+        --set-val KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT y \
+        --set-val KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT y \
+        --set-val KSU_SUSFS_SUS_KSTAT y \
+        --set-val KSU_SUSFS_SUS_OVERLAYFS n \
+        --set-val KSU_SUSFS_TRY_UMOUNT y \
+        --set-val KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT y \
+        --set-val KSU_SUSFS_SPOOF_UNAME y \
+        --set-val KSU_SUSFS_ENABLE_LOG y \
+        --set-val KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y \
+        --set-val KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y \
+        --set-val KSU_SUSFS_OPEN_REDIRECT y \
+        --set-val KSU_SUSFS_SUS_MAP y \
+        --set-val KSU_SUSFS_SUS_SU n \
+        --set-val OVERLAY_FS y \
+        --set-val TMPFS_XATTR y \
+        --set-val TMPFS_POSIX_ACL y
+        
+        if grep -q '^CONFIG_LSM=' "$DEFCONFIG"; then
+            info -n "CONFIG_LSM found, adding baseband_guard"
+            sed -i '/^CONFIG_LSM=/ s/"$/,baseband_guard"/' "$DEFCONFIG"
+        fi
+        
+    done
     
     # 3. Metadata Configuration
     info -n "Configuring Kernel metadata..."
@@ -337,6 +384,46 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                     fi
                 done
             fi
+            
+            popd > /dev/null
+            
+            info -n "Setting up Baseband Guard..."
+            curl -LSs https://github.com/poqdavid/Baseband-guard/raw/main/setup.sh | bash
+            
+            info -n "Adding Baseband Guard into kconfig"
+            sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
+            
+            if [[ "$kernel_version" == 6.* ]]; then
+                info -n "Applying unicode bypass fix for 6.1+..."
+                patch -p1 < "../patches/kernel_patches/common/unicode_bypass_fix_6.1+.patch"
+            else
+                info -n "Applying unicode bypass fix for 6.1-..."
+                patch -p1 < "../patches/kernel_patches/common/unicode_bypass_fix_6.1-.patch"
+            fi
+            
+            info -n "Applying droidspaces patch (fix_sysvipc_kabi_6_7_8.patch)..."
+            patch -p1 < "../patches/kernel_patches/common/droidspaces/fix_sysvipc_kabi_6_7_8.patch"
+            
+            if [[ "$kernel_version" == 5.10* ]]; then
+                info -n "Applying droidspaces patch (fix_abi_padding_for_posix_mqueue.patch)..."
+                patch -p1 < "../patches/kernel_patches/common/droidspaces/fix_abi_padding_for_posix_mqueue.patch"
+            fi
+            
+            info -n "Applying NTSync patch (ntsync_base.patch)..."
+            patch -p1 < "../patches/kernel_patches/common/ntsync/ntsync_base.patch"
+            
+            ntsync_compat_patch_file="ntsync_compat_${android_version}-${kernel_version}.patch"
+            ntsync_compat_patch_path="../patches/kernel_patches/common/ntsync/${ntsync_compat_patch_file}"
+            
+            info -n "Applying NTSync patch ($ntsync_compat_patch_file)..."
+            
+            if [[ -f "$ntsync_compat_patch_path" ]]; then
+                patch -p1 < "$ntsync_compat_patch_path"
+            else
+                info -n "No specific NTSync compat patch found for Android $android_version / Kernel $kernel_version; skipping compat patch. You may need to resolve this manually or update the build script with a new compat patch if it is a common issue."
+            fi
+            
+            pushd "./KernelSU-Next" > /dev/null
             
             # Final KSU patches
             # Note: The Hook Mode patch for KernelSU-Next should ideally be applied for the main KernelSU-Next repository so for now we disable it for the pershoot's fork.
