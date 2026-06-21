@@ -48,9 +48,13 @@ For GKI installation, please follow the official guide:
 
 - 🔐 **KernelSU/KernelSUNext**: A root solution for Android GKI devices that works in kernel mode and grants root permission to userspace applications directly in kernel space
 - 🥷 **SUSFS**: An addon root hiding kernel patches and userspace module for KernelSU
+- 🛡️ **BBG**: LSM-based Baseband Guard security to protect critical device partitions
 - 🖧 **BBRv1**: Improved TCP congestion control
 - ✅ **LTO**: Link Time Optimisation enabled
 - ⚡️ **TMPFS XATTR / POSIX ACL**: Extended TMPFS support for meta modules and Mountify
+- </> **Unicode Bypass Fix**: Prevent path traversal and other detections using non-printable Unicode codepoints [Experimental]
+- 🖥️ **Droidspaces Support**: Support Portable Linux containers to run full Linux environments.
+- 🔃 **NTSync**: Provide high-performance, low-latency synchronization primitives compatible with the Windows NT kernel API
 
 ---
 <div align="center">
@@ -102,6 +106,8 @@ Flashing this kernel will void your warranty, and there is always a risk of bric
 | **fei-ke** | fei-ke | [![GitHub](https://img.shields.io/badge/GitHub-fei--ke-blue?style=flat-square&logo=github)](https://github.com/fei-ke/android_kernel_samsung_sm8550.git) |
 | **pershoot** | pershoot | [![GitHub](https://img.shields.io/badge/GitHub-pershoot-blue?style=flat-square&logo=github)](https://github.com/pershoot) |
 | **jimsterino98** | jimsterino98 | [![GitHub](https://img.shields.io/badge/GitHub-jimsterino98-blue?style=flat-square&logo=github)](https://github.com/jimsterino98) |
+| **Baseband Guard** | vc-teahouse | [![GitHub](https://img.shields.io/badge/GitHub-vc--teahouse-blue?style=flat-square&logo=github)](https://github.com/vc-teahouse/Baseband-guard.git) |
+| **Droidspaces** | ravindu644 | [![GitHub](https://img.shields.io/badge/GitHub-ravindu644-blue?style=flat-square&logo=github)](https://github.com/ravindu644/Droidspaces-OSS.git) |
 
 *If you have contributed and are not listed here, please remind me!* 🙏
 
