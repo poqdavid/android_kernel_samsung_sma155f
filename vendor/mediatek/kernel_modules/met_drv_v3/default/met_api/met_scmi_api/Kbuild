@@ -1,5 +1,0 @@
-obj-m += met_scmi_api.o
-
-ccflags-y += -I$(srctree)/include/
-
-met_scmi_api-y := default/met_api/met_scmi_api/met_scmi_api.o
