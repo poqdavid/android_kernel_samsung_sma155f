@@ -1,6 +1,102 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# -------- Discord Webhook Configuration --------
+WEBHOOK_FILE="$(pwd)/.discord_webhook"
+if [[ -f "$WEBHOOK_FILE" ]]; then
+    DISCORD_WEBHOOK_URL=$(cat "$WEBHOOK_FILE" | tr -d '\n' | tr -d '\r')
+else
+    DISCORD_WEBHOOK_URL=""
+fi
+
+# -------- Discord USER ID Configuration --------
+USERID_FILE="$(pwd)/.discord_userid"
+if [[ -f "$USERID_FILE" ]]; then
+    DISCORD_USER_ID=$(cat "$USERID_FILE" | tr -d '\n' | tr -d '\r')
+else
+    DISCORD_USER_ID=""
+fi
+
+LOGFILE="$(pwd)/logs/build_ksu_$(date +%Y%m%d_%H%M%S).log"
+
+if [[ ! -d "$(pwd)/logs" ]]; then
+    mkdir -p "$(pwd)/logs"
+fi
+
+# Strip ANSI color codes from the log file output, but keep them in the terminal
+exec > >(tee >(sed "s/$(printf '\033')\\[[0-9;]*m//g" >> "$LOGFILE")) 2>&1
+
+_calc_runtime() {
+    local start=${1:-0} end=${2:-0}
+    if [[ -z "$start" || "$start" -eq 0 ]]; then
+        echo "N/A"
+    else
+        if [[ -z "$end" || "$end" -eq 0 ]]; then
+            end=$(date +%s) # Calculate elapsed time if process didn't finish
+        fi
+        if [[ "$end" -lt "$start" ]]; then
+            echo "N/A"
+        else
+            local runtime=$((end - start))
+            printf "%02d:%02d:%02d" $((runtime / 3600)) $(((runtime % 3600) / 60)) $((runtime % 60))
+        fi
+    fi
+}
+
+send_discord_file() {
+    local status="$1"
+    local message="$2"
+    local color="$3"
+    
+    if [[ -z "$DISCORD_WEBHOOK_URL" ]]; then
+        return 0
+    fi
+    
+    # Safely handle potentially unset timestamps
+    local config_time=$(_calc_runtime "${CONFIG_START:-0}" "${CONFIG_END:-0}")
+    local patch_time=$(_calc_runtime "${PATCH_START:-0}" "${PATCH_END:-0}")
+    local build_time=$(_calc_runtime "${BUILD_START:-0}" "${BUILD_END:-0}")
+    
+    local status_emoji="✅"
+    if [[ "$status" == *"FAILED"* ]]; then
+        status_emoji="❌"
+    fi
+    
+    # Format the content string to ping the user if the ID is provided
+    local content_str=""
+    if [[ -n "$DISCORD_USER_ID" ]]; then
+        content_str="\"content\":\"<@$DISCORD_USER_ID>\", "
+    fi
+    
+    # Use bash parameter expansion ${VAR:-N/A} to print N/A if the variable is unbound or empty
+    curl -s \
+    -F "payload_json={
+        $content_str
+        \"embeds\":[{
+          \"title\":\"${status_emoji} Kernel Build $status\",
+          \"description\":\"$message\",
+          \"color\":$color,
+          \"fields\": [
+            { \"name\": \"🐧 Kernel Version\", \"value\": \"${kernel_version:-N/A}\", \"inline\": true },
+            { \"name\": \"📱 Android Version\", \"value\": \"${android_version:-N/A}\", \"inline\": true },
+            { \"name\": \"🐧 KernelSU Version\", \"value\": \"${KSU_VERSION:-N/A}\", \"inline\": true },
+            { \"name\": \"🛡️ SUSFS Version\", \"value\": \"${SUSFS_VER:-N/A}\", \"inline\": false },
+            { \"name\": \"⏱️ Config Time\", \"value\": \"${config_time}\", \"inline\": true },
+            { \"name\": \"⏱️ Patch Time\", \"value\": \"${patch_time}\", \"inline\": true },
+            { \"name\": \"⏱️ Build Time\", \"value\": \"${build_time}\", \"inline\": true }
+          ]
+    }]}" \
+    -F "file1=@$LOGFILE" \
+    "$DISCORD_WEBHOOK_URL" >/dev/null
+}
+
+on_error() {
+    send_discord_file "FAILED" "Kernel build failed at line $1 ⚠️" 16711680
+}
+
+trap 'on_error $LINENO' ERR
+
+
 # -------- Configuration / defaults --------
 SCRIPT_NAME="$(basename "$0")"
 DEFAULT_KERNEL_DIR="$(find . -maxdepth 1 -type d -name "kernel-*" | head -n1)"
@@ -9,6 +105,7 @@ OTHER_DEFCONFIG="arch/arm64/configs/a15_defconfig"
 DEFAULT_OUT="../out/target/product/a15/obj/KERNEL_OBJ"
 KERNELSU_SETUP_URL="https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh"
 BASE_KSU_VERSION=20000
+KSU_VERSION=0
 
 pushd "$DEFAULT_KERNEL_DIR" > /dev/null
 KERNELVERSION="$(make -s kernelversion)"
@@ -51,16 +148,12 @@ print_msg "$RED" "       by poqdavid "
 _ts() { date +%s; }
 _print_runtime() {
     local label=$1 start=$2 end=$3
-    if [[ -z "$start" || -z "$end" || "$end" -lt "$start" ]]; then
+    local runtime_str=$(_calc_runtime "$start" "$end")
+    if [[ "$runtime_str" == "N/A" ]]; then
         printf "%b%s: skipped%b\n" "${YELLOW}" "$label" "${RESET}"
-        return
+    else
+        printf "%b%s: %s%b\n" "${GREEN}" "$label" "$runtime_str" "${RESET}"
     fi
-    local runtime=$((end - start))
-    printf "%b%s: %02d:%02d:%02d%b\n" "${GREEN}" "$label" \
-    $((runtime / 3600)) \
-    $(((runtime % 3600) / 60)) \
-    $((runtime % 60)) \
-    "${RESET}"
 }
 
 # -------- CLI parsing --------
@@ -467,3 +560,4 @@ popd > /dev/null
 
 BUILD_END=$(_ts)
 info -n "Build completed successfully."
+send_discord_file "SUCCESS" "Kernel build completed successfully. 🎉" 65280
