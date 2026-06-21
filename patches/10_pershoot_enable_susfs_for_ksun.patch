@@ -1,12 +1,11 @@
-From 20b7d66986a990c0acd1a7845daa66378a476104 Mon Sep 17 00:00:00 2001
+From 58aa7790a440a5baadc3e623ffee5454aee2bb89 Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Sat, 20 Jun 2026 01:19:38 +0200
+Date: Sun, 21 Jun 2026 23:03:56 +0200
 Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
 
-1
 ---
  kernel/Kbuild                      |  75 ++++---
- kernel/Kconfig                     | 107 +++++++++-
+ kernel/Kconfig                     | 107 ++++++++-
  kernel/core/init.c                 |  49 ++++-
  kernel/extras.c                    |  22 +-
  kernel/feature/adb_root.c          | 160 +++++++++++++-
@@ -14,7 +13,7 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  kernel/feature/kernel_umount.c     |  13 +-
  kernel/feature/selinux_hide.c      | 163 +++++++-------
  kernel/feature/selinux_hide.h      |  15 ++
- kernel/feature/sucompat.c          | 327 ++++++++++++++++++++++++++++-
+ kernel/feature/sucompat.c          | 335 ++++++++++++++++++++++++++++-
  kernel/feature/sucompat.h          |  21 +-
  kernel/hook/setuid_hook.c          |  81 ++++++-
  kernel/hook/setuid_hook.h          |   4 +
@@ -27,20 +26,20 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  kernel/policy/app_profile.h        |   2 +-
  kernel/runtime/boot_event.c        |  21 +-
  kernel/runtime/ksud.h              |  20 ++
- kernel/runtime/ksud_integration.c  | 155 ++++++++++++--
+ kernel/runtime/ksud_integration.c  | 155 +++++++++++--
  kernel/selinux/rules.c             |  22 ++
  kernel/selinux/selinux.c           | 244 ++++++++++++++-------
  kernel/selinux/selinux.h           |  10 +
  kernel/setup.sh                    |   2 +
  kernel/sulog/event.c               |  84 ++++++++
  kernel/sulog/event.h               |   4 +
- kernel/supercall/dispatch.c        | 153 ++++++++++++++
+ kernel/supercall/dispatch.c        | 153 +++++++++++++
  kernel/supercall/internal.h        |   2 +
- kernel/supercall/supercall.c       | 189 +++++++++++------
+ kernel/supercall/supercall.c       | 189 ++++++++++------
  kernel/supercall/supercall.h       |   4 +
  manager/app/build.gradle.kts       |   5 +
  manager/build.gradle.kts           |  69 +++++-
- 35 files changed, 1924 insertions(+), 367 deletions(-)
+ 35 files changed, 1932 insertions(+), 367 deletions(-)
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
 index 889d0306d..62349dd00 100644
@@ -1126,7 +1125,7 @@ index 5a0437108..faecb73d8 100644
 +
  #endif
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index 553cb6ae9..d1d740163 100644
+index 553cb6ae9..a469b9b6a 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
 @@ -13,6 +13,18 @@
@@ -1218,7 +1217,7 @@ index 553cb6ae9..d1d740163 100644
  static bool is_ksud_exists()
  {
  	struct path path;
-@@ -86,6 +114,277 @@ static bool is_ksud_exists()
+@@ -86,6 +114,285 @@ static bool is_ksud_exists()
  	return true;
  }
  
@@ -1330,6 +1329,8 @@ index 553cb6ae9..d1d740163 100644
 +                 int *__never_use_flags)
 +{
 +    struct filename *filename;
++    struct user_arg_ptr *argv_ptr = (struct user_arg_ptr *)argv_user;
++    struct ksu_sulog_pending_event *pending_sucompat = NULL;
 +    int ret;
 +
 +    if (unlikely(!filename_ptr))
@@ -1354,11 +1355,17 @@ index 553cb6ae9..d1d740163 100644
 +    ksu_compat_sulog('x');
 +    pr_info("ksu_handle_execveat_sucompat: su found\n");
 +
++    pending_sucompat = ksu_sulog_capture_sucompat_kernel(filename->name,
++                                                         (const char __user *const __user *)argv_ptr->ptr.native,
++                                                         GFP_KERNEL);
++
 +    memcpy((void *)filename->name, ksud_path, sizeof(ksud_path));
 +
 +    ret = escape_with_root_profile();
 +    if (ret)
 +        pr_err("escape_with_root_profile() failed: %d\n", ret);
++
++    ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
 +
 +    return 0;
 +}
@@ -1496,7 +1503,7 @@ index 553cb6ae9..d1d740163 100644
  long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  {
  	const char __user **filename_user, *orig_filename;
-@@ -103,6 +402,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -103,6 +410,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1507,7 +1514,7 @@ index 553cb6ae9..d1d740163 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('a');
-@@ -139,6 +442,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -139,6 +450,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1518,7 +1525,7 @@ index 553cb6ae9..d1d740163 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('s');
-@@ -189,6 +496,11 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
+@@ -189,6 +504,11 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
  	if (likely(memcmp(path, su_path, sizeof(su_path))))
  		goto do_orig_execve;
  
@@ -1530,7 +1537,7 @@ index 553cb6ae9..d1d740163 100644
  	ksu_compat_sulog('x');
  	pr_info("sys_execve su found\n");
  
-@@ -243,6 +555,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
+@@ -243,6 +563,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
  do_orig_execve:
  	return ksu_syscall_table[orig_nr](regs);
  }
@@ -1834,7 +1841,7 @@ index f866a4980..b75155141 100644
      return ret;
  }
 diff --git a/kernel/manager/apk_sign.c b/kernel/manager/apk_sign.c
-index a1e2c6464..bf4937e28 100644
+index 95beea84a..5380630d7 100644
 --- a/kernel/manager/apk_sign.c
 +++ b/kernel/manager/apk_sign.c
 @@ -363,5 +363,26 @@ bool is_manager_apk(char *path)
@@ -1866,7 +1873,7 @@ index a1e2c6464..bf4937e28 100644
 +	return false;
  }
 diff --git a/kernel/manager/throne_tracker.c b/kernel/manager/throne_tracker.c
-index 8d1b64b2a..f06905075 100644
+index 3e8c8bfa7..24be6888f 100644
 --- a/kernel/manager/throne_tracker.c
 +++ b/kernel/manager/throne_tracker.c
 @@ -6,6 +6,15 @@
