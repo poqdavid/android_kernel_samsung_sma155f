@@ -1,0 +1,4 @@
+*.img
+out/
+scripts/bin/certs/
+scripts/bin/workspace/
