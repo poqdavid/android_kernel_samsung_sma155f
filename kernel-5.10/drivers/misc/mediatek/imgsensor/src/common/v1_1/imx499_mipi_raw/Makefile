@@ -1,1 +1,0 @@
-imgsensor_isp6s-objs += $(subdrv-rpath)/imx499mipiraw_Sensor.o

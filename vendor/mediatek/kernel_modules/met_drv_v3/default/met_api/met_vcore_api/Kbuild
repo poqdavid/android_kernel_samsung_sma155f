@@ -1,5 +1,0 @@
-obj-m += met_vcore_api.o
-
-ccflags-y += -I$(srctree)/include/
-
-met_vcore_api-y := default/met_api/met_vcore_api/met_vcore_api.o
