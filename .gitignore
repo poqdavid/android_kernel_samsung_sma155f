@@ -1,4 +1,8 @@
 *.img
 out/
+logs/
 scripts/bin/certs/
 scripts/bin/workspace/
+.discord_userid
+.discord_webhook
+
