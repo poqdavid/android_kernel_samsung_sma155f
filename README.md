@@ -1,87 +1,123 @@
-## Introduction ##
-- An addon root hiding kernel patches and userspace module for KernelSU.
+<div align="center">
 
-- The userspace tool `ksu_susfs`, as well as the ksu module, require a susfs patched kernel to work.
+# KernelSU Next for Samsung A15 4G
 
-# Warning #
-- This is only experimental code, that said it can harm your system or cause performance hit, **YOU ARE !! W A R N E D !!** already
+[![KernelSU](https://img.shields.io/badge/KernelSU-Supported-green)](https://kernelsu.org/)
+[![SUSFS](https://img.shields.io/badge/SUSFS-Integrated-orange)](https://gitlab.com/simonpunk/susfs4ksu)
 
-## Compatibility ##
-- The susfs kernel patches may differ for different kernel version or even on the same kernel version, you may need to create your own patches for your kernel.
+</div>
+<div align="center">
+## ⚠️ Your warranty is no longer valid!
 
-## Patch Instruction (For GKI Kernel only and building from official google artifacts) ##
-**- Prerequisite -**
-1. All susfs patches are mainly based on the **original official KernelSU (the one from weishu)** with **tag / release tag**, so you should clone his repo with **tag / release tag** and clone this susfs branch with a **tag / release tag** or up to a commit message containing **"Bump version to vX.X.X"** to get a better patching result.
-2. Since v2.0.0, SUSFS does not rely on kernel features like KPROBES, KRETPROBES and HAVE_SYSCALL_TRACEPOINTS, which means it will patch all the KernelSU code to use inline hooks now, even for the sucompat code.
-3. SUSFS patches may conflict with some patches like custom manual hooks for sucompat since SUSFS already includes its own sucompat patches in KernelSU and kernel code.
+I am **not responsible** for bricked devices, damaged hardware, or any issues that arise from using this kernel.
 
+**Please** do thorough research and fully understand the features included in this kernel before flashing it!
 
-**- Apply SUSFS patches -**
-1. Make sure you follow the offical KSU guild here to clone and build the kernel with KSU: `https://kernelsu.org/guide/how-to-build.html`, the kernel root directory should be `$KERNEL_REPO/common`, you should run script to clone KernelSU in `$KERNEL_REPO`, **make sure you clone with a tag version.**
-2. Clone this susfs branch with a **tag / release tag** or up to a commit message containing **"Bump version to vX.X.X"**, as they are more stable in general.
-3. Run `cp ./kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch $KERNEL_REPO/KernelSU/`
-4. Run `cp ./kernel_patches/50_add_susfs_in_kernel-<kernel_version>.patch $KERNEL_REPO/common/`
-5. Run `cp ./kernel_patches/fs/* $KERNEL_REPO/common/fs/`
-6. Run `cp ./kernel_patches/include/linux/* $KERNEL_REPO/common/include/linux/`
-7. Run `cd $KERNEL_REPO/KernelSU` and then `patch -p1 < 10_enable_susfs_for_ksu.patch`
-8. Run `cd $KERNEL_REPO/common` and then `patch -p1 < 50_add_susfs_in_kernel.patch`, **if there are failed patches, you may try to patch them manually by yourself.**
-9. If you want to make your kernel support other KSU manager variant, you can add its own hash size and hash in `ksu_is_manager_apk()` function in `KernelSU/kernel/apk_sign.c`
-10. Make sure again to have `CONFIG_KSU` and `CONFIG_KSU_SUSFS` enabled before building the kernel, some other SUSFS feature may be disabled by default, you may enable/disable them via `menuconfig`, `kernel defconfig`, or change the `default [y|n]` option under each `config KSU_SUSFS_` option in `$KernelSU_repo/kernel/Kconfig` if you build with a new defconfig every time.
-11. For `gki kernel android14` or above, if you are building from google artifacts, it is necessary to delete the file `$KERNEL_REPO/common/android/abi_gki_protected_exports_aarch64` and `$KERNEL_REPO/common/android/abi_gki_protected_exports_x86_64`, otherwise some modules like WiFi will not work. Or you can just remove those files whenever they exist in your kernel repo.
-12. If you want to flash the fresh built gki boot.img, then before you build the kernel, first you need to fix or hardcode the `local spl_date` in function `build_gki_boot_images()` in `$KERNEL_REPO/build/kernel/build_utils.sh` to match the current boot security patch level of your phone. Or you can just use magiskboot to unpack and repack the built kernel for your stock boot.img.
-13. Build and flash the kernel.
-14. For some compilor error, please refer to the section **[Known Compilor Issues]** below.
-15. For other building tips, please refer to the section **[Other Building Tips]** below.
+By flashing this kernel, **YOU** are choosing to make these modifications. If something goes wrong, **do not blame me**!
 
-## Build ksu_susfs userspace tool ##
-1. Run `./build_ksu_susfs_tool.sh` to build the userspace tool `ksu_susfs`, and the arm64 and arm binary will be copied to `ksu_module_susfs/tools/` as well.
-2. Now you can also push the compiled `ksu_susfs` tool to `/data/adb/ksu/bin/` so that you can run it directly in adb root shell or termux root shell, as well as in your own ksu modules.
+---
 
-## Build susfs4ksu module ##
-- The ksu module here is just a demo to show how to use it.
-- It will also copy the `ksu_susfs` tool to `/data/adb/ksu/bin/` as well when installing the module.
+### 🚨 Proceed at your own risk!
 
-1. ksu_susfs tool can be run in any stage scripts, post-fs-data.sh, services.sh, boot-completed.sh according to your own need.
-2. Run `./build_ksu_module.sh` to build the susfs KSU module.
+---
 
-## Usage of ksu_susfs and supported features ##
-- Run `ksu_susfs` in root shell for detailed usages.
-- See `$KernelSU_repo/kernel/Kconfig` for supported features after applying the susfs patches.
+## 🔧 Available Kernels
 
-## Other Building Tips ##
-- To only remove the `-dirty` string from kernel release string, open file `$KERNEL_ROOT/scripts/setlocalversion`, then look for all the lines that containing `printf '%s' -dirty`, and replace it with `printf '%s' ''`
-- Alternatively, If you want to directly hardcode the whole kernel release string, then open file `$KERNEL_ROOT/scripts/setlocalversion`, look for the last line `echo "$res"`, and for example, replace it with `echo "-android13-01-gb123456789012-ab12345678"`
-- To hardcode your kernel version string, open `$KERNEL_ROOT/scripts/mkcompile_h`, and look for line `UTS_VERSION="$(echo $UTS_VERSION $CONFIG_FLAGS $TIMESTAMP | cut -b -$UTS_LEN)"`, then for example, replace it with `UTS_VERSION="#1 SMP PREEMPT Mon Jan 1 18:00:00 UTC 2024"`. But for kernel 6.1+, you need to edit `${KERNEL_ROOT}/init/Makefile`, and look for line `build-timestamp = $(or $(KBUILD_BUILD_TIMESTAMP), $(build-timestamp-auto))`, replace it with your own timestamp, like `build-timestamp = "Wed Jan 30 12:00:00 UTC 2025"`
-- To hardcode your kernel version string which can be seen from /proc/version, open `$KERNEL_ROOT/scripts/mkcompile_h`, then search for variable name `LINUX_COMPILE_BY` and `LINUX_COMPILE_HOST`, then for example, append `LINUX_COMPILE_BY=build-user` and `LINUX_COMPILE_HOST=build-host` after line `UTS_VERSION="$(echo $UTS_VERSION $CONFIG_FLAGS $TIMESTAMP | cut -b -$UTS_LEN)"`
-- To spoof the `/proc/config.gz` with the stock config, 
+| Kernel | Repository | Status |
+|--------|------------|--------|
+| 📱 **Samsung** | [SamsungA15_KernelSUNext_SUSFS](https://github.com/poqdavid/android_kernel_samsung_sma155f/tree/kernelsunext) | ✅ Active |
 
-   1. Make sure you are on the stock ROM and using stock kernel.
-   2. Use adb shell or root shell to pull your stock `/proc/config.gz` from your device to PC.
-   3. Decompress it using `gunzip` or whatever tools, then copy it to `$KERNEL_ROOT/arch/arm64/configs/stock_defconfig`
-   4. Open file `$KERNEL_ROOT/kernel/Makefile`.
-   5. Look for line `$(obj)/config_data: $(KCONFIG_CONFIG) FORCE`, and replace it with `$(obj)/config_data: arch/arm64/configs/stock_defconfig FORCE`
+---
+<div align="left">
+## 🔗 Additional Resources
 
-## Known Compiler Issues ##
-   1. error: no member named 'android_kabi_reservedx' in 'struct yyyyyyyy'
+- 🩹 [Kernel Patches](https://github.com/WildKernels/kernel_patches)
+- ⚡ [Kernel Flasher](https://github.com/fatalcoder524/KernelFlasher)
 
-      - Because normally the memeber `u64 android_kabi_reservedx;` doesn't exist in all structs with all kernel version below 4.19, and sometimes it is not guaranteed existed with kernel version >= 4.19 and <= 5.4, and even with GKI kernel, like some of the custom kernels has all of them disabled. So at this point if the susfs patches didn't have them patched for you, then what you need to do is to manually append the member to the end of the corresponding struct definition, it should be `u64 android_kabi_reservedx;` with the last `x` starting from `1`, like `u64 android_kabi_reserved1;`, `u64 android_kabi_reserved2;` and so on. You may also refer to patch from other branches like `kernel-4.14`, `kernel-4.9` of this repo for extra `diff` of the missing kabi members.
+---
 
-## Other Known Issues ##
-- Some of the File Explorer Apps cannot display a files/directory properly when a specific sub path of '/sdcard' or '/storage/emulated/0' is added to sus_path
-    1. Make sure the file explorer app has root allowed by KSU manager, because sus_path is only effective on no root allowed process uid.
-    2. It is strongly NOT recommended adding sub path of '/sdcard' or '/storage/emulated/0' to sus_path, because file explorer app is likely using android API to retrieve the list of files/directory, which means the calling uid will be changed to other system media provider app such as the google provider to execute the file lookup operation, and makes sus_path think that it is not a root allowed process uid so as to prevent them from showing up, unless the app obtains the root access first then use root privilege to list the files/directories without using android API.
+## 📋 Installation Instructions
 
-- If your KernelSU manager is using magic mount, susfs may not be able to capture all the sus mounts mounted by KSU, in this situation, users are advised to inspect which mounts are leaking and then manually add them via `ksu_susfs add_try_umount <leaked_mount_path> 1`.
+For GKI installation, please follow the official guide:
 
-## Credits ##
-- KernelSU: https://github.com/tiann/KernelSU
-- KernelSU fork: https://github.com/5ec1cff/KernelSU
-- @Kartatz: for ideas and original commit from https://github.com/Dominium-Apum/kernel_xiaomi_chime/pull/1/commits/74f8d4ecacd343432bb8137b7e7fbe3fd9fef189
+📖 **[KernelSU Installation Guide](https://kernelsu.org/guide/installation.html)**
 
-## Telegram ##
-- @simonpunk
+---
 
+## ✨ Features
 
-## Buy me a coffee ##
-- PayPal: kingjeffkimo@yahoo.com.tw
-- BTC: bc1qgkwvsfln02463zpjf7z6tds8xnpeykggtgk4kw
+- 🔐 **KernelSU/KernelSUNext**: A root solution for Android GKI devices that works in kernel mode and grants root permission to userspace applications directly in kernel space
+- 🥷 **SUSFS**: An addon root hiding kernel patches and userspace module for KernelSU
+- 🛡️ **BBG**: LSM-based Baseband Guard security to protect critical device partitions
+- 🖧 **BBRv1**: Improved TCP congestion control
+- ✅ **LTO**: Link Time Optimisation enabled
+- ⚡️ **TMPFS XATTR / POSIX ACL**: Extended TMPFS support for meta modules and Mountify
+- </> **Unicode Bypass Fix**: Prevent path traversal and other detections using non-printable Unicode codepoints [Experimental]
+- 🖥️ **Droidspaces Support**: Support Portable Linux containers to run full Linux environments.
+- 🔃 **NTSync**: Provide high-performance, low-latency synchronization primitives compatible with the Windows NT kernel API
+
+---
+<div align="center">
+  
+🙏 Special thanks to the open-source community for their contributions!
+
+---
+<div align="left">
+## 💬 Support
+
+If you encounter any issues or need help, feel free to:
+- 🐛 Open an issue in this repository
+- 💬 Reach out to me directly
+
+---
+
+## ⚠️ Disclaimer
+
+Flashing this kernel will void your warranty, and there is always a risk of bricking your device. Please make sure to:
+- 💾 Back up your data
+- 🧠 Understand the risks before proceeding
+
+**🚨 Proceed at your own risk!**
+
+---
+
+<div align="center">
+
+## 📱 Contacts
+
+[![Telegram](https://img.shields.io/badge/Telegram-poqdavid-blue?logo=telegram)](https://t.me/poqdavid)
+
+</div>
+
+---
+<div align="center">
+## 🌟 Special Thanks
+
+**These amazing people help make this project possible! ❤️**
+
+| 🔧 **Project** | 👨‍💻 **Developer** | 🔗 **Link** |
+|:---------------:|:----------------:|:-----------:|
+| **KernelSU** | tiann | [![GitHub](https://img.shields.io/badge/GitHub-tiann-blue?style=flat-square&logo=github)](https://github.com/tiann/KernelSU) |
+| **KernelSU-Next** | rifsxd | [![GitHub](https://img.shields.io/badge/GitHub-rifsxd-blue?style=flat-square&logo=github)](https://github.com/KernelSU-Next/KernelSU-Next) |
+| **Magic-KSU** | 5ec1cff | [![GitHub](https://img.shields.io/badge/GitHub-5ec1cff-blue?style=flat-square&logo=github)](https://github.com/5ec1cff/KernelSU) |
+| **SUSFS** | simonpunk | [![GitLab](https://img.shields.io/badge/GitLab-simonpunk-orange?style=flat-square&logo=gitlab)](https://gitlab.com/simonpunk/susfs4ksu.git) |
+| **SUSFS Module** | sidex15 | [![GitHub](https://img.shields.io/badge/GitHub-sidex15-blue?style=flat-square&logo=github)](https://github.com/sidex15) |
+| **ReeViiS69** | ReeViiS69 | [![GitHub](https://img.shields.io/badge/GitHub-ReeViiS69-blue?style=flat-square&logo=github)](https://github.com/ReeViiS69) |
+| **fei-ke** | fei-ke | [![GitHub](https://img.shields.io/badge/GitHub-fei--ke-blue?style=flat-square&logo=github)](https://github.com/fei-ke/android_kernel_samsung_sm8550.git) |
+| **pershoot** | pershoot | [![GitHub](https://img.shields.io/badge/GitHub-pershoot-blue?style=flat-square&logo=github)](https://github.com/pershoot) |
+| **jimsterino98** | jimsterino98 | [![GitHub](https://img.shields.io/badge/GitHub-jimsterino98-blue?style=flat-square&logo=github)](https://github.com/jimsterino98) |
+| **Baseband Guard** | vc-teahouse | [![GitHub](https://img.shields.io/badge/GitHub-vc--teahouse-blue?style=flat-square&logo=github)](https://github.com/vc-teahouse/Baseband-guard.git) |
+| **Droidspaces** | ravindu644 | [![GitHub](https://img.shields.io/badge/GitHub-ravindu644-blue?style=flat-square&logo=github)](https://github.com/ravindu644/Droidspaces-OSS.git) |
+
+*If you have contributed and are not listed here, please remind me!* 🙏
+
+---
+<div align="center">
+## 💝 Donations
+
+Any and all donations are appreciated!
+
+<br/>**BTC Legacy:** 1Q2JQG3iCLZPT2iJfDLow1oQVGKmxheoAh
+<br/>**BTC Segwit:** bc1q8gurls0wjkfe43ygmrqmu2pzmyjetnrvgws9sr
+<br/>**BCH:** qrks52smlqw7d8700d77uqvmve03d4knzvd2vghaqz
+<br/>**ETH:** 0x7218779242a8425879B09969431c20F5eC1a192D

@@ -1,0 +1,95 @@
+diff --git a/kernel/sucompat.c b/kernel/sucompat.c
+index 97493b1e..e2079313 100644
+--- a/kernel/sucompat.c
++++ b/kernel/sucompat.c
+@@ -230,6 +230,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+     pr_info("ksu_handle_execveat_sucompat: su found\n");
+     memcpy((void *)filename->name, ksud_path, sizeof(ksud_path));
+ 
++    write_sulog('x');
+     escape_with_root_profile();
+ 
+     return 0;
+@@ -254,6 +255,7 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
+ 
+     if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
+         pr_info("ksu_handle_faccessat: su->sh!\n");
++        write_sulog('a');
+         *filename_user = sh_user_path();
+     }
+ 
+@@ -273,6 +275,7 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags) {
+     }
+ 
+     pr_info("ksu_handle_stat: su->sh!\n");
++    write_sulog('s');
+     memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
+     return 0;
+ }
+@@ -289,6 +292,7 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
+ 
+     if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
+         pr_info("ksu_handle_stat: su->sh!\n");
++        write_sulog('s');
+         *filename_user = sh_user_path();
+     }
+ 
+diff --git a/kernel/supercalls.c b/kernel/supercalls.c
+index 5d78b861..ab494f51 100644
+--- a/kernel/supercalls.c
++++ b/kernel/supercalls.c
+@@ -1123,6 +1123,54 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user
+         return 0;
+     }
+ 
++	unsigned long reply = (unsigned long)*arg;
++
++	if (magic2 == CHANGE_MANAGER_UID) {
++		/* only root is allowed for this command */
++		if (current_uid().val != 0)
++			return 0;
++
++		pr_info("ksu_handle_sys_reboot: ksu_set_manager_appid to: %d\n", cmd);
++		ksu_set_manager_appid(cmd);
++
++		if (cmd == ksu_get_manager_appid()) {
++			if (copy_to_user((void __user *)*arg, &reply, sizeof(reply)))
++				pr_info("ksu_handle_sys_reboot: reply fail\n");
++		}
++
++		return 0;
++	}
++
++	if (magic2 == GET_SULOG_DUMP_V2) {
++		// only root is allowed for this command
++		if (current_uid().val != 0)
++			return 0;
++
++		int ret = send_sulog_dump(*arg);
++			if (ret)
++				return 0;
++		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
++			return 0;
++	}
++
++	if (magic2 == CHANGE_KSUVER) {
++		// only root is allowed for this command
++		if (current_uid().val != 0)
++			return 0;
++
++		pr_info("sys_reboot: ksu_change_ksuver to: %d\n", cmd);
++		ksuver_override = cmd;
++		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
++			return 0;
++	}
++
++	if (magic2 == CHANGE_SPOOF_UNAME) {
++		// we write our error confirmation on **
++		reply = 0;
++		if (copy_to_user((void __user *)*arg, &reply, sizeof(reply) ))
++			return 0;
++	}
++
+     return -EINVAL;
+ }
+ #endif // #ifndef CONFIG_KSU_SUSFS
