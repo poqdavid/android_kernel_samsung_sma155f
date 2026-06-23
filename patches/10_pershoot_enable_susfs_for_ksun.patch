@@ -1,6 +1,6 @@
-From 58aa7790a440a5baadc3e623ffee5454aee2bb89 Mon Sep 17 00:00:00 2001
+From 6a8c15e1ada19be801a9cf473e2916289c4fb013 Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Sun, 21 Jun 2026 23:03:56 +0200
+Date: Tue, 23 Jun 2026 23:52:38 +0200
 Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
 
 ---
