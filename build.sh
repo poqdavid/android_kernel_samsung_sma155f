@@ -318,15 +318,34 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-val MODULE_COMPRESS n
         
         info -n "Setting optimization configs..."
-        # Optimizations (BBR, etc)
+        
+        info "Adding BBG support..."
+        # BBG support
         $CONFIG_TOOL --file $DEFCONFIG \
-        --set-val IP_NF_TARGET_TTL y \
-        --set-val IP6_NF_TARGET_HL y \
-        --set-val IP6_NF_MATCH_HL y \
+        --set-val BBG y
+        
+        info "Adding Droidspaces support..."
+        # Droidspaces support
+        $CONFIG_TOOL --file $DEFCONFIG \
+        --set-val SYSVIPC y \
+        --set-val DEVTMPFS y \
+        --set-val IPC_NS y \
+        --set-val PID_NS y \
+        --set-val POSIX_MQUEUE y \
+        --set-val NETFILTER_XT_TARGET_REJECT y \
+        --set-val NETFILTER_XT_TARGET_LOG y \
+        --set-val NETFILTER_XT_MATCH_RECENT y \
+        --set-val NTSYNC y
+        
+        info "Adding BBR Support Support..."
+        # BBR Support
+        $CONFIG_TOOL --file $DEFCONFIG \
         --set-val TCP_CONG_ADVANCED y \
         --set-val TCP_CONG_BBR y \
-        --set-val TCP_CONG_CUBIC y \
         --set-val NET_SCH_FQ y \
+        --set-val NET_SCH_FQ_CODEL y \
+        --set-val TCP_CONG_CUBIC y \
+        --set-val TCP_CONG_BIC n \
         --set-val TCP_CONG_WESTWOOD n \
         --set-val TCP_CONG_HTCP n \
         --set-val DEFAULT_BBR y \
@@ -334,27 +353,36 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-str DEFAULT_TCP_CONG "bbr" \
         --set-val DEFAULT_RENO n \
         --set-val DEFAULT_CUBIC n \
-        -d TCP_CONG_BIC \
-        -d TCP_CONG_WESTWOOD \
-        -d TCP_CONG_HTCP \
-        --set-val IP6_NF_NAT y \
-        --set-val IP6_NF_TARGET_MASQUERADE y \
-        --set-val NF_NAT_IPV6 y \
-        --set-val BBG y \
-        --set-val SYSVIPC y \
-        --set-val POSIX_MQUEUE y \
-        --set-val IPC_NS y \
-        --set-val PID_NS y \
-        --set-val DEVTMPFS y \
-        --set-val NETFILTER_XT_MATCH_ADDRTYPE y \
-        --set-val NETFILTER_XT_TARGET_REJECT y \
-        --set-val NETFILTER_XT_TARGET_LOG y \
-        --set-val NETFILTER_XT_MATCH_RECENT y \
+        
+        info "Adding IP SET & IPv6_NAT Support..."
+        #IP SET & IPv6_NAT Support
+        $CONFIG_TOOL --file $DEFCONFIG \
         --set-val IP_SET y \
+        --set-val IP_SET_MAX 65534 \
+        --set-val IP_SET_BITMAP_IP y \
+        --set-val IP_SET_BITMAP_IPMAC y \
+        --set-val IP_SET_BITMAP_PORT y \
         --set-val IP_SET_HASH_IP y \
+        --set-val IP_SET_HASH_IPMARK y \
+        --set-val IP_SET_HASH_IPPORT y \
+        --set-val IP_SET_HASH_IPPORTIP y \
+        --set-val IP_SET_HASH_IPPORTNET y \
+        --set-val IP_SET_HASH_IPMAC y \
+        --set-val IP_SET_HASH_MAC y \
+        --set-val IP_SET_HASH_NETPORTNET y \
         --set-val IP_SET_HASH_NET y \
+        --set-val IP_SET_HASH_NETNET y \
+        --set-val IP_SET_HASH_NETPORT y \
+        --set-val IP_SET_HASH_NETIFACE y \
+        --set-val IP_SET_LIST_SET y \
+        --set-val NETFILTER_XT_MATCH_ADDRTYPE y \
         --set-val NETFILTER_XT_SET y \
-        --set-val NTSYNC y
+        --set-val IP_NF_TARGET_TTL y \
+        --set-val IP6_NF_TARGET_HL y \
+        --set-val IP6_NF_MATCH_HL y \
+        --set-val IP6_NF_NAT y \
+        --set-val NF_NAT_IPV6 y \
+        --set-val IP6_NF_TARGET_MASQUERADE y
         
         info -n "Setting KernelSU Next & SUSFS configs..."
         # KernelSU Next & SUSFS
