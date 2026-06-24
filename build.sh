@@ -599,6 +599,10 @@ export CROSS_COMPILE_COMPAT="arm-linux-gnueabi-"
 export OUT_DIR="$OUT_DIR"
 export DIST_DIR="$OUT_DIR"
 export BUILD_CONFIG="$OUT_DIR/build.config"
+export LD=ld.lld
+export HOSTLD=ld.lld
+export AR=llvm-ar
+export NM=llvm-nm
 
 if [[ -n "$JOBS" ]]; then
     export MAKEFLAGS="-j$JOBS"
