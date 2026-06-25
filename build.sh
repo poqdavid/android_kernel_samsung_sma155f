@@ -216,10 +216,10 @@ CMDMISSING=0
 require_cmds=(bash sed awk find git patch curl printf)
 
 PYTHON_BIN=""
-if command -v python2 >/dev/null 2>&1; then
-    PYTHON_BIN=python2
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN=python3
 else
-    require_cmds+=(python2) # force readable error later
+    require_cmds+=(python3) # force readable error later
 fi
 
 for c in "${require_cmds[@]}"; do
@@ -275,6 +275,9 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
     CONFIG_TOOL="./${KERNEL_DIR}/scripts/config"
     DEFAULTDEFCONFIG="./${KERNEL_DIR}/${DEFAULT_DEFCONFIG}"
     OTHERDEFCONFIG="./${KERNEL_DIR}/${OTHER_DEFCONFIG}"
+    
+    info -n "Applying Python3 support patch..."
+    patch -p1 --forward < ./patches/enable-python3-support.patch || true
     
     for DEFCONFIG in "$DEFAULTDEFCONFIG" "$OTHERDEFCONFIG"; do
         info -n "$DEFCONFIG"
@@ -426,7 +429,7 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
     
     # 4. Generate build.config
     info -n "Generating build configs..."
-    python2 scripts/gen_build_config.py --kernel-defconfig a15_00_defconfig --kernel-defconfig-overlays entry_level.config -m user -o $OUT_DIR/build.config
+    python3 scripts/gen_build_config.py --kernel-defconfig a15_00_defconfig --kernel-defconfig-overlays entry_level.config -m user -o $OUT_DIR/build.config
     popd > /dev/null
     CONFIG_END=$(_ts)
 fi
