@@ -211,6 +211,23 @@ done
 
 if [[ $VERBOSE -eq 1 ]]; then set -x; fi
 
+export LTO=thin
+export ARCH=arm64
+export PLATFORM_VERSION=12
+export CROSS_COMPILE="aarch64-linux-gnu-"
+export CROSS_COMPILE_COMPAT="arm-linux-gnueabi-"
+export OUT_DIR="$OUT_DIR"
+export DIST_DIR="$OUT_DIR"
+export BUILD_CONFIG="$OUT_DIR/build.config"
+export LD=ld.lld
+export HOSTLD=ld.lld
+export AR=llvm-ar
+export NM=llvm-nm
+
+if [[ -n "$JOBS" ]]; then
+    export MAKEFLAGS="-j$JOBS"
+fi
+
 # -------- Preconditions: required commands --------
 CMDMISSING=0
 require_cmds=(bash sed awk find git patch curl printf)
@@ -454,6 +471,12 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
         KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" $BASE_VERSION)
         
         info -n "Detected KernelSU Next Version: $KSU_VERSION"
+        
+        if [ -n "${GITHUB_ENV:-}" ]; then
+            info -n "Writing KernelSU Next version to GitHub Actions environment..."
+            echo "REL_KERNEL=$KSU_VERSION" >> "$GITHUB_ENV"
+        fi
+        
         popd > /dev/null
         
         info -n "Applying fake_config.patch..."
@@ -468,6 +491,11 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
             # Get SUSFS version from header we just copied
             SUSFS_VER=$(grep '#define SUSFS_VERSION' ./include/linux/susfs.h | awk -F'"' '{print $2}' || echo "N/A")
             info -n "Detected SUSFS Version: $SUSFS_VER"
+            
+            if [ -n "${GITHUB_ENV:-}" ]; then
+                info -n "Writing SUSFS version to GitHub Actions environment..."
+                echo "REL_SUSFS=$SUSFS_VER" >> "$GITHUB_ENV"
+            fi
             
             # Patch Main Kernel
             info -n "Patching SUSFS into Kernel..."
@@ -593,23 +621,6 @@ fi
 # 6. Build
 BUILD_START=$(_ts)
 info -n "Starting Kernel Build..."
-
-export LTO=thin
-export ARCH=arm64
-export PLATFORM_VERSION=12
-export CROSS_COMPILE="aarch64-linux-gnu-"
-export CROSS_COMPILE_COMPAT="arm-linux-gnueabi-"
-export OUT_DIR="$OUT_DIR"
-export DIST_DIR="$OUT_DIR"
-export BUILD_CONFIG="$OUT_DIR/build.config"
-export LD=ld.lld
-export HOSTLD=ld.lld
-export AR=llvm-ar
-export NM=llvm-nm
-
-if [[ -n "$JOBS" ]]; then
-    export MAKEFLAGS="-j$JOBS"
-fi
 
 pushd "$KERNEL_DIR" > /dev/null
 cd ../kernel

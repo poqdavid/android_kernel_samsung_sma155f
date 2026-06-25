@@ -114,16 +114,16 @@ checks() {
     fi
     
     # Uncompress if needed
-    if [ -f "${PARENTDIR}/boot.img.lz4" ]; then
+    if [ -f "${PARENTDIR}/repackfiles/boot.img.lz4" ]; then
         info -n "Found boot.img.lz4. Decompressing now..."
-        lz4 -B6 --content-size -f boot.img.lz4 boot.img
+        lz4 -B6 --content-size -f repackfiles/boot.img.lz4 repackfiles/boot.img
         info -n "Decompression complete."
     else
         info -n "No compressed boot image detected."
     fi
     
     # Check if boot image is available
-    if [ ! -f "${PARENTDIR}/boot.img" ]; then
+    if [ ! -f "${PARENTDIR}/repackfiles/boot.img" ]; then
         err -n "boot.img not found in ${PARENTDIR}!"
         err -n "Please place your boot.img in ${PARENTDIR}."
         err -n "Aborting..."
@@ -150,7 +150,7 @@ unpack() {
     
     info -n "Starting unpacking of boot.img..."
     cd $WORKSPACE
-    $MAGISKBOOT unpack -n "${PARENTDIR}/boot.img"
+    $MAGISKBOOT unpack -n "${PARENTDIR}/repackfiles/boot.img"
     rm kernel
     cd $PARENTDIR
     info -n "Boot image unpacked successfully."
@@ -172,15 +172,15 @@ repack() {
         # Repacking boot image
         info -n "Starting repacking of boot image..."
         cd $WORKSPACE
-        $MAGISKBOOT repack "${PARENTDIR}/boot.img" "${WORKSPACE}/new-boot.img"
+        $MAGISKBOOT repack "${PARENTDIR}/repackfiles/boot.img" "${WORKSPACE}/new-boot.img"
         cd $PARENTDIR
         info -n "Boot image repacked into new-boot.img."
         
         cp -f $WORKSPACE/new-boot.img $WORKSPACE/new-boot-signed.img
         info -n "Boot image Copied to ${WORKSPACE}/new-boot-signed.img."
         
-        mv $WORKSPACE/new-boot.img $PARENTDIR/boot-repacked.img
-        info -n "Repacked boot image moved to ${PARENTDIR}/boot-repacked.img."
+        mv $WORKSPACE/new-boot.img $PARENTDIR/repackfiles/boot-repacked.img
+        info -n "Repacked boot image moved to ${PARENTDIR}/repackfiles/boot-repacked.img."
         
         info -n "Signing boot image..."
         python3 "${AVBTOOL}" add_hash_footer --partition_name boot --partition_size $((64 * 1024 * 1024)) --image $WORKSPACE/new-boot-signed.img --algorithm SHA256_RSA4096 --key $CERTDIR/sign.pk8
@@ -190,8 +190,8 @@ repack() {
         #$MAGISKBOOT sign $WORKSPACE/new-boot-signed.img $CERTDIR/sign.pem
         info -n "Boot image signed successfully."
         
-        mv $WORKSPACE/new-boot-signed.img $PARENTDIR/boot-repacked-signed.img
-        info -n "Repacked boot image moved to ${PARENTDIR}/boot-repacked-signed.img."
+        mv $WORKSPACE/new-boot-signed.img $PARENTDIR/repackfiles/boot-repacked-signed.img
+        info -n "Repacked boot image moved to ${PARENTDIR}/repackfiles/boot-repacked-signed.img."
         
         info -n "Repacking process completed successfully."
         return 0
@@ -216,7 +216,7 @@ package_tar() {
         OUTTAR="../kernelsunext_${KSU_VERSION}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
     fi
     
-    if [ ! -f "${PARENTDIR}/boot-repacked-signed.img" ]; then
+    if [ ! -f "${PARENTDIR}/repackfiles/boot-repacked-signed.img" ]; then
         err -n "Signed repacked boot image not found at ${PARENTDIR}/boot-repacked-signed.img"
         err -n "Skipping tar packaging."
         return 1
@@ -227,12 +227,17 @@ package_tar() {
     
     info -n "Created temp directory at $TMPDIR"
     
+    if [ ! -d "${PARENTDIR}/release" ]; then
+        mkdir -p "${PARENTDIR}/release"
+        info -n "Created release directory at ${PARENTDIR}/release"
+    fi
+    
     # Copy/sign image as boot.img inside temp dir so tar entry is named boot.img
-    cp -f "${PARENTDIR}/boot-repacked-signed.img" "${TMPDIR}/boot.img"
+    cp -f "${PARENTDIR}/repackfiles/boot-repacked-signed.img" "${TMPDIR}/boot.img"
     
     # Also include vbmeta.img.lz4 if it exists in parent dir
-    if [ -f "${PARENTDIR}/vbmeta.img.lz4" ]; then
-        cp -f "${PARENTDIR}/vbmeta.img.lz4" "${TMPDIR}/vbmeta.img.lz4"
+    if [ -f "${PARENTDIR}/repackfiles/vbmeta.img.lz4" ]; then
+        cp -f "${PARENTDIR}/repackfiles/vbmeta.img.lz4" "${TMPDIR}/vbmeta.img.lz4"
         SRCFILES="boot.img vbmeta.img.lz4"
     else
         SRCFILES="boot.img"
@@ -240,11 +245,11 @@ package_tar() {
     
     # Create the tar using ustar header type and write to the requested output path
     cd "$TMPDIR"
-    tar -H ustar -c -f "${PARENTDIR}/${OUTTAR##*/}" $SRCFILES
+    tar -H ustar -c -f "${PARENTDIR}/release/${OUTTAR##*/}" $SRCFILES
     
     # Move tar to the parent directory if created in TMPDIR (tar created there already)
-    if [ -f "${PARENTDIR}/${OUTTAR##*/}" ]; then
-        info -n "Tar archive created at ${PARENTDIR}/${OUTTAR##*/}"
+    if [ -f "${PARENTDIR}/release/${OUTTAR##*/}" ]; then
+        info -n "Tar archive created at ${PARENTDIR}/release/${OUTTAR##*/}"
     else
         err -n "Failed to create tar archive."
         return 1
