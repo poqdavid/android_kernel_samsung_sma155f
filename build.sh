@@ -211,15 +211,32 @@ done
 
 if [[ $VERBOSE -eq 1 ]]; then set -x; fi
 
+export LTO=thin
+export ARCH=arm64
+export PLATFORM_VERSION=12
+export CROSS_COMPILE="aarch64-linux-gnu-"
+export CROSS_COMPILE_COMPAT="arm-linux-gnueabi-"
+export OUT_DIR="$OUT_DIR"
+export DIST_DIR="$OUT_DIR"
+export BUILD_CONFIG="$OUT_DIR/build.config"
+export LD=ld.lld
+export HOSTLD=ld.lld
+export AR=llvm-ar
+export NM=llvm-nm
+
+if [[ -n "$JOBS" ]]; then
+    export MAKEFLAGS="-j$JOBS"
+fi
+
 # -------- Preconditions: required commands --------
 CMDMISSING=0
 require_cmds=(bash sed awk find git patch curl printf)
 
 PYTHON_BIN=""
-if command -v python2 >/dev/null 2>&1; then
-    PYTHON_BIN=python2
+if command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN=python3
 else
-    require_cmds+=(python2) # force readable error later
+    require_cmds+=(python3) # force readable error later
 fi
 
 for c in "${require_cmds[@]}"; do
@@ -276,6 +293,9 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
     DEFAULTDEFCONFIG="./${KERNEL_DIR}/${DEFAULT_DEFCONFIG}"
     OTHERDEFCONFIG="./${KERNEL_DIR}/${OTHER_DEFCONFIG}"
     
+    info -n "Applying Python3 support patch..."
+    patch -p1 --forward < ./patches/enable-python3-support.patch || true
+    
     for DEFCONFIG in "$DEFAULTDEFCONFIG" "$OTHERDEFCONFIG"; do
         info -n "$DEFCONFIG"
         
@@ -318,15 +338,33 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-val MODULE_COMPRESS n
         
         info -n "Setting optimization configs..."
-        # Optimizations (BBR, etc)
+        
+        info "Adding BBG support..."
+        # BBG support
         $CONFIG_TOOL --file $DEFCONFIG \
-        --set-val IP_NF_TARGET_TTL y \
-        --set-val IP6_NF_TARGET_HL y \
-        --set-val IP6_NF_MATCH_HL y \
+        --set-val BBG y
+        
+        info "Adding Droidspaces support..."
+        # Droidspaces support
+        $CONFIG_TOOL --file $DEFCONFIG \
+        --set-val SYSVIPC y \
+        --set-val DEVTMPFS y \
+        --set-val IPC_NS y \
+        --set-val PID_NS y \
+        --set-val POSIX_MQUEUE y \
+        --set-val NETFILTER_XT_TARGET_REJECT y \
+        --set-val NETFILTER_XT_TARGET_LOG y \
+        --set-val NETFILTER_XT_MATCH_RECENT y \
+        --set-val NTSYNC y
+        
+        info "Adding BBR Support Support..."
+        # BBR Support
+        $CONFIG_TOOL --file $DEFCONFIG \
         --set-val TCP_CONG_ADVANCED y \
         --set-val TCP_CONG_BBR y \
-        --set-val TCP_CONG_CUBIC y \
         --set-val NET_SCH_FQ y \
+        --set-val NET_SCH_FQ_CODEL y \
+        --set-val TCP_CONG_CUBIC y \
         --set-val TCP_CONG_BIC n \
         --set-val TCP_CONG_WESTWOOD n \
         --set-val TCP_CONG_HTCP n \
@@ -335,29 +373,38 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-str DEFAULT_TCP_CONG "bbr" \
         --set-val DEFAULT_RENO n \
         --set-val DEFAULT_CUBIC n \
-        -d TCP_CONG_BIC \
-        -d TCP_CONG_WESTWOOD \
-        -d TCP_CONG_HTCP \
-        --set-val IP6_NF_NAT y \
-        --set-val IP6_NF_TARGET_MASQUERADE y \
-        --set-val NF_NAT_IPV6 y \
-        --set-val BBG y \
-        --set-val SYSVIPC y \
-        --set-val POSIX_MQUEUE y \
-        --set-val IPC_NS y \
-        --set-val PID_NS y \
-        --set-val DEVTMPFS y \
-        --set-val NETFILTER_XT_MATCH_ADDRTYPE y \
-        --set-val NETFILTER_XT_TARGET_REJECT y \
-        --set-val NETFILTER_XT_TARGET_LOG y \
-        --set-val NETFILTER_XT_MATCH_RECENT y \
-        --set-val IP_SET y \
-        --set-val IP_SET_HASH_IP y \
-        --set-val IP_SET_HASH_NET y \
-        --set-val NETFILTER_XT_SET y \
-        --set-val NTSYNC y
         
-        info -n "Setting KernelSU & SUSFS configs..."
+        info "Adding IP SET & IPv6_NAT Support..."
+        #IP SET & IPv6_NAT Support
+        $CONFIG_TOOL --file $DEFCONFIG \
+        --set-val IP_SET y \
+        --set-val IP_SET_MAX 65534 \
+        --set-val IP_SET_BITMAP_IP y \
+        --set-val IP_SET_BITMAP_IPMAC y \
+        --set-val IP_SET_BITMAP_PORT y \
+        --set-val IP_SET_HASH_IP y \
+        --set-val IP_SET_HASH_IPMARK y \
+        --set-val IP_SET_HASH_IPPORT y \
+        --set-val IP_SET_HASH_IPPORTIP y \
+        --set-val IP_SET_HASH_IPPORTNET y \
+        --set-val IP_SET_HASH_IPMAC y \
+        --set-val IP_SET_HASH_MAC y \
+        --set-val IP_SET_HASH_NETPORTNET y \
+        --set-val IP_SET_HASH_NET y \
+        --set-val IP_SET_HASH_NETNET y \
+        --set-val IP_SET_HASH_NETPORT y \
+        --set-val IP_SET_HASH_NETIFACE y \
+        --set-val IP_SET_LIST_SET y \
+        --set-val NETFILTER_XT_MATCH_ADDRTYPE y \
+        --set-val NETFILTER_XT_SET y \
+        --set-val IP_NF_TARGET_TTL y \
+        --set-val IP6_NF_TARGET_HL y \
+        --set-val IP6_NF_MATCH_HL y \
+        --set-val IP6_NF_NAT y \
+        --set-val NF_NAT_IPV6 y \
+        --set-val IP6_NF_TARGET_MASQUERADE y
+        
+        info -n "Setting KernelSU Next & SUSFS configs..."
         # KernelSU & SUSFS
         $CONFIG_TOOL --file $DEFCONFIG \
         --set-val KSU y \
@@ -399,7 +446,7 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
     
     # 4. Generate build.config
     info -n "Generating build configs..."
-    python2 scripts/gen_build_config.py --kernel-defconfig a15_00_defconfig --kernel-defconfig-overlays entry_level.config -m user -o $OUT_DIR/build.config
+    python3 scripts/gen_build_config.py --kernel-defconfig a15_00_defconfig --kernel-defconfig-overlays entry_level.config -m user -o $OUT_DIR/build.config
     popd > /dev/null
     CONFIG_END=$(_ts)
 fi
@@ -424,6 +471,12 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
         KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" $BASE_VERSION)
         
         info -n "Detected KernelSU Version: $KSU_VERSION"
+        
+        if [ -n "${GITHUB_ENV:-}" ]; then
+            info -n "Writing KernelSU version to GitHub Actions environment..."
+            echo "REL_KERNEL=$KSU_VERSION" >> "$GITHUB_ENV"
+        fi
+        
         popd > /dev/null
         
         info -n "Applying fake_config.patch..."
@@ -436,8 +489,13 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
             cp ../patches/susfs4ksu/kernel_patches/include/linux/* ./include/linux/
             
             # Get SUSFS version from header we just copied
-            SUSFS_VER=$(grep '#define SUSFS_VERSION' ./include/linux/susfs.h | awk -F'"' '{print $2}' || echo "unknown")
+            SUSFS_VER=$(grep '#define SUSFS_VERSION' ./include/linux/susfs.h | awk -F'"' '{print $2}' || echo "N/A")
             info -n "Detected SUSFS Version: $SUSFS_VER"
+            
+            if [ -n "${GITHUB_ENV:-}" ]; then
+                info -n "Writing SUSFS version to GitHub Actions environment..."
+                echo "REL_SUSFS=$SUSFS_VER" >> "$GITHUB_ENV"
+            fi
             
             # Patch Main Kernel
             info -n "Patching SUSFS into Kernel..."
@@ -519,6 +577,33 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                 info -n "No specific NTSync compat patch found for Android $android_version / Kernel $kernel_version; skipping compat patch. You may need to resolve this manually or update the build script with a new compat patch if it is a common issue."
             fi
             
+            pushd "./KernelSU" > /dev/null
+            
+            # Final KSU patches
+            # Note: The Hook Mode patch for KernelSU-Next should ideally be applied for the main KernelSU-Next repository so for now we disable it for the pershoot's fork.
+            #info -n "Patching Hook Mode!"
+            #patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/overwrite_hook_mode.patch" || true
+            
+            #info -n "Patching KSU_TOOLKIT Support for SusFS kernel!"
+            #patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/ksu_toolkit.patch" || true
+            
+            # if [ "$KSU_VERSION" -le 33095 ]; then
+            #     info -n "Patching Multi-manager Support for SusFS kernel!"
+            #     patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/multi_manager.patch" ||true
+            # else
+            #     info -n "Skipping Multi-manager patch for newer KernelSU versions (>= 33096) as it should be included in mainline already."
+            # fi
+            
+            # if [ "$KSU_VERSION" -ge 33068 ] && [ "$KSU_VERSION" -lt 33070 ]; then
+            #     echo ""
+            #     info -n "Patching Multi-manager sepolicy Support for SusFS kernel!"
+            #     patch -p1 --forward < "../../patches/kernel_patches/next/susfs_fix_patches/$SUSFS_VER/multi_sepolicy_fix.patch" ||true
+            # else
+            #     info -n "Skipping Multi-manager sepolicy patch for KernelSU versions outside 33068-33069 as it should be included in mainline already or the affected code may have been refactored."
+            # fi
+            
+            popd > /dev/null
+            
         else
             warn -n "SUSFS support is disabled; skipping SUSFS-related patches. If you want SUSFS, remove the --no-susfs flag."
         fi
@@ -539,19 +624,6 @@ fi
 # 6. Build
 BUILD_START=$(_ts)
 info -n "Starting Kernel Build..."
-
-export LTO=thin
-export ARCH=arm64
-export PLATFORM_VERSION=12
-export CROSS_COMPILE="aarch64-linux-gnu-"
-export CROSS_COMPILE_COMPAT="arm-linux-gnueabi-"
-export OUT_DIR="$OUT_DIR"
-export DIST_DIR="$OUT_DIR"
-export BUILD_CONFIG="$OUT_DIR/build.config"
-
-if [[ -n "$JOBS" ]]; then
-    export MAKEFLAGS="-j$JOBS"
-fi
 
 pushd "$KERNEL_DIR" > /dev/null
 cd ../kernel

@@ -1,4 +1,6 @@
 *.img
+repackfiles/*.img
+release/
 out/
 logs/
 scripts/bin/certs/
