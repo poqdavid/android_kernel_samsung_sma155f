@@ -1,5 +1,0 @@
-obj-m += met_emi_api.o
-
-ccflags-y += -I$(srctree)/include/
-
-met_emi_api-y := default/met_api/met_emi_api/met_emi_api.o

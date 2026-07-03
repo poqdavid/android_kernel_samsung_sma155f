@@ -1,6 +1,0 @@
-config MTK_VDEC_FMT
-	tristate "mtk vdec formatter"
-	help
-		This option enables mtk vdec formatter driver,
-		To compile this driver as modules, choose M here:
-		the modules will be called vdec-fmt.
