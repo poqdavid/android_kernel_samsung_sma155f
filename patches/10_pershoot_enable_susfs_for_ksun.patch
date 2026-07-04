@@ -1,25 +1,25 @@
-From 6a8c15e1ada19be801a9cf473e2916289c4fb013 Mon Sep 17 00:00:00 2001
+From d053cc8a99d952c80404d94bf2dba47017d092d2 Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Tue, 23 Jun 2026 23:52:38 +0200
+Date: Fri, 3 Jul 2026 18:40:33 +0200
 Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
 
 ---
  kernel/Kbuild                      |  75 ++++---
  kernel/Kconfig                     | 107 ++++++++-
- kernel/core/init.c                 |  49 ++++-
+ kernel/core/init.c                 |  49 +++-
  kernel/extras.c                    |  22 +-
- kernel/feature/adb_root.c          | 160 +++++++++++++-
+ kernel/feature/adb_root.c          | 160 ++++++++++++-
  kernel/feature/adb_root.h          |   4 +
  kernel/feature/kernel_umount.c     |  13 +-
  kernel/feature/selinux_hide.c      | 163 +++++++-------
  kernel/feature/selinux_hide.h      |  15 ++
- kernel/feature/sucompat.c          | 335 ++++++++++++++++++++++++++++-
+ kernel/feature/sucompat.c          | 350 ++++++++++++++++++++++++++++-
  kernel/feature/sucompat.h          |  21 +-
  kernel/hook/setuid_hook.c          |  81 ++++++-
  kernel/hook/setuid_hook.h          |   4 +
- kernel/hook/syscall_event_bridge.c |  74 ++++---
+ kernel/hook/syscall_event_bridge.c |  74 +++---
  kernel/manager/apk_sign.c          |  23 +-
- kernel/manager/throne_tracker.c    |  92 ++++++--
+ kernel/manager/throne_tracker.c    |  92 +++++++-
  kernel/manager/throne_tracker.h    |  52 ++++-
  kernel/policy/allowlist.c          |   2 +
  kernel/policy/app_profile.c        |  21 +-
@@ -28,10 +28,10 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  kernel/runtime/ksud.h              |  20 ++
  kernel/runtime/ksud_integration.c  | 155 +++++++++++--
  kernel/selinux/rules.c             |  22 ++
- kernel/selinux/selinux.c           | 244 ++++++++++++++-------
+ kernel/selinux/selinux.c           | 244 +++++++++++++-------
  kernel/selinux/selinux.h           |  10 +
  kernel/setup.sh                    |   2 +
- kernel/sulog/event.c               |  84 ++++++++
+ kernel/sulog/event.c               |  84 +++++++
  kernel/sulog/event.h               |   4 +
  kernel/supercall/dispatch.c        | 153 +++++++++++++
  kernel/supercall/internal.h        |   2 +
@@ -39,7 +39,8 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  kernel/supercall/supercall.h       |   4 +
  manager/app/build.gradle.kts       |   5 +
  manager/build.gradle.kts           |  69 +++++-
- 35 files changed, 1932 insertions(+), 367 deletions(-)
+ userspace/ksud/build.rs            |  24 +-
+ 36 files changed, 1969 insertions(+), 369 deletions(-)
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
 index 889d0306d..62349dd00 100644
@@ -1125,10 +1126,10 @@ index 5a0437108..faecb73d8 100644
 +
  #endif
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index 553cb6ae9..a469b9b6a 100644
+index 553cb6ae9..549827e16 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
-@@ -13,6 +13,18 @@
+@@ -13,6 +13,19 @@
  #include <linux/version.h>
  #include <linux/sched/task_stack.h>
  #include <linux/ptrace.h>
@@ -1136,10 +1137,11 @@ index 553cb6ae9..a469b9b6a 100644
 +
 +#include "linux/jump_label.h"
 +
++#include <linux/fs_struct.h>
++
 +#ifdef CONFIG_KSU_SUSFS
 +#include <linux/susfs_def.h>
 +#include <linux/minmax.h>
-+#include <linux/fs_struct.h>
 +#include "selinux/selinux.h"
 +#include "objsec.h"
 +#include "runtime/ksud.h"
@@ -1147,7 +1149,7 @@ index 553cb6ae9..a469b9b6a 100644
  
  #include "arch.h"
  #include "policy/allowlist.h"
-@@ -20,6 +32,7 @@
+@@ -20,6 +33,7 @@
  #include "klog.h" // IWYU pragma: keep
  #include "runtime/ksud.h"
  #include "feature/sucompat.h"
@@ -1155,7 +1157,7 @@ index 553cb6ae9..a469b9b6a 100644
  #include "policy/app_profile.h"
  #include "hook/syscall_hook.h"
  #include "sulog/event.h"
-@@ -29,18 +42,28 @@
+@@ -29,18 +43,28 @@
  #define SU_PATH "/system/bin/su"
  #define SH_PATH "/system/bin/sh"
  
@@ -1187,7 +1189,7 @@ index 553cb6ae9..a469b9b6a 100644
  	pr_info("su_compat: set to %d\n", enable);
  	return 0;
  }
-@@ -61,11 +84,18 @@ static void __user *userspace_stack_buffer(const void *d, size_t len)
+@@ -61,11 +85,18 @@ static void __user *userspace_stack_buffer(const void *d, size_t len)
  	return copy_to_user(p, d, len) ? NULL : p;
  }
  
@@ -1208,7 +1210,7 @@ index 553cb6ae9..a469b9b6a 100644
  }
  
  static char __user *empty_user_path(void)
-@@ -73,8 +103,6 @@ static char __user *empty_user_path(void)
+@@ -73,8 +104,6 @@ static char __user *empty_user_path(void)
  	return userspace_stack_buffer("", sizeof(""));
  }
  
@@ -1217,7 +1219,7 @@ index 553cb6ae9..a469b9b6a 100644
  static bool is_ksud_exists()
  {
  	struct path path;
-@@ -86,6 +114,285 @@ static bool is_ksud_exists()
+@@ -86,6 +115,299 @@ static bool is_ksud_exists()
  	return true;
  }
  
@@ -1352,6 +1354,9 @@ index 553cb6ae9..a469b9b6a 100644
 +        return 0;
 +    }
 +
++    if (!ksu_is_allow_uid_for_current(current_uid().val))
++        return 0;
++
 +    ksu_compat_sulog('x');
 +    pr_info("ksu_handle_execveat_sucompat: su found\n");
 +
@@ -1411,6 +1416,10 @@ index 553cb6ae9..a469b9b6a 100644
 +            pr_err("ksu_handle_faccessat: su found but NOT allowed! Because current process is running in chrooted environment\n");
 +            return 0;
 +        }
++
++        if (!ksu_is_allow_uid_for_current(current_uid().val))
++            return 0;
++
 +        ksu_compat_sulog('a');
 +        pr_info("ksu_handle_faccessat: su->sh!\n");
 +        *filename_user = sh_user_path();
@@ -1450,6 +1459,9 @@ index 553cb6ae9..a469b9b6a 100644
 +        return 0;
 +    }
 +
++    if (!ksu_is_allow_uid_for_current(current_uid().val))
++        return 0;
++
 +    ksu_compat_sulog('s');
 +    pr_info("ksu_handle_stat: su->sh!\n");
 +    memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
@@ -1469,6 +1481,10 @@ index 553cb6ae9..a469b9b6a 100644
 +            pr_err("ksu_handle_stat: su found but NOT allowed! Because current process is running in chrooted environment\n");
 +            return 0;
 +        }
++
++        if (!ksu_is_allow_uid_for_current(current_uid().val))
++            return 0;
++
 +        ksu_compat_sulog('s');
 +        pr_info("ksu_handle_stat: su->sh!\n");
 +        *filename_user = sh_user_path();
@@ -1503,7 +1519,7 @@ index 553cb6ae9..a469b9b6a 100644
  long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  {
  	const char __user **filename_user, *orig_filename;
-@@ -103,6 +410,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -103,6 +425,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1514,7 +1530,7 @@ index 553cb6ae9..a469b9b6a 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('a');
-@@ -139,6 +450,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -139,6 +465,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1525,7 +1541,7 @@ index 553cb6ae9..a469b9b6a 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('s');
-@@ -189,6 +504,11 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
+@@ -189,6 +519,11 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
  	if (likely(memcmp(path, su_path, sizeof(su_path))))
  		goto do_orig_execve;
  
@@ -1537,7 +1553,7 @@ index 553cb6ae9..a469b9b6a 100644
  	ksu_compat_sulog('x');
  	pr_info("sys_execve su found\n");
  
-@@ -243,6 +563,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
+@@ -243,6 +578,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
  do_orig_execve:
  	return ksu_syscall_table[orig_nr](regs);
  }
@@ -3806,6 +3822,50 @@ index 56f21ef7a..27b415a92 100644
  subprojects {
      plugins.withType(AndroidBasePlugin::class.java) {
          extensions.configure(CommonExtension::class.java) {
+diff --git a/userspace/ksud/build.rs b/userspace/ksud/build.rs
+index 9f8819666..7e5a123ea 100644
+--- a/userspace/ksud/build.rs
++++ b/userspace/ksud/build.rs
+@@ -4,9 +4,29 @@ use std::io::Write;
+ use std::path::Path;
+ use std::process::Command;
+ 
++fn get_base_commit() -> String {
++    let branch = Command::new("git").args(["rev-parse", "--abbrev-ref", "HEAD"]).output()
++        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_else(|_| "dev".into());
++    let b = branch.split('-').next().unwrap_or("dev");
++    let b = if b.is_empty() || b == "HEAD" { "dev" } else { b };
++
++    let mut base = Command::new("git").args(["merge-base", "HEAD", &format!("refs/remotes/origin/{}", b)]).output()
++        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
++    if base.is_empty() || base.contains("fatal") {
++        base = Command::new("git").args(["merge-base", "HEAD", "refs/remotes/origin/main"]).output()
++            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string()).unwrap_or_default();
++    }
++    if base.is_empty() || base.contains("fatal") {
++        "HEAD".to_string()
++    } else {
++        base
++    }
++}
++
+ fn get_git_version() -> Result<(u32, String), std::io::Error> {
++    let base_commit = get_base_commit();
+     let output = Command::new("git")
+-        .args(["rev-list", "--count", "HEAD"])
++        .args(["rev-list", "--count", &base_commit])
+         .output()?;
+ 
+     let output = output.stdout;
+@@ -19,7 +39,7 @@ fn get_git_version() -> Result<(u32, String), std::io::Error> {
+ 
+     let version_name = String::from_utf8(
+         Command::new("git")
+-            .args(["describe", "--tags", "--always"])
++            .args(["describe", "--tags", "--always", &base_commit])
+             .output()?
+             .stdout,
+     )
 -- 
 2.43.0
 
