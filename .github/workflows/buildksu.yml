@@ -1,0 +1,127 @@
+name: Build and Release KernelSU Image
+
+on:
+  push:
+    tags:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential ccache ca-certificates clang curl flex gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi git libelf-dev libssl-dev lld llvm make python3 rsync unzip wget zip zstd
+          pip3 install telethon
+
+      - name: Show runner CPU count
+        run: |
+          echo "nproc: $(nproc)"
+          lscpu | grep '^CPU(s):'
+          echo "proc CPUs: $(grep -c '^processor' /proc/cpuinfo)"
+
+      - name: Make build script executable
+        run: |
+          chmod +x ./build.sh
+          chmod +x ./scripts/repack
+
+      - name: Build kernel
+        env:
+          OUT_DIR: ${{ github.workspace }}/out
+          DIST_DIR: ${{ github.workspace }}/out
+          ARCH: arm64
+          PLATFORM_VERSION: "12"
+          LTO: thin
+          CROSS_COMPILE: aarch64-linux-gnu-
+          CROSS_COMPILE_COMPAT: arm-linux-gnueabi-
+          LD: ld.lld
+          HOSTLD: ld.lld
+          AR: llvm-ar
+          NM: llvm-nm
+        run: |
+          JOBS=$(nproc)
+          echo "Using $JOBS parallel jobs"
+          MAKEFLAGS="-j$JOBS" ./build.sh "-j $JOBS"
+
+      - name: Build Image
+        env:
+          OUT_DIR: ${{ github.workspace }}/out
+        run: |
+          ./scripts/repack
+
+      - name: Upload build output as Artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: kernelsu-build-zips
+          path: |
+            release/*.tar
+          archive: false
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create GitHub Release and Upload Assets
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v3
+        with:
+          files: |
+            release/*.tar
+          name: KernelSU ${{ env.REL_KERNEL }} SUSFS ${{ env.REL_SUSFS }} A155FXXS7CYG1 A155FXXS7CYG4
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get commit annotation/message
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+        id: commit_message
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          # Try to read annotated tag contents (works for annotated tags)
+          COMMIT_MESSAGE=$(git for-each-ref --format='%(contents)' refs/tags/"$TAG_NAME" 2>/dev/null || true)
+          # If empty, fallback to the commit message of HEAD (covers lightweight tags)
+          if [ -z "$COMMIT_MESSAGE" ]; then
+            COMMIT_MESSAGE=$(git log -1 --pretty=%B)
+          fi
+          # Escape percent/newlines for $GITHUB_OUTPUT usage
+          COMMIT_MESSAGE="${COMMIT_MESSAGE//'%'/'%25'}"
+          COMMIT_MESSAGE="${COMMIT_MESSAGE//$'\n'/'%0A'}"
+          COMMIT_MESSAGE="${COMMIT_MESSAGE//$'\r'/'%0D'}"
+          echo "message=$COMMIT_MESSAGE" >> "$GITHUB_OUTPUT"
+
+      - name: Send to Telegram
+        if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          # Decode the escaped message from GITHUB_OUTPUT before passing to Python
+          COMMIT_MESSAGE_DECODED="${COMMIT_MESSAGE//'%25'/'%'}"
+          COMMIT_MESSAGE_DECODED="${COMMIT_MESSAGE_DECODED//'%0A'/$'\n'}"
+          COMMIT_MESSAGE_DECODED="${COMMIT_MESSAGE_DECODED//'%0D'/$'\r'}"
+          export COMMIT_MESSAGE="$COMMIT_MESSAGE_DECODED"
+          python3 ./scripts/telegrambot.py release/*.tar
+        shell: bash
+        env:
+          BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+          API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+          COMMIT_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}
+          COMMIT_MESSAGE: ${{ steps.commit_message.outputs.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          TITLE: KernelSU Build
+          VERSION: ${{ github.ref_name }}
