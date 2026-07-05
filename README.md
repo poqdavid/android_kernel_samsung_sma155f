@@ -4,7 +4,7 @@
 
 [![KernelSU](https://img.shields.io/badge/KernelSU-Supported-green)](https://kernelsu.org/)
 [![SUSFS](https://img.shields.io/badge/SUSFS-Integrated-orange)](https://gitlab.com/simonpunk/susfs4ksu)
-[![Telegram](https://img.shields.io/badge/Join-Build_Notification-blue?logo=telegram&style=flat-square)](https://t.me/+UcM4BeR-Fio3OGFh)
+[![Telegram](https://img.shields.io/badge/Join-Build_Notification-blue?logo=telegram&style=flat-square)](https://t.me/sma155fkernelbuilds)
 
 </div>
 <div align="center">
