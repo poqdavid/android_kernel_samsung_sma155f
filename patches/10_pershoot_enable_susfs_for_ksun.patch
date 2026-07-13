@@ -1,19 +1,19 @@
-From baefa36dbec934a94adcd57c1e4517316625d6d4 Mon Sep 17 00:00:00 2001
+From b5eef8d227564bf41c74d06c1a0686e0bf5005df Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Mon, 6 Jul 2026 00:23:56 +0200
+Date: Tue, 14 Jul 2026 01:08:50 +0200
 Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
 
 ---
- kernel/Kbuild                      |  75 ++++---
+ kernel/Kbuild                      |  75 ++++--
  kernel/Kconfig                     | 107 ++++++++-
  kernel/core/init.c                 |  49 +++-
  kernel/extras.c                    |  22 +-
  kernel/feature/adb_root.c          | 160 ++++++++++++-
  kernel/feature/adb_root.h          |   4 +
  kernel/feature/kernel_umount.c     |  13 +-
- kernel/feature/selinux_hide.c      | 163 +++++++-------
+ kernel/feature/selinux_hide.c      | 163 +++++++------
  kernel/feature/selinux_hide.h      |  15 ++
- kernel/feature/sucompat.c          | 350 ++++++++++++++++++++++++++++-
+ kernel/feature/sucompat.c          | 354 ++++++++++++++++++++++++++++-
  kernel/feature/sucompat.h          |  21 +-
  kernel/hook/setuid_hook.c          |  81 ++++++-
  kernel/hook/setuid_hook.h          |   4 +
@@ -26,7 +26,7 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  kernel/policy/app_profile.h        |   2 +-
  kernel/runtime/boot_event.c        |  21 +-
  kernel/runtime/ksud.h              |  20 ++
- kernel/runtime/ksud_integration.c  | 155 +++++++++++--
+ kernel/runtime/ksud_integration.c  | 195 ++++++++++++----
  kernel/selinux/rules.c             |  22 ++
  kernel/selinux/selinux.c           | 244 +++++++++++++-------
  kernel/selinux/selinux.h           |  10 +
@@ -35,15 +35,17 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  kernel/sulog/event.h               |   4 +
  kernel/supercall/dispatch.c        | 153 +++++++++++++
  kernel/supercall/internal.h        |   2 +
- kernel/supercall/supercall.c       | 189 ++++++++++------
+ kernel/supercall/supercall.c       | 189 +++++++++------
  kernel/supercall/supercall.h       |   4 +
  manager/app/build.gradle.kts       |   5 +
  manager/build.gradle.kts           |  69 +++++-
  userspace/ksud/build.rs            |  24 +-
- 36 files changed, 1969 insertions(+), 369 deletions(-)
+ userspace/ksud/src/cli.rs          |   2 +-
+ userspace/ksud/src/init_event.rs   |  34 ++-
+ 38 files changed, 2017 insertions(+), 401 deletions(-)
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index 889d0306d..62349dd00 100644
+index cec135d13..f51f739a6 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
 @@ -1,21 +1,36 @@
@@ -116,8 +118,8 @@ index 889d0306d..62349dd00 100644
 +ifeq ($(strip $(CONFIG_KSU_DEBUG)),y)
  ccflags-y += -DCONFIG_KSU_DEBUG=1
  endif
- endif
-@@ -88,8 +103,12 @@ KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplev
+ ifeq ($(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER),y)
+@@ -91,8 +106,12 @@ KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplev
  ifneq ($(GIT_ROOT),$(KERNEL_GIT_ROOT))
  # Only set version if it's a different repo from kernel
  $(shell cd $(GIT_ROOT) && [ -f .git/shallow ] && $(LPATH) git fetch --unshallow 2>/dev/null || true)
@@ -132,7 +134,7 @@ index 889d0306d..62349dd00 100644
  KSU_GIT_VERSION_VALID := 1
  $(info -- KernelSU-Next Git repo detected at: $(GIT_ROOT))
  endif
-@@ -123,12 +142,9 @@ endif
+@@ -126,12 +145,9 @@ endif
  KSU_NEW_DCACHE_FLUSH := $(shell grep -q __flush_dcache_area $(srctree)/arch/arm64/include/asm/cacheflush.h ; echo $$?)
  $(info -- KernelSU-Next new DCACHE flush: $(KSU_NEW_DCACHE_FLUSH))
  
@@ -148,7 +150,7 @@ index 889d0306d..62349dd00 100644
  endif
  
  ifdef KSU_MANAGER_PACKAGE
-@@ -136,15 +152,24 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
+@@ -139,15 +155,24 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
  $(info -- KernelSU-Next Manager package name: $(KSU_MANAGER_PACKAGE))
  endif
  
@@ -179,7 +181,7 @@ index 889d0306d..62349dd00 100644
 +
  # Keep a new line here!! Because someone may append config
 diff --git a/kernel/Kconfig b/kernel/Kconfig
-index c77016613..e4cf84425 100644
+index 88e228117..1f30a997c 100644
 --- a/kernel/Kconfig
 +++ b/kernel/Kconfig
 @@ -2,12 +2,12 @@ menu "KernelSU"
@@ -215,9 +217,9 @@ index c77016613..e4cf84425 100644
  config KSU_DISABLE_MANAGER
  	bool "Disable KernelSU manager integration"
  	depends on KSU
-@@ -35,4 +45,95 @@ config KSU_DISABLE_POLICY
- 	  Escalation will always use the default full root profile, and
- 	  non-root handling will follow the global umount policy only.
+@@ -43,4 +53,95 @@ config KSU_X86_PATCH_SYSCALL_DISPATCHER
+ 	  Dynamically patch x64's hardened syscall dispatcher to support syscall hooks. This is a
+ 	  replacement for a kernel source code patch, and is useful for x86_64 LKM mode.
  
 +menu "KernelSU - SUSFS"
 +config KSU_SUSFS
@@ -312,7 +314,7 @@ index c77016613..e4cf84425 100644
 +
  endmenu
 diff --git a/kernel/core/init.c b/kernel/core/init.c
-index c158df8e1..cc1758c73 100644
+index db10afa79..84c2155d2 100644
 --- a/kernel/core/init.c
 +++ b/kernel/core/init.c
 @@ -26,6 +26,13 @@
@@ -326,7 +328,7 @@ index c158df8e1..cc1758c73 100644
 +extern void ksu_avc_spoof_late_init(void);
 +#endif
 +
- #if defined(__x86_64__)
+ #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
  #include <asm/cpufeature.h>
  #include <linux/version.h>
 @@ -86,6 +93,10 @@ module_param_named(norc, ksu_no_custom_rc, bool, 0);
@@ -337,8 +339,8 @@ index c158df8e1..cc1758c73 100644
 +	susfs_init();
 +#endif // #ifdef KSU_SUSFS
 +
- #if defined(__x86_64__)
-     // If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set 
+ #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
+     // If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set
      if (!boot_cpu_has(X86_FEATURE_INDIRECT_SAFE)) {
 @@ -128,20 +139,33 @@ int __init kernelsu_init(void)
  	}
@@ -1126,7 +1128,7 @@ index 5a0437108..faecb73d8 100644
 +
  #endif
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index 553cb6ae9..549827e16 100644
+index 553cb6ae9..af6dd24dd 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
 @@ -13,6 +13,19 @@
@@ -1219,7 +1221,7 @@ index 553cb6ae9..549827e16 100644
  static bool is_ksud_exists()
  {
  	struct path path;
-@@ -86,6 +115,299 @@ static bool is_ksud_exists()
+@@ -86,6 +115,303 @@ static bool is_ksud_exists()
  	return true;
  }
  
@@ -1375,6 +1377,8 @@ index 553cb6ae9..549827e16 100644
 +    return 0;
 +}
 +
++extern struct static_key_true is_first_zygote;
++
 +int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 +            void *envp, int *flags)
 +{
@@ -1394,8 +1398,10 @@ index 553cb6ae9..549827e16 100644
 +        ksu_sulog_emit_pending(pending_root_execve, 0, GFP_KERNEL);
 +    }
 +
-+    if (ksu_handle_execveat_ksud(fd, filename_ptr, argv, envp, flags))
-+        return 0;
++    if (static_branch_unlikely(&is_first_zygote)) {
++        if (ksu_handle_execveat_ksud(fd, filename_ptr, argv, envp, flags))
++            return 0;
++    }
 +
 +    return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp,
 +                        flags);
@@ -1519,7 +1525,7 @@ index 553cb6ae9..549827e16 100644
  long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  {
  	const char __user **filename_user, *orig_filename;
-@@ -103,6 +425,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -103,6 +429,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1530,7 +1536,7 @@ index 553cb6ae9..549827e16 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('a');
-@@ -139,6 +465,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -139,6 +469,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1541,7 +1547,7 @@ index 553cb6ae9..549827e16 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('s');
-@@ -189,6 +519,11 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
+@@ -189,6 +523,11 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
  	if (likely(memcmp(path, su_path, sizeof(su_path))))
  		goto do_orig_execve;
  
@@ -1553,7 +1559,7 @@ index 553cb6ae9..549827e16 100644
  	ksu_compat_sulog('x');
  	pr_info("sys_execve su found\n");
  
-@@ -243,6 +578,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
+@@ -243,6 +582,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
  do_orig_execve:
  	return ksu_syscall_table[orig_nr](regs);
  }
@@ -2299,10 +2305,10 @@ index 62cfaabf2..2285e8931 100644
 +
  #endif
 diff --git a/kernel/runtime/ksud_integration.c b/kernel/runtime/ksud_integration.c
-index 38d1476f1..ca9fe254a 100644
+index 38d1476f1..9976a28cd 100644
 --- a/kernel/runtime/ksud_integration.c
 +++ b/kernel/runtime/ksud_integration.c
-@@ -29,6 +29,13 @@
+@@ -29,6 +29,16 @@
  #include "hook/syscall_hook.h"
  #include "hook/syscall_event_bridge.h"
  
@@ -2313,10 +2319,13 @@ index 38d1476f1..ca9fe254a 100644
 +DEFINE_STATIC_KEY_TRUE(ksu_is_input_hook_enabled);
 +#endif
 +
++DEFINE_STATIC_KEY_TRUE(is_init_second_stage_not_executed);
++DEFINE_STATIC_KEY_TRUE(is_first_zygote);
++
  // clang-format off
  static const char KERNEL_SU_RC[] =
      "\n"
-@@ -49,25 +56,14 @@ static const char KERNEL_SU_RC[] =
+@@ -49,25 +59,14 @@ static const char KERNEL_SU_RC[] =
      "\n";
  // clang-format on
  
@@ -2345,7 +2354,7 @@ index 38d1476f1..ca9fe254a 100644
  {
      const char __user *native;
  
-@@ -103,7 +99,7 @@ static int __maybe_unused count(struct user_arg_ptr argv, int max)
+@@ -103,7 +102,7 @@ static int __maybe_unused count(struct user_arg_ptr argv, int max)
  
      if (argv.ptr.native != NULL) {
          for (;;) {
@@ -2354,7 +2363,7 @@ index 38d1476f1..ca9fe254a 100644
  
              if (!p)
                  break;
-@@ -131,21 +127,84 @@ static bool check_argv(struct user_arg_ptr argv, int index, const char *expected
+@@ -131,53 +130,114 @@ static bool check_argv(struct user_arg_ptr argv, int index, const char *expected
      if (argc <= index)
          return false;
  
@@ -2390,11 +2399,9 @@ index 38d1476f1..ca9fe254a 100644
 +{
 +    struct filename *filename;
 +    static const char app_process[] = "/system/bin/app_process";
-+    static bool first_zygote = true;
 +
 +    /* This applies to versions Android 10+ */
 +    static const char system_bin_init[] = "/system/bin/init";
-+    static bool init_second_stage_executed = false;
 +
 +    if (!filename_ptr)
 +        return 0;
@@ -2404,36 +2411,33 @@ index 38d1476f1..ca9fe254a 100644
 +        return 0;
 +    }
 +
-+    // https://cs.android.com/android/platform/superproject/+/android-16.0.0_r2:system/core/init/main.cpp;l=77
-+    if (unlikely(!memcmp(filename->name, system_bin_init, sizeof(system_bin_init) - 1) && argv))
-+    {
-+        char buf[16];
-+        if (!init_second_stage_executed &&
-+            check_argv(*argv, 1, "second_stage", buf, sizeof(buf)))
-+        {
-+            pr_info("/system/bin/init second_stage executed\n");
-+            ksu_selinux_hide_handle_second_stage();
-+            apply_kernelsu_rules();
-+            cache_sid();
-+            setup_ksu_cred();
-+            init_second_stage_executed = true;
++    if (static_branch_unlikely(&is_init_second_stage_not_executed)) {
++        // https://cs.android.com/android/platform/superproject/+/android-16.0.0_r2:system/core/init/main.cpp;l=77
++        if (unlikely(!memcmp(filename->name, system_bin_init, sizeof(system_bin_init) - 1) && argv)) {
++            char buf[16];
++            if (check_argv(*argv, 1, "second_stage", buf, sizeof(buf))) {
++                pr_info("/system/bin/init second_stage executed\n");
++                ksu_selinux_hide_handle_second_stage();
++                apply_kernelsu_rules();
++                cache_sid();
++                setup_ksu_cred();
++                static_branch_disable(&is_init_second_stage_not_executed);
++            }
 +        }
 +    }
 +
-+    if (unlikely(first_zygote && !memcmp(filename->name, app_process, sizeof(app_process) - 1) && argv))
-+    {
-+        char buf[16];
-+        if (check_argv(*argv, 1, "-Xzygote", buf, sizeof(buf))) {
-+            pr_info("exec zygote, /data prepared, second_stage: %d\n", init_second_stage_executed);
-+            on_post_fs_data();
-+            cache_sid();
-+            setup_ksu_cred();
-+            first_zygote = false;
++    if (static_branch_unlikely(&is_first_zygote)) {
++        if (unlikely(!memcmp(filename->name, app_process, sizeof(app_process) - 1) && argv)) {
++            char buf[16];
++            if (check_argv(*argv, 1, "-Xzygote", buf, sizeof(buf))) {
++                pr_info("exec zygote, /data prepared, second_stage: %d\n", !static_key_enabled(&is_init_second_stage_not_executed));
++                on_post_fs_data();
++                cache_sid();
++                setup_ksu_cred();
++                static_branch_disable(&is_first_zygote);
++            }
 +        }
 +    }
-+
-+    // - We need to run ksu_handle_execveat_init() at the very end in case the above checks are skipped
-+    (void)ksu_handle_execveat_init(filename, argv, envp);
 +
 +    return 0;
 +}
@@ -2441,7 +2445,54 @@ index 38d1476f1..ca9fe254a 100644
  void ksu_handle_execveat_ksud(const char *path, struct user_arg_ptr *argv)
  {
      static const char app_process[] = "/system/bin/app_process";
-@@ -178,6 +237,7 @@ void ksu_handle_execveat_ksud(const char *path, struct user_arg_ptr *argv)
+-    static bool first_zygote = true;
+ 
+     /* This applies to versions Android 10+ */
+     static const char system_bin_init[] = "/system/bin/init";
+-    static bool init_second_stage_executed = false;
+-
+-    // https://cs.android.com/android/platform/superproject/+/android-16.0.0_r2:system/core/init/main.cpp;l=77
+-    if (unlikely(!memcmp(path, system_bin_init, sizeof(system_bin_init) - 1) && argv)) {
+-        char buf[16];
+-        if (!init_second_stage_executed && check_argv(*argv, 1, "second_stage", buf, sizeof(buf))) {
+-            pr_info("/system/bin/init second_stage executed\n");
+-            ksu_selinux_hide_handle_second_stage();
+-            apply_kernelsu_rules();
+-            cache_sid();
+-            setup_ksu_cred();
+-            init_second_stage_executed = true;
++
++    if (static_branch_unlikely(&is_init_second_stage_not_executed)) {
++        // https://cs.android.com/android/platform/superproject/+/android-16.0.0_r2:system/core/init/main.cpp;l=77
++        if (unlikely(!memcmp(path, system_bin_init, sizeof(system_bin_init) - 1) && argv)) {
++            char buf[16];
++            if (check_argv(*argv, 1, "second_stage", buf, sizeof(buf))) {
++                pr_info("/system/bin/init second_stage executed\n");
++                ksu_selinux_hide_handle_second_stage();
++                apply_kernelsu_rules();
++                cache_sid();
++                setup_ksu_cred();
++                static_branch_disable(&is_init_second_stage_not_executed);
++            }
+         }
+     }
+ 
+-    if (unlikely(first_zygote && !memcmp(path, app_process, sizeof(app_process) - 1) && argv)) {
+-        char buf[16];
+-        if (check_argv(*argv, 1, "-Xzygote", buf, sizeof(buf))) {
+-            pr_info("exec zygote, /data prepared, second_stage: %d\n", init_second_stage_executed);
+-            on_post_fs_data();
+-            first_zygote = false;
+-            ksu_stop_ksud_execve_hook();
++    if (static_branch_unlikely(&is_first_zygote)) {
++        if (unlikely(!memcmp(path, app_process, sizeof(app_process) - 1) && argv)) {
++            char buf[16];
++            if (check_argv(*argv, 1, "-Xzygote", buf, sizeof(buf))) {
++                pr_info("exec zygote, /data prepared, second_stage: %d\n", !static_key_enabled(&is_init_second_stage_not_executed));
++                on_post_fs_data();
++                static_branch_disable(&is_first_zygote);
++                ksu_stop_ksud_execve_hook();
++            }
          }
      }
  }
@@ -3866,6 +3917,93 @@ index 9f8819666..7e5a123ea 100644
              .output()?
              .stdout,
      )
+diff --git a/userspace/ksud/src/cli.rs b/userspace/ksud/src/cli.rs
+index f1bb8bcc2..d5d088bd1 100644
+--- a/userspace/ksud/src/cli.rs
++++ b/userspace/ksud/src/cli.rs
+@@ -511,7 +511,7 @@ pub fn run() -> Result<()> {
+     log::info!("command: {:?}", cli.command);
+ 
+     let result = match cli.command {
+-        Commands::PostFsData => init_event::on_post_data_fs(),
++        Commands::PostFsData => init_event::on_post_data_fs(false),
+         Commands::BootCompleted => {
+             init_event::on_boot_completed();
+             Ok(())
+diff --git a/userspace/ksud/src/init_event.rs b/userspace/ksud/src/init_event.rs
+index d133c1160..a4a02d3ff 100644
+--- a/userspace/ksud/src/init_event.rs
++++ b/userspace/ksud/src/init_event.rs
+@@ -13,7 +13,7 @@ use rustix::process::chdir;
+ use std::path::Path;
+ use std::process::Command;
+ 
+-pub fn on_post_data_fs() -> Result<()> {
++pub fn on_post_data_fs(is_soft_reboot: bool) -> Result<()> {
+     if let Err(e) = ksucalls::ensure_uapi_version_matched() {
+         error!("{e:#}, skip on_post_fs_data");
+         return Ok(());
+@@ -44,7 +44,7 @@ pub fn on_post_data_fs() -> Result<()> {
+         // we should still ensure module directory exists in safe mode
+         // because we may need to operate the module dir in safe mode
+         warn!("safe mode, skip common post-fs-data.d scripts");
+-    } else {
++    } else if !is_soft_reboot {
+         // Then exec common post-fs-data scripts
+         if let Err(e) = crate::module::exec_common_scripts("post-fs-data.d", true) {
+             warn!("exec common post-fs-data scripts failed: {e}");
+@@ -99,15 +99,17 @@ pub fn on_post_data_fs() -> Result<()> {
+         warn!("init features failed: {e}");
+     }
+ 
+-    // execute metamodule post-fs-data script first (priority)
+-    if let Err(e) = metamodule::exec_stage_script("post-fs-data", true) {
+-        warn!("exec metamodule post-fs-data script failed: {e}");
+-    }
++    if !is_soft_reboot {
++        // execute metamodule post-fs-data script first (priority)
++        if let Err(e) = metamodule::exec_stage_script("post-fs-data", true) {
++            warn!("exec metamodule post-fs-data script failed: {e}");
++        }
+ 
+-    // exec modules post-fs-data scripts
+-    // TODO: Add timeout
+-    if let Err(e) = crate::module::exec_stage_script("post-fs-data", true) {
+-        warn!("exec post-fs-data scripts failed: {e}");
++        // exec modules post-fs-data scripts
++        // TODO: Add timeout
++        if let Err(e) = crate::module::exec_stage_script("post-fs-data", true) {
++            warn!("exec post-fs-data scripts failed: {e}");
++        }
+     }
+ 
+     // load system.prop
+@@ -269,7 +271,7 @@ pub fn soft_reboot() -> Result<()> {
+         warn!("stop exited with status: {status}");
+     }
+     info!("post-fs-data");
+-    on_post_data_fs()?;
++    on_post_data_fs(true)?;
+     info!("start");
+     let status = Command::new("start").status().context("start failed")?;
+     if !status.success() {
+@@ -282,6 +284,16 @@ pub fn soft_reboot() -> Result<()> {
+     }
+     on_boot_completed();
+ 
++    // Workaround for wireless debugging dropping on soft reboot
++    if let Ok(out) = Command::new("settings").args(["get", "global", "adb_wifi_enabled"]).output() {
++        if String::from_utf8_lossy(&out.stdout).trim() == "1" {
++            info!("Kicking wireless debugging...");
++            let _ = Command::new("settings").args(["put", "global", "adb_wifi_enabled", "0"]).status();
++            std::thread::sleep(std::time::Duration::from_secs(1));
++            let _ = Command::new("settings").args(["put", "global", "adb_wifi_enabled", "1"]).status();
++        }
++    }
++
+     unsafe {
+         _exit(0);
+     }
 -- 
 2.43.0
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # SPDX-License-Identifier: GPL-3.0
 
 # Configuration
@@ -11,6 +11,9 @@ AVBTOOL=$BINDIR/avb/avbtool.py
 KERNELPATH=$PARENTDIR/out/target/product/a15/obj/KERNEL_OBJ/kernel-5.10/arch/arm64/boot/
 WORKSPACE=$BINDIR/workspace
 CERTDIR=$BINDIR/certs
+
+# -------- Argument parsing --------
+KSU_VARIANT=""
 
 # -------- Colors & logging --------
 RED="\e[1;31m"
@@ -42,6 +45,50 @@ err()  { _log_handler "${RED}"    "ERROR" "$@"; }
 # -------- Script header --------
 print_msg "$GREEN" " - Build script for Samsung kernel image - "
 print_msg "$RED" "       by poqdavid "
+print_msg "$RED" ""
+
+usage() {
+    info "Usage: $0 --ksu | --ksun"
+    info -n "  --ksu     Build/repack using KernelSU"
+    info "  --ksun    Build/repack using KernelSU-Next"
+    exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --ksu)
+            KSU_VARIANT="ksu"
+            shift
+        ;;
+        --ksun|--ksu-next)
+            KSU_VARIANT="ksun"
+            shift
+        ;;
+        -h|--help)
+            usage
+        ;;
+        *)
+            err "Unknown option: $1"
+            usage
+        ;;
+    esac
+done
+
+if [[ -z "$KSU_VARIANT" ]]; then
+    err  "Error: you must specify --ksu or --ksun"
+    usage
+fi
+
+if [[ "$KSU_VARIANT" == "ksu" ]]; then
+    KSU_DIR_NAME="KernelSU"
+    OUTPUT_PREFIX="kernelsu"
+else
+    KSU_DIR_NAME="KernelSU-Next"
+    OUTPUT_PREFIX="kernelsunext"
+fi
+
+info -n "Selected KernelSU variant: ${KSU_DIR_NAME}"
+KSUDIR=$PARENTDIR/kernel-5.10/$KSU_DIR_NAME
 
 # Check requirements and environment
 checks() {
@@ -49,9 +96,9 @@ checks() {
     
     if [ ! -d "${WORKSPACE}" ]; then
         info -n "WORKSPACE directory not found. Creating directory at ${WORKSPACE}..."
-        cd $BINDIR
+        pushd "$BINDIR" > /dev/null
         mkdir workspace > /dev/null 2>&1
-        cd $PARENTDIR
+        pushd $PARENTDIR > /dev/null
         info -n "WORKSPACE directory created."
     else
         info -n "WORKSPACE directory exists."
@@ -63,9 +110,9 @@ checks() {
     
     if [ ! -d "${CERTDIR}" ]; then
         info -n "CERTS directory not found. Creating directory at ${CERTDIR}..."
-        cd $BINDIR
+        pushd "$BINDIR" > /dev/null
         mkdir certs > /dev/null 2>&1
-        cd $PARENTDIR
+        pushd $PARENTDIR > /dev/null
         info -n "CERTS directory created."
     else
         info -n "CERTS directory exists."
@@ -85,6 +132,14 @@ checks() {
         exit 1
     else
         info -n "Found KSUD at ${KSUD}."
+    fi
+    
+    if [ ! -d "${KSUDIR}" ]; then
+        err -n "${KSU_DIR_NAME} directory not found: ${KSUDIR}"
+        err -n "Aborting..."
+        exit 1
+    else
+        info -n "Found ${KSU_DIR_NAME} at ${KSUDIR}."
     fi
     
     if [ ! -f "${MAGISKBOOT}" ]; then
@@ -149,10 +204,10 @@ unpack() {
     info -n "Public key extracted successfully."
     
     info -n "Starting unpacking of boot.img..."
-    cd $WORKSPACE
+    pushd "$WORKSPACE" > /dev/null
     $MAGISKBOOT unpack -n "${PARENTDIR}/repackfiles/boot.img"
     rm kernel
-    cd $PARENTDIR
+    pushd "$PARENTDIR" > /dev/null
     info -n "Boot image unpacked successfully."
     
     info -n "Returning to parent directory..."
@@ -171,9 +226,9 @@ repack() {
         
         # Repacking boot image
         info -n "Starting repacking of boot image..."
-        cd $WORKSPACE
+        pushd "$WORKSPACE" > /dev/null
         $MAGISKBOOT repack "${PARENTDIR}/repackfiles/boot.img" "${WORKSPACE}/new-boot.img"
-        cd $PARENTDIR
+        pushd "$PARENTDIR" > /dev/null
         info -n "Boot image repacked into new-boot.img."
         
         cp -f $WORKSPACE/new-boot.img $WORKSPACE/new-boot-signed.img
@@ -201,8 +256,8 @@ repack() {
 package_tar() {
     info -n "Packaging boot-repacked-signed.img into tar archive..."
     
-    BASE_VERSION=$(grep -m1 -oP 'expr\s*\K[0-9]+' ${PARENTDIR}/kernel-5.10/KernelSU-Next/kernel/Kbuild)
-    KSU_VERSION=$(( $(git -C ${PARENTDIR}/kernel-5.10/KernelSU-Next rev-list --count HEAD) + BASE_VERSION ))
+    BASE_VERSION=$(grep -m1 -oP 'expr\s*\K[0-9]+' ${KSUDIR}/kernel/Kbuild)
+    KSU_VERSION=$(( $(git -C ${KSUDIR} rev-list --count HEAD) + BASE_VERSION ))
     
     susfs_header="${PARENTDIR}/kernel-5.10/include/linux/susfs.h"
     
@@ -211,9 +266,9 @@ package_tar() {
     fi
     
     if [[ -z "$susfs_version" ]]; then
-        OUTTAR="../kernelsunext_${KSU_VERSION}_A155FXXS7CYG4_A15_GKI.tar"
+        OUTTAR="../${OUTPUT_PREFIX}_${KSU_VERSION}_A155FXXS7CYG4_A15_GKI.tar"
     else
-        OUTTAR="../kernelsunext_${KSU_VERSION}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
+        OUTTAR="../${OUTPUT_PREFIX}_${KSU_VERSION}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
     fi
     
     if [ ! -f "${PARENTDIR}/repackfiles/boot-repacked-signed.img" ]; then
