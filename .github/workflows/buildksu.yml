@@ -57,13 +57,13 @@ jobs:
         run: |
           JOBS=$(nproc)
           echo "Using $JOBS parallel jobs"
-          MAKEFLAGS="-j$JOBS" ./build.sh "-j $JOBS"
+          MAKEFLAGS="-j$JOBS" ./build.sh --ksu "-j $JOBS"
 
       - name: Build Image
         env:
           OUT_DIR: ${{ github.workspace }}/out
         run: |
-          ./scripts/repack
+          ./scripts/repack --ksu
 
       - name: Upload build output as Artifacts
         uses: actions/upload-artifact@v7
