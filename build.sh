@@ -26,7 +26,7 @@ if [[ "$KSU_VARIANT" == "ksun" ]]; then
     KSU_DISCORD_LABEL="KernelSUNext"
     SUSFS_KSU_INTERNAL_PATCH_DESC="pershoot-fork SUSFS patch (10_pershoot_enable_susfs_for_ksun.patch)"
     elif [[ "$KSU_VARIANT" == "ksu" ]]; then
-    KERNELSU_SETUP_URL="https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh"
+    KERNELSU_SETUP_URL="https://raw.githubusercontent.com/poqdavid/KernelSU/main/kernel/setup.sh"
     KERNELSU_SETUP_BRANCH="main"
     BASE_KSU_VERSION=20000
     KSU_DIR="KernelSU"
@@ -430,6 +430,7 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-val NETFILTER_XT_TARGET_REJECT y \
         --set-val NETFILTER_XT_TARGET_LOG y \
         --set-val NETFILTER_XT_MATCH_RECENT y \
+        --set-val CONFIG_USER_NS y \
         --set-val NTSYNC y
         
         info "Adding BBR3 Support Support..."
