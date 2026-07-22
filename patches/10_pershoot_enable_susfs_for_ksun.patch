@@ -1,7 +1,7 @@
-From b5eef8d227564bf41c74d06c1a0686e0bf5005df Mon Sep 17 00:00:00 2001
+From ab118078f6bd7989dad66d62c2884729cd00ff9d Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Tue, 14 Jul 2026 01:08:50 +0200
-Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
+Date: Thu, 23 Jul 2026 00:00:31 +0200
+Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
 
 ---
  kernel/Kbuild                      |  75 ++++--
@@ -1895,7 +1895,7 @@ index 95beea84a..5380630d7 100644
 +	return false;
  }
 diff --git a/kernel/manager/throne_tracker.c b/kernel/manager/throne_tracker.c
-index 3e8c8bfa7..24be6888f 100644
+index e005c70b1..fb9e06338 100644
 --- a/kernel/manager/throne_tracker.c
 +++ b/kernel/manager/throne_tracker.c
 @@ -6,6 +6,15 @@
@@ -1914,7 +1914,7 @@ index 3e8c8bfa7..24be6888f 100644
  
  #include "policy/allowlist.h"
  #include "manager/apk_sign.h"
-@@ -192,7 +201,7 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
+@@ -196,7 +205,7 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
  			struct file *file;
  
  			if (!stop) {
@@ -1923,7 +1923,7 @@ index 3e8c8bfa7..24be6888f 100644
  				if (IS_ERR(file)) {
  					pr_err("Failed to open directory: %s, err: %ld\n",
  						pos->dirpath, PTR_ERR(file));
-@@ -254,12 +263,25 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
+@@ -258,12 +267,25 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
  	return exist;
  }
  
@@ -1953,7 +1953,7 @@ index 3e8c8bfa7..24be6888f 100644
  		return;
  	}
  
-@@ -283,7 +305,7 @@ void track_throne(bool prune_only)
+@@ -287,7 +309,7 @@ void track_throne(bool prune_only)
  		}
  		buf[count] = '\0';
  
@@ -1962,7 +1962,7 @@ index 3e8c8bfa7..24be6888f 100644
  		if (!data) {
  			filp_close(fp, 0);
  			goto out;
-@@ -351,14 +373,60 @@ out:
+@@ -355,14 +377,60 @@ out:
  	}
  }
  

@@ -430,6 +430,7 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-val NETFILTER_XT_TARGET_REJECT y \
         --set-val NETFILTER_XT_TARGET_LOG y \
         --set-val NETFILTER_XT_MATCH_RECENT y \
+        --set-val CONFIG_USER_NS y \
         --set-val NTSYNC y
         
         info "Adding BBR3 Support Support..."
