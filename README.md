@@ -39,9 +39,112 @@ By flashing this kernel, **YOU** are choosing to make these modifications. If so
 
 ## 📋 Installation Instructions
 
-For GKI installation, please follow the official guide:
+- Grab the latest **.tar** from the Releases page of whichever branch you chose.
+- Flash using [Kernel Flasher](https://github.com/fatalcoder524/KernelFlasher) (recommended), or your preferred method (Odin/Heimdall with the repacked `boot.img`).
+- Reboot, then install the matching KernelSU / KernelSU Next manager APK.
 
-📖 **[KernelSU Installation Guide](https://kernelsu.org/guide/installation.html)**
+---
+
+## 🛠️ Building From Source
+
+For devs / advanced users who want to compile the kernel themselves instead of using the prebuilt release.
+
+### 1. Install build dependencies
+
+*(Ubuntu/Debian — matches the CI environment)*
+
+```bash
+sudo apt-get update
+sudo apt-get install -y bc bison build-essential ccache ca-certificates clang curl flex \
+  gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi git libelf-dev libssl-dev lld llvm make \
+  python3 rsync unzip wget zip zstd lz4
+pip3 install telethon
+```
+
+### 2. Clone the branch you want to build
+
+```bash
+# KernelSU Next + SUSFS
+git clone --branch kernelsunext https://github.com/poqdavid/android_kernel_samsung_sma155f.git
+cd android_kernel_samsung_sma155f
+
+# --- OR ---
+
+# KernelSU (upstream) + SUSFS
+git clone --branch kernelsu https://github.com/poqdavid/android_kernel_samsung_sma155f.git
+cd android_kernel_samsung_sma155f
+```
+
+### 3. Make the scripts executable
+
+```bash
+chmod +x build.sh
+chmod +x scripts/repack
+```
+
+### 4. Run the build
+
+```bash
+# KernelSU Next
+./build.sh --ksun -j$(nproc)
+
+# KernelSU (upstream)
+./build.sh --ksu -j$(nproc)
+```
+
+<details>
+<summary>⚙️ Useful <code>build.sh</code> flags</summary>
+
+| Flag | Description |
+|------|-------------|
+| `--kernel-dir DIR` | Path to kernel source (default: auto-detected `kernel-*` folder) |
+| `--out-dir DIR` | Output directory for build artifacts |
+| `--ksu` / `--ksun` | Pick the root backend (mutually exclusive) |
+| `--no-clean` | Skip the clean step |
+| `--no-patch` | Skip patching / KernelSU setup |
+| `--no-susfs` | Skip SUSFS config & patches |
+| `--build-only` | Skip config & patch steps; just run the build |
+| `--clean` | Only run the clean step |
+| `--jobs N`, `-j N` | Number of parallel build jobs |
+| `--verbose` | Print extra debug info |
+| `--help`, `-h` | Show all options |
+
+</details>
+
+The script auto-detects your kernel/Android version, applies the Samsung/security config tweaks, BBG, BBRv3, SUSFS, and all the optimization patches before invoking the actual kernel build.
+
+### 5. Repack the built Image into a flashable `boot.img`
+
+```bash
+mkdir -p repackfiles
+cp /path/to/your/stock_boot.img repackfiles/boot.img
+
+# Repack — use the SAME variant flag you built with
+./scripts/repack --ksun   # or --ksu
+```
+
+This unpacks your stock `boot.img`, swaps in the freshly built kernel `Image`, re-signs it with a generated AVB key, and packages the result.
+
+**Output:** `release/<kernelsu|kernelsunext>_<ksu_version>_susfs_<susfs_version>_A155FXXS7CYG4_A15_GKI.tar` containing `boot.img` (and `vbmeta.img.lz4` if present).
+
+> ℹ️ `lz4` and `python3` must be installed for this step — `magiskboot`, `ksud`, and `avbtool` are already bundled in `scripts/bin`.
+
+### 6. Flash
+
+Follow the **[📋 Installation Instructions](#-installation-instructions)** above to flash your freshly built `boot.img`.
+
+<details>
+<summary>☁️ Building in the cloud instead (GitHub Actions)</summary>
+
+Both branches ship a ready-made workflow (`.github/workflows/buildksun.yml` / `buildksu.yml`) that does the whole thing above on GitHub's runners — no local toolchain needed:
+
+1. Fork the repo (on the branch you want).
+2. Push a tag, or trigger it manually via **Actions → Run workflow** (`workflow_dispatch`).
+3. It installs deps, runs `build.sh` + `scripts/repack`, uploads the `.tar` as a build artifact, and creates a GitHub Release automatically on tagged pushes.
+
+Discord/Telegram build notifications are optional — they only fire if you add the relevant secrets (`TELEGRAM_BOT_TOKEN`, etc.) or a `.discord_webhook` file.
+
+</details>
 
 ---
 
