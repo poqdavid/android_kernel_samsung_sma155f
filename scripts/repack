@@ -48,9 +48,10 @@ print_msg "$RED" "       by poqdavid "
 print_msg "$RED" ""
 
 usage() {
-    info "Usage: $0 --ksu | --ksun"
+    info "Usage: $0 [--ksu | --ksun]"
     info -n "  --ksu     Build/repack using KernelSU"
     info "  --ksun    Build/repack using KernelSU-Next"
+    info "  (none)    Build/repack the stock kernel (no root, no KSU checks)"
     exit 1
 }
 
@@ -75,20 +76,27 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$KSU_VARIANT" ]]; then
-    err  "Error: you must specify --ksu or --ksun"
-    usage
+    KSU_VARIANT="stock"
 fi
 
-if [[ "$KSU_VARIANT" == "ksu" ]]; then
-    KSU_DIR_NAME="KernelSU"
-    OUTPUT_PREFIX="kernelsu"
-else
-    KSU_DIR_NAME="KernelSU-Next"
-    OUTPUT_PREFIX="kernelsunext"
-fi
-
-info -n "Selected KernelSU variant: ${KSU_DIR_NAME}"
-KSUDIR=$PARENTDIR/kernel-5.10/$KSU_DIR_NAME
+case "$KSU_VARIANT" in
+    ksu)
+        KSU_DIR_NAME="KernelSU"
+        OUTPUT_PREFIX="kernelsu"
+        KSUDIR=$PARENTDIR/kernel-5.10/$KSU_DIR_NAME
+        info -n "Selected KernelSU variant: ${KSU_DIR_NAME}"
+    ;;
+    ksun)
+        KSU_DIR_NAME="KernelSU-Next"
+        OUTPUT_PREFIX="kernelsunext"
+        KSUDIR=$PARENTDIR/kernel-5.10/$KSU_DIR_NAME
+        info -n "Selected KernelSU variant: ${KSU_DIR_NAME}"
+    ;;
+    stock)
+        OUTPUT_PREFIX="stock"
+        warn -n "No --ksu/--ksun given. Building a stock (non-rooted) kernel package."
+    ;;
+esac
 
 # Check requirements and environment
 checks() {
@@ -126,20 +134,24 @@ checks() {
         info -n "Kernel path found: ${KERNELPATH}"
     fi
     
-    if [ ! -f "${KSUD}" ]; then
-        err -n "KSUD not found: ${KSUD}"
-        err -n "Aborting..."
-        exit 1
+    if [[ "$KSU_VARIANT" == "stock" ]]; then
+        info -n "Stock build selected. Skipping KernelSU component checks."
     else
-        info -n "Found KSUD at ${KSUD}."
-    fi
-    
-    if [ ! -d "${KSUDIR}" ]; then
-        err -n "${KSU_DIR_NAME} directory not found: ${KSUDIR}"
-        err -n "Aborting..."
-        exit 1
-    else
-        info -n "Found ${KSU_DIR_NAME} at ${KSUDIR}."
+        if [ ! -f "${KSUD}" ]; then
+            err -n "KSUD not found: ${KSUD}"
+            err -n "Aborting..."
+            exit 1
+        else
+            info -n "Found KSUD at ${KSUD}."
+        fi
+        
+        if [ ! -d "${KSUDIR}" ]; then
+            err -n "${KSU_DIR_NAME} directory not found: ${KSUDIR}"
+            err -n "Aborting..."
+            exit 1
+        else
+            info -n "Found ${KSU_DIR_NAME} at ${KSUDIR}."
+        fi
     fi
     
     if [ ! -f "${MAGISKBOOT}" ]; then
@@ -256,19 +268,29 @@ repack() {
 package_tar() {
     info -n "Packaging boot-repacked-signed.img into tar archive..."
     
-    BASE_VERSION=$(grep -m1 -oP 'expr\s*\K[0-9]+' ${KSUDIR}/kernel/Kbuild)
-    KSU_VERSION=$(( $(git -C ${KSUDIR} rev-list --count HEAD) + BASE_VERSION ))
-    
     susfs_header="${PARENTDIR}/kernel-5.10/include/linux/susfs.h"
     
     if [[ -f "$susfs_header" ]]; then
         susfs_version=$(grep -oP '#define\s+SUSFS_VERSION\s+"\K[^"]+' "$susfs_header")
     fi
     
-    if [[ -z "$susfs_version" ]]; then
-        OUTTAR="../${OUTPUT_PREFIX}_${KSU_VERSION}_A155FXXS7CYG4_A15_GKI.tar"
+    if [[ "$KSU_VARIANT" == "stock" ]]; then
+        # No KSU repo to derive a build number from, so tag the package with
+        # the actual kernel release baked into the Image, if we can read it.
+        VERSION_TAG=$(strings "${KERNELPATH}/Image" 2>/dev/null | grep -m1 -oP 'Linux version \K[0-9]+\.[0-9]+\.[0-9]+')
+        if [[ -z "$VERSION_TAG" ]]; then
+            warn -n "Could not read kernel release from Image. Falling back to build date."
+            VERSION_TAG=$(date +%Y%m%d)
+        fi
     else
-        OUTTAR="../${OUTPUT_PREFIX}_${KSU_VERSION}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
+        BASE_VERSION=$(grep -m1 -oP 'expr\s*\K[0-9]+' ${KSUDIR}/kernel/Kbuild)
+        VERSION_TAG=$(( $(git -C ${KSUDIR} rev-list --count HEAD) + BASE_VERSION ))
+    fi
+    
+    if [[ -z "$susfs_version" ]]; then
+        OUTTAR="../${OUTPUT_PREFIX}_${VERSION_TAG}_A155FXXS7CYG4_A15_GKI.tar"
+    else
+        OUTTAR="../${OUTPUT_PREFIX}_${VERSION_TAG}_susfs_${susfs_version}_A155FXXS7CYG4_A15_GKI.tar"
     fi
     
     if [ ! -f "${PARENTDIR}/repackfiles/boot-repacked-signed.img" ]; then
