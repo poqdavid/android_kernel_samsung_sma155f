@@ -1,4 +1,12 @@
 *.img
+repackfiles/*.img
+release/
 out/
+logs/
+scripts/*.session
+scripts/__pycache__/
 scripts/bin/certs/
 scripts/bin/workspace/
+.discord_userid
+.discord_webhook
+
