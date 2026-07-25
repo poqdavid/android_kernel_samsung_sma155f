@@ -8,6 +8,7 @@
 
 </div>
 <div align="center">
+
 ## ⚠️ Your warranty is no longer valid!
 
 I am **not responsible** for bricked devices, damaged hardware, or any issues that arise from using this kernel.
@@ -31,6 +32,20 @@ By flashing this kernel, **YOU** are choosing to make these modifications. If so
 
 ---
 <div align="left">
+
+## ✨ Features
+
+- 🔐 **KernelSU/KernelSUNext**: A root solution for Android GKI devices that works in kernel mode and grants root permission to userspace applications directly in kernel space
+- 🥷 **SUSFS**: An addon root hiding kernel patches and userspace module for KernelSU
+- 🛡️ **BBG**: LSM-based Baseband Guard security to protect critical device partitions
+- 🖧 **BBRv3**: Improved TCP congestion control
+- ⚡️ **TMPFS XATTR / POSIX ACL**: Extended TMPFS support for meta modules and Mountify
+- </> **Unicode Bypass Fix**: Prevent path traversal and other detections using non-printable Unicode codepoints
+- 🖥️ **Droidspaces Support**: Support Portable Linux containers to run full Linux environments.
+- 🔃 **NTSync**: Provide high-performance, low-latency synchronization primitives compatible with the Windows NT kernel API
+
+---
+
 ## 🔗 Additional Resources
 
 - 🩹 [Kernel Patches](https://github.com/WildKernels/kernel_patches)
@@ -148,25 +163,13 @@ Discord/Telegram build notifications are optional — they only fire if you add 
 </details>
 
 ---
-
-## ✨ Features
-
-- 🔐 **KernelSU/KernelSUNext**: A root solution for Android GKI devices that works in kernel mode and grants root permission to userspace applications directly in kernel space
-- 🥷 **SUSFS**: An addon root hiding kernel patches and userspace module for KernelSU
-- 🛡️ **BBG**: LSM-based Baseband Guard security to protect critical device partitions
-- 🖧 **BBRv3**: Improved TCP congestion control
-- ⚡️ **TMPFS XATTR / POSIX ACL**: Extended TMPFS support for meta modules and Mountify
-- </> **Unicode Bypass Fix**: Prevent path traversal and other detections using non-printable Unicode codepoints
-- 🖥️ **Droidspaces Support**: Support Portable Linux containers to run full Linux environments.
-- 🔃 **NTSync**: Provide high-performance, low-latency synchronization primitives compatible with the Windows NT kernel API
-
----
 <div align="center">
   
 🙏 Special thanks to the open-source community for their contributions!
 
 ---
 <div align="left">
+
 ## 💬 Support
 
 If you encounter any issues or need help, feel free to:
@@ -195,6 +198,7 @@ Flashing this kernel will void your warranty, and there is always a risk of bric
 
 ---
 <div align="center">
+
 ## 🌟 Special Thanks
 
 **These amazing people help make this project possible! ❤️**
@@ -217,6 +221,7 @@ Flashing this kernel will void your warranty, and there is always a risk of bric
 
 ---
 <div align="center">
+
 ## 💝 Donations
 
 Any and all donations are appreciated!
