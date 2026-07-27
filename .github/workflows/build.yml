@@ -34,13 +34,14 @@ jobs:
 
       - name: Resolve build variant
         run: |
+          SHORT_SHA=${GITHUB_SHA::7}
           case "$VARIANT" in
             stock)
               echo "BUILD_FLAG=" >> "$GITHUB_ENV"
               echo "REPACK_FLAG=" >> "$GITHUB_ENV"
-              echo "ARTIFACT_NAME=stock-build-zips" >> "$GITHUB_ENV"
-              echo "RELEASE_TITLE=Stock" >> "$GITHUB_ENV"
-              echo "LEGACY_LABEL=Stock" >> "$GITHUB_ENV"
+              echo "ARTIFACT_NAME=stock-optimized-build-zips" >> "$GITHUB_ENV"
+              echo "RELEASE_TITLE=Stock optimized ($SHORT_SHA)" >> "$GITHUB_ENV"
+              echo "LEGACY_LABEL=Stock optimized" >> "$GITHUB_ENV"
               ;;
             ksu)
               echo "BUILD_FLAG=--ksu" >> "$GITHUB_ENV"
@@ -105,8 +106,9 @@ jobs:
 
       - name: Compute release title
         run: |
+          SHORT_SHA=${GITHUB_SHA::7}
           if [ "$VARIANT" = "stock" ]; then
-            echo "RELEASE_NAME=Stock ${{ github.ref_name }} A155FXXS7CYG4" >> "$GITHUB_ENV"
+            echo "RELEASE_NAME=$RELEASE_TITLE A155FXXS7CYG1 A155FXXS7CYG4" >> "$GITHUB_ENV"
           else
             echo "RELEASE_NAME=$LEGACY_LABEL $REL_KERNEL SUSFS $REL_SUSFS A155FXXS7CYG1 A155FXXS7CYG4" >> "$GITHUB_ENV"
           fi
