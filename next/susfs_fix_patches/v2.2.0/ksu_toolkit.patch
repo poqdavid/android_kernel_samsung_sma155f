@@ -1,0 +1,118 @@
+diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
+index 4ad8e056..a4e3152d 100644
+--- a/kernel/feature/sucompat.c
++++ b/kernel/feature/sucompat.c
+@@ -199,7 +199,7 @@ int ksu_handle_execveat_sucompat(int *fd, struct filename **filename_ptr,
+     pr_info("ksu_handle_execveat_sucompat: su found\n");
+ 
+     memcpy((void *)filename->name, ksud_path, sizeof(ksud_path));
+-
++	ksu_compat_sulog('x');
+     pending_sucompat = ksu_sulog_capture_sucompat(filename->name, (struct user_arg_ptr*)argv_user, GFP_KERNEL);
+ 
+     ret = escape_with_root_profile();
+@@ -240,6 +240,7 @@ int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
+             pr_err("ksu_handle_faccessat: su found but NOT allowed! Because current process is running in chrooted environment\n");
+             return 0;
+         }
++		ksu_compat_sulog('a');
+         pr_info("ksu_handle_faccessat: su->sh!\n");
+         *filename_user = sh_user_path();
+ 	}
+@@ -260,6 +261,7 @@ int ksu_handle_stat(int *dfd, struct filename **filename, int *flags) {
+         pr_err("ksu_handle_stat: su found but NOT allowed! Because current process is running in chrooted environment\n");
+         return 0;
+ 	}
++	ksu_compat_sulog('s');
+     pr_info("ksu_handle_stat: su->sh!\n");
+     memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
+     return 0;
+@@ -280,6 +282,7 @@ int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
+             pr_err("ksu_handle_stat: su found but NOT allowed! Because current process is running in chrooted environment\n");
+             return 0;
+         }
++		ksu_compat_sulog('s');
+         pr_info("ksu_handle_stat: su->sh!\n");
+         *filename_user = sh_user_path();
+ 	}
+diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
+index 92640df7..fef6bd80 100644
+--- a/kernel/supercall/dispatch.c
++++ b/kernel/supercall/dispatch.c
+@@ -472,6 +472,67 @@ static int do_manage_mark(void __user *arg)
+     return 0;
+ }
+ 
++int ksu_handle_toolkit_reboot(int magic2, unsigned int cmd, void __user *arg)
++{
++    unsigned long reply = (unsigned long)arg;
++
++    if (magic2 == CHANGE_MANAGER_UID) {
++        /* only root is allowed for this command */
++        if (current_uid().val != 0)
++            return -EPERM;
++        pr_info("ksu_handle_toolkit_reboot: ksu_set_manager_appid to: %d\n", cmd);
++        ksu_set_manager_appid(cmd);
++        if (cmd == ksu_get_manager_appid()) {
++            if (copy_to_user(arg, &reply, sizeof(reply))) {
++                pr_info("ksu_handle_toolkit_reboot: reply fail\n");
++                return -EFAULT;
++            }
++        }
++        return 0;
++    }
++
++    if (magic2 == GET_SULOG_DUMP_V2) {
++        /* only root is allowed for this command */
++        if (current_uid().val != 0)
++            return -EPERM;
++
++        int ret = ksu_sulog_handle_compat_dump(arg);
++        if (ret)
++            return ret;
++
++        if (copy_to_user(arg, &reply, sizeof(reply))) {
++            pr_info("ksu_handle_toolkit_reboot: reply fail\n");
++            return -EFAULT;
++        }
++        return 0;
++    }
++
++    if (magic2 == CHANGE_KSUVER) {
++        /* only root is allowed for this command */
++        if (current_uid().val != 0)
++            return -EPERM;
++        pr_info("ksu_handle_toolkit_reboot: ksu_change_ksuver to: %d\n", cmd);
++        ksuver_override = cmd;
++        if (copy_to_user(arg, &reply, sizeof(reply))) {
++            pr_info("ksu_handle_toolkit_reboot: reply fail\n");
++            return -EFAULT;
++        }
++        return 0;
++    }
++
++    if (magic2 == CHANGE_SPOOF_UNAME) {
++        // we write our error on **
++        reply = 0;
++        if (copy_to_user(arg, &reply, sizeof(reply))) {
++            pr_info("ksu_handle_toolkit_reboot: reply fail\n");
++            return -EFAULT;
++        }
++        return 0;
++    }
++
++    return -EINVAL;
++}
++
+ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user **arg)
+ {
+     if (magic1 != KSU_INSTALL_MAGIC1) {
+@@ -550,7 +611,7 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user
+     if (magic2 == KSU_INSTALL_MAGIC2)
+         return ksu_supercall_reboot_handler(arg);
+ 
+-    return -EINVAL;
++    return ksu_handle_toolkit_reboot(magic2, cmd, *arg);
+ }
+ 
+ static int do_nuke_ext4_sysfs(void __user *arg)
