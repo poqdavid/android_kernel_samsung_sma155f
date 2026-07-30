@@ -578,6 +578,9 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                 info -n "Patching SUSFS into Kernel..."
                 patch -p1 < $SUSFS_PATCHES/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch || true
                 
+                info -n "Fixing set_nameidata() call in fs/namei.c..."
+                sed -i 's/set_nameidata(nd, old_dfd, fake_filename, NULL);/set_nameidata(nd, old_dfd, fake_filename);/g' fs/namei.c
+                
                 # Samsung Specific Patches
                 info -n "Applying Samsung device patches..."
                 for rej in $(find ./ -maxdepth 8 -name "*.rej" -exec basename {} .rej \;); do
