@@ -1,0 +1,4 @@
+source=git@github.com:poqdavid/kernel_patches.git
+ref=dev
+commit=ff50c66f6e985d9ff14b303e0dfe29126d00809f
+synced=2026-07-30T22:47:54Z
