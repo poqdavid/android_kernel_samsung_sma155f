@@ -1,7 +1,7 @@
-From ab118078f6bd7989dad66d62c2884729cd00ff9d Mon Sep 17 00:00:00 2001
+From 765e77ee9ad1472eab9f0dd70001bb9b8bc06645 Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Thu, 23 Jul 2026 00:00:31 +0200
-Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
+Date: Thu, 30 Jul 2026 22:26:29 +0200
+Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
 
 ---
  kernel/Kbuild                      |  75 ++++--
@@ -45,7 +45,7 @@ Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
  38 files changed, 2017 insertions(+), 401 deletions(-)
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index cec135d13..f51f739a6 100644
+index cec135d1..f51f739a 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
 @@ -1,21 +1,36 @@
@@ -181,7 +181,7 @@ index cec135d13..f51f739a6 100644
 +
  # Keep a new line here!! Because someone may append config
 diff --git a/kernel/Kconfig b/kernel/Kconfig
-index 88e228117..1f30a997c 100644
+index 88e22811..1f30a997 100644
 --- a/kernel/Kconfig
 +++ b/kernel/Kconfig
 @@ -2,12 +2,12 @@ menu "KernelSU"
@@ -314,7 +314,7 @@ index 88e228117..1f30a997c 100644
 +
  endmenu
 diff --git a/kernel/core/init.c b/kernel/core/init.c
-index db10afa79..84c2155d2 100644
+index db10afa7..84c2155d 100644
 --- a/kernel/core/init.c
 +++ b/kernel/core/init.c
 @@ -26,6 +26,13 @@
@@ -440,7 +440,7 @@ index db10afa79..84c2155d2 100644
  	ksu_adb_root_exit();
  
 diff --git a/kernel/extras.c b/kernel/extras.c
-index 0cb3ffd02..434d46685 100644
+index 0cb3ffd0..434d4668 100644
 --- a/kernel/extras.c
 +++ b/kernel/extras.c
 @@ -8,6 +8,12 @@
@@ -508,7 +508,7 @@ index 0cb3ffd02..434d46685 100644
  	if (ret) {
  		pr_info("avc_spoof/init: sid grab fail!\n");
 diff --git a/kernel/feature/adb_root.c b/kernel/feature/adb_root.c
-index c41a99559..ae3c017f9 100644
+index c41a9955..ae3c017f 100644
 --- a/kernel/feature/adb_root.c
 +++ b/kernel/feature/adb_root.c
 @@ -9,9 +9,15 @@
@@ -754,7 +754,7 @@ index c41a99559..ae3c017f9 100644
  static int kernel_adb_root_feature_get(u64 *value)
  {
 diff --git a/kernel/feature/adb_root.h b/kernel/feature/adb_root.h
-index 754dba232..5b9b855c2 100644
+index 754dba23..5b9b855c 100644
 --- a/kernel/feature/adb_root.h
 +++ b/kernel/feature/adb_root.h
 @@ -2,7 +2,11 @@
@@ -770,7 +770,7 @@ index 754dba232..5b9b855c2 100644
  void ksu_adb_root_init(void);
  
 diff --git a/kernel/feature/kernel_umount.c b/kernel/feature/kernel_umount.c
-index dd741202a..6ad23160c 100644
+index dd741202..6ad23160 100644
 --- a/kernel/feature/kernel_umount.c
 +++ b/kernel/feature/kernel_umount.c
 @@ -83,6 +83,7 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
@@ -811,7 +811,7 @@ index dd741202a..6ad23160c 100644
  	ksu_unregister_feature_handler(KSU_FEATURE_KERNEL_UMOUNT);
  }
 diff --git a/kernel/feature/selinux_hide.c b/kernel/feature/selinux_hide.c
-index 5bb59bfe4..e1384d92a 100644
+index 5bb59bfe..e1384d92 100644
 --- a/kernel/feature/selinux_hide.c
 +++ b/kernel/feature/selinux_hide.c
 @@ -10,10 +10,12 @@
@@ -1098,7 +1098,7 @@ index 5bb59bfe4..e1384d92a 100644
  {
      struct policydb *policydb;
 diff --git a/kernel/feature/selinux_hide.h b/kernel/feature/selinux_hide.h
-index 5a0437108..faecb73d8 100644
+index 5a043710..faecb73d 100644
 --- a/kernel/feature/selinux_hide.h
 +++ b/kernel/feature/selinux_hide.h
 @@ -1,10 +1,25 @@
@@ -1128,7 +1128,7 @@ index 5a0437108..faecb73d8 100644
 +
  #endif
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index 553cb6ae9..af6dd24dd 100644
+index 553cb6ae..af6dd24d 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
 @@ -13,6 +13,19 @@
@@ -1568,7 +1568,7 @@ index 553cb6ae9..af6dd24dd 100644
  // sucompat: permitted process can execute 'su' to gain root access.
  void __init ksu_sucompat_init()
 diff --git a/kernel/feature/sucompat.h b/kernel/feature/sucompat.h
-index bd7cc21f4..1431557a4 100644
+index bd7cc21f..1431557a 100644
 --- a/kernel/feature/sucompat.h
 +++ b/kernel/feature/sucompat.h
 @@ -2,15 +2,34 @@
@@ -1608,7 +1608,7 @@ index bd7cc21f4..1431557a4 100644
  
  #endif
 diff --git a/kernel/hook/setuid_hook.c b/kernel/hook/setuid_hook.c
-index 3cccc7800..71fcd07cf 100644
+index 3cccc780..71fcd07c 100644
 --- a/kernel/hook/setuid_hook.c
 +++ b/kernel/hook/setuid_hook.c
 @@ -3,6 +3,7 @@
@@ -1736,7 +1736,7 @@ index 3cccc7800..71fcd07cf 100644
  void __init ksu_setuid_hook_init(void)
  {
 diff --git a/kernel/hook/setuid_hook.h b/kernel/hook/setuid_hook.h
-index 3a3dfea8e..d5ab04236 100644
+index 3a3dfea8..d5ab0423 100644
 --- a/kernel/hook/setuid_hook.h
 +++ b/kernel/hook/setuid_hook.h
 @@ -8,6 +8,10 @@ void ksu_setuid_hook_init(void);
@@ -1751,10 +1751,10 @@ index 3a3dfea8e..d5ab04236 100644
  
  #endif
 diff --git a/kernel/hook/syscall_event_bridge.c b/kernel/hook/syscall_event_bridge.c
-index f866a4980..b75155141 100644
+index a961321b..e1ead915 100644
 --- a/kernel/hook/syscall_event_bridge.c
 +++ b/kernel/hook/syscall_event_bridge.c
-@@ -44,61 +44,61 @@ static int ksu_handle_init_mark_tracker(const char __user **filename_user)
+@@ -45,61 +45,61 @@ static int ksu_handle_init_mark_tracker(const char __user **filename_user)
          ksu_clear_task_tracepoint_flag_if_needed(current);
      }
  
@@ -1851,7 +1851,7 @@ index f866a4980..b75155141 100644
  }
  
  long __nocfi ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs)
-@@ -109,6 +109,10 @@ long __nocfi ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs)
+@@ -110,6 +110,10 @@ long __nocfi ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs)
      if (ret < 0)
          return ret;
  
@@ -1863,10 +1863,10 @@ index f866a4980..b75155141 100644
      return ret;
  }
 diff --git a/kernel/manager/apk_sign.c b/kernel/manager/apk_sign.c
-index 95beea84a..5380630d7 100644
+index 2429b8c9..4f2c9530 100644
 --- a/kernel/manager/apk_sign.c
 +++ b/kernel/manager/apk_sign.c
-@@ -363,5 +363,26 @@ bool is_manager_apk(char *path)
+@@ -385,5 +385,26 @@ bool is_manager_apk(char *path)
  		return false;
  	}
  #endif
@@ -1895,7 +1895,7 @@ index 95beea84a..5380630d7 100644
 +	return false;
  }
 diff --git a/kernel/manager/throne_tracker.c b/kernel/manager/throne_tracker.c
-index e005c70b1..fb9e06338 100644
+index e005c70b..fb9e0633 100644
 --- a/kernel/manager/throne_tracker.c
 +++ b/kernel/manager/throne_tracker.c
 @@ -6,6 +6,15 @@
@@ -2030,7 +2030,7 @@ index e005c70b1..fb9e06338 100644
  
  void __exit ksu_throne_tracker_exit()
 diff --git a/kernel/manager/throne_tracker.h b/kernel/manager/throne_tracker.h
-index 3ca346c12..616ba87a7 100644
+index 3ca346c1..616ba87a 100644
 --- a/kernel/manager/throne_tracker.h
 +++ b/kernel/manager/throne_tracker.h
 @@ -2,12 +2,15 @@
@@ -2107,7 +2107,7 @@ index 3ca346c12..616ba87a7 100644
  
  #endif
 diff --git a/kernel/policy/allowlist.c b/kernel/policy/allowlist.c
-index 6996e365f..537f5f9c2 100644
+index 6996e365..537f5f9c 100644
 --- a/kernel/policy/allowlist.c
 +++ b/kernel/policy/allowlist.c
 @@ -297,6 +297,7 @@ bool ksu_uid_should_umount(uid_t uid)
@@ -2127,7 +2127,7 @@ index 6996e365f..537f5f9c2 100644
      return !__ksu_is_allow_uid(uid);
  #else
 diff --git a/kernel/policy/app_profile.c b/kernel/policy/app_profile.c
-index ce086beb1..da6bc3c7d 100644
+index ce086beb..da6bc3c7 100644
 --- a/kernel/policy/app_profile.c
 +++ b/kernel/policy/app_profile.c
 @@ -9,6 +9,10 @@
@@ -2202,7 +2202,7 @@ index ce086beb1..da6bc3c7d 100644
 +    return 0;
  }
 diff --git a/kernel/policy/app_profile.h b/kernel/policy/app_profile.h
-index 5a4097aed..f63c84a88 100644
+index 5a4097ae..f63c84a8 100644
 --- a/kernel/policy/app_profile.h
 +++ b/kernel/policy/app_profile.h
 @@ -8,6 +8,6 @@
@@ -2214,7 +2214,7 @@ index 5a4097aed..f63c84a88 100644
  
  #endif
 diff --git a/kernel/runtime/boot_event.c b/kernel/runtime/boot_event.c
-index eed9047d1..7e064f36c 100644
+index eed9047d..7e064f36 100644
 --- a/kernel/runtime/boot_event.c
 +++ b/kernel/runtime/boot_event.c
 @@ -1,9 +1,10 @@
@@ -2273,7 +2273,7 @@ index eed9047d1..7e064f36c 100644
  void on_module_mounted(void)
  {
 diff --git a/kernel/runtime/ksud.h b/kernel/runtime/ksud.h
-index 62cfaabf2..2285e8931 100644
+index 62cfaabf..2285e893 100644
 --- a/kernel/runtime/ksud.h
 +++ b/kernel/runtime/ksud.h
 @@ -8,7 +8,27 @@
@@ -2305,7 +2305,7 @@ index 62cfaabf2..2285e8931 100644
 +
  #endif
 diff --git a/kernel/runtime/ksud_integration.c b/kernel/runtime/ksud_integration.c
-index 38d1476f1..9976a28cd 100644
+index 38d1476f..9976a28c 100644
 --- a/kernel/runtime/ksud_integration.c
 +++ b/kernel/runtime/ksud_integration.c
 @@ -29,6 +29,16 @@
@@ -2655,7 +2655,7 @@ index 38d1476f1..9976a28cd 100644
      if (module_rc_buf) {
          free_module_rc();
 diff --git a/kernel/selinux/rules.c b/kernel/selinux/rules.c
-index b081294cf..cb1da7964 100644
+index b081294c..cb1da796 100644
 --- a/kernel/selinux/rules.c
 +++ b/kernel/selinux/rules.c
 @@ -98,6 +98,12 @@ void apply_kernelsu_rules()
@@ -2700,7 +2700,7 @@ index b081294cf..cb1da7964 100644
      mutex_unlock(&selinux_state.policy_mutex);
  }
 diff --git a/kernel/selinux/selinux.c b/kernel/selinux/selinux.c
-index 88c795686..b5220d384 100644
+index 88c79568..b5220d38 100644
 --- a/kernel/selinux/selinux.c
 +++ b/kernel/selinux/selinux.c
 @@ -23,6 +23,37 @@ static u32 cached_zygote_sid __read_mostly = 0;
@@ -3043,7 +3043,7 @@ index 88c795686..b5220d384 100644
  }
 +#endif
 diff --git a/kernel/selinux/selinux.h b/kernel/selinux/selinux.h
-index a17ed226b..325b43052 100644
+index a17ed226..325b4305 100644
 --- a/kernel/selinux/selinux.h
 +++ b/kernel/selinux/selinux.h
 @@ -39,4 +39,14 @@ void escape_to_root_for_adb_root();
@@ -3062,7 +3062,7 @@ index a17ed226b..325b43052 100644
 +
  #endif
 diff --git a/kernel/setup.sh b/kernel/setup.sh
-index 292e2c022..d9f120873 100755
+index 292e2c02..d9f12087 100755
 --- a/kernel/setup.sh
 +++ b/kernel/setup.sh
 @@ -16,6 +16,8 @@ display_usage() {
@@ -3075,7 +3075,7 @@ index 292e2c022..d9f120873 100755
           DRIVER_DIR="$GKI_ROOT/drivers"
      else
 diff --git a/kernel/sulog/event.c b/kernel/sulog/event.c
-index 17375e1c8..83c0f4942 100644
+index 17375e1c..83c0f494 100644
 --- a/kernel/sulog/event.c
 +++ b/kernel/sulog/event.c
 @@ -364,18 +364,102 @@ static void ksu_sulog_free_pending(struct ksu_sulog_pending_event *pending)
@@ -3182,7 +3182,7 @@ index 17375e1c8..83c0f4942 100644
  {
      struct ksu_sulog_event *event;
 diff --git a/kernel/sulog/event.h b/kernel/sulog/event.h
-index 866fb6ad9..5f4c50e11 100644
+index 866fb6ad..5f4c50e1 100644
 --- a/kernel/sulog/event.h
 +++ b/kernel/sulog/event.h
 @@ -14,8 +14,12 @@ void __exit ksu_sulog_events_exit(void);
@@ -3199,7 +3199,7 @@ index 866fb6ad9..5f4c50e11 100644
  int ksu_sulog_emit_grant_root(int retval, __u32 uid, __u32 euid, gfp_t gfp);
  
 diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
-index 902631d99..fd915c493 100644
+index 902631d9..fd915c49 100644
 --- a/kernel/supercall/dispatch.c
 +++ b/kernel/supercall/dispatch.c
 @@ -5,6 +5,13 @@
@@ -3438,7 +3438,7 @@ index 902631d99..fd915c493 100644
 +}
 +#endif
 diff --git a/kernel/supercall/internal.h b/kernel/supercall/internal.h
-index 89a973596..460367382 100644
+index 89a97359..46036738 100644
 --- a/kernel/supercall/internal.h
 +++ b/kernel/supercall/internal.h
 @@ -13,6 +13,8 @@ bool allowed_for_su(void);
@@ -3451,7 +3451,7 @@ index 89a973596..460367382 100644
  extern uint32_t ksuver_override;
  
 diff --git a/kernel/supercall/supercall.c b/kernel/supercall/supercall.c
-index 1a397320b..edc6566ed 100644
+index 1a397320..edc6566e 100644
 --- a/kernel/supercall/supercall.c
 +++ b/kernel/supercall/supercall.c
 @@ -21,6 +21,11 @@
@@ -3751,7 +3751,7 @@ index 1a397320b..edc6566ed 100644
      ksu_supercall_cleanup_state();
  }
 diff --git a/kernel/supercall/supercall.h b/kernel/supercall/supercall.h
-index fbedd11f8..50a35a0fc 100644
+index fbedd11f..50a35a0f 100644
 --- a/kernel/supercall/supercall.h
 +++ b/kernel/supercall/supercall.h
 @@ -19,6 +19,10 @@ struct ksu_ioctl_cmd_map {
@@ -3766,7 +3766,7 @@ index fbedd11f8..50a35a0fc 100644
  void ksu_supercalls_exit(void);
  #endif // __KSU_H_SUPERCALL
 diff --git a/manager/app/build.gradle.kts b/manager/app/build.gradle.kts
-index bba48947c..6a3787bfa 100644
+index bba48947..6a3787bf 100644
 --- a/manager/app/build.gradle.kts
 +++ b/manager/app/build.gradle.kts
 @@ -25,6 +25,11 @@ apksign {
@@ -3782,7 +3782,7 @@ index bba48947c..6a3787bfa 100644
          release {
              isMinifyEnabled = true
 diff --git a/manager/build.gradle.kts b/manager/build.gradle.kts
-index 56f21ef7a..27b415a92 100644
+index 56f21ef7..27b415a9 100644
 --- a/manager/build.gradle.kts
 +++ b/manager/build.gradle.kts
 @@ -37,26 +37,79 @@ val androidTargetCompatibility = JavaVersion.VERSION_21
@@ -3874,7 +3874,7 @@ index 56f21ef7a..27b415a92 100644
      plugins.withType(AndroidBasePlugin::class.java) {
          extensions.configure(CommonExtension::class.java) {
 diff --git a/userspace/ksud/build.rs b/userspace/ksud/build.rs
-index 9f8819666..7e5a123ea 100644
+index 9f881966..7e5a123e 100644
 --- a/userspace/ksud/build.rs
 +++ b/userspace/ksud/build.rs
 @@ -4,9 +4,29 @@ use std::io::Write;
@@ -3918,7 +3918,7 @@ index 9f8819666..7e5a123ea 100644
              .stdout,
      )
 diff --git a/userspace/ksud/src/cli.rs b/userspace/ksud/src/cli.rs
-index f1bb8bcc2..d5d088bd1 100644
+index f1bb8bcc..d5d088bd 100644
 --- a/userspace/ksud/src/cli.rs
 +++ b/userspace/ksud/src/cli.rs
 @@ -511,7 +511,7 @@ pub fn run() -> Result<()> {
@@ -3931,7 +3931,7 @@ index f1bb8bcc2..d5d088bd1 100644
              init_event::on_boot_completed();
              Ok(())
 diff --git a/userspace/ksud/src/init_event.rs b/userspace/ksud/src/init_event.rs
-index d133c1160..a4a02d3ff 100644
+index d133c116..a4a02d3f 100644
 --- a/userspace/ksud/src/init_event.rs
 +++ b/userspace/ksud/src/init_event.rs
 @@ -13,7 +13,7 @@ use rustix::process::chdir;

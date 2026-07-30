@@ -26,7 +26,7 @@ if [[ "$KSU_VARIANT" == "ksun" ]]; then
     KSU_DISCORD_LABEL="KernelSUNext"
     SUSFS_KSU_INTERNAL_PATCH_DESC="pershoot-fork SUSFS patch (10_pershoot_enable_susfs_for_ksun.patch)"
     elif [[ "$KSU_VARIANT" == "ksu" ]]; then
-    KERNELSU_SETUP_URL="https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh"
+    KERNELSU_SETUP_URL="https://raw.githubusercontent.com/poqdavid/KernelSU/main/kernel/setup.sh"
     KERNELSU_SETUP_BRANCH="main"
     BASE_KSU_VERSION=20000
     KSU_DIR="KernelSU"
@@ -577,6 +577,9 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                 # Patch Main Kernel
                 info -n "Patching SUSFS into Kernel..."
                 patch -p1 < $SUSFS_PATCHES/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch || true
+                
+                info -n "Fixing set_nameidata() call in fs/namei.c..."
+                sed -i 's/set_nameidata(nd, old_dfd, fake_filename, NULL);/set_nameidata(nd, old_dfd, fake_filename);/g' fs/namei.c
                 
                 # Samsung Specific Patches
                 info -n "Applying Samsung device patches..."
