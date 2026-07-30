@@ -93,7 +93,7 @@ case "$KSU_VARIANT" in
         info -n "Selected KernelSU variant: ${KSU_DIR_NAME}"
     ;;
     stock)
-        OUTPUT_PREFIX="stock"
+        OUTPUT_PREFIX="stock_optimized"
         warn -n "No --ksu/--ksun given. Building a stock (non-rooted) kernel package."
     ;;
 esac

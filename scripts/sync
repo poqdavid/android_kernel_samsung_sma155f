@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+#
+# sync — deterministically resync vendored external
+# repos into patches/ subdirectories.
+#
+# Each dependency is fully mirrored from a fresh shallow clone via rsync,
+# so there is no merge step and nothing to partially apply or conflict.
+# The upstream commit synced is recorded in a `.sync-info` file next
+# to the vendored files, since squash commits alone are easy to lose
+# track of across repeated resyncs.
+#
+# Usage:
+#   ./sync              # sync everything
+#   ./sync susfs4ksu    # sync just one entry by name
+#
+# Place this anywhere under the repo (e.g. scripts/sync).
+# It resolves the repo root from its OWN path, not the caller's cwd, so it
+# behaves the same whether run as ./scripts/sync from repo
+# root, from inside scripts/, via an absolute path, or from cron/CI.
+#
+# Commits are GPG-signed (-S) by default, using your normal git signing
+# config (user.signingkey / gpg.program). Disable per-run with:
+#   SIGN_COMMITS=0 ./sync
+# Sign with a specific key instead of your default:
+#   SIGNING_KEY=ABCD1234 ./sync
+#
+set -euo pipefail
+
+# name|local prefix|remote url|ref (branch/tag)
+DEPS=(
+  "kernel_patches|patches/kernel_patches|git@github.com:poqdavid/kernel_patches.git|dev"
+  "susfs4ksu|patches/susfs4ksu|https://gitlab.com/simonpunk/susfs4ksu.git|gki-android12-5.10"
+)
+
+FILTER="${1:-}"
+SIGN_COMMITS="${SIGN_COMMITS:-1}"
+
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(dirname "$SCRIPT_PATH")"
+REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+# gpg needs a TTY to prompt for a passphrase when run non-interactively
+# (cron, wrapper scripts, etc); without this, signing fails with
+# "Inappropriate ioctl for device".
+if [ -z "${GPG_TTY:-}" ]; then
+    export GPG_TTY="$(tty 2>/dev/null || true)"
+fi
+
+TMPROOT="$(mktemp -d)"
+trap 'rm -rf "$TMPROOT"' EXIT
+
+sync_one() {
+    local name="$1" prefix="$2" url="$3" ref="$4"
+    local clone_dir="$TMPROOT/$name"
+    local manifest="$prefix/.sync-info"
+
+    echo "==> $name ($ref)"
+
+    git clone --quiet --depth 1 --branch "$ref" "$url" "$clone_dir"
+    local upstream_sha
+    upstream_sha="$(git -C "$clone_dir" rev-parse HEAD)"
+
+    if [ -f "$manifest" ] && grep -q "^commit=$upstream_sha$" "$manifest"; then
+        echo "    already at $upstream_sha, skipping"
+        return 0
+    fi
+
+    mkdir -p "$prefix"
+    rsync -a --delete --exclude='.git' "$clone_dir/" "$prefix/"
+
+    {
+        echo "source=$url"
+        echo "ref=$ref"
+        echo "commit=$upstream_sha"
+        echo "synced=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } > "$manifest"
+
+    git add -A -- "$prefix"
+    if git diff --cached --quiet -- "$prefix"; then
+        echo "    no file changes despite new upstream commit, skipping commit"
+        return 0
+    fi
+
+    local commit_args=(--quiet -m "sync: $name to ${upstream_sha:0:12}")
+    if [ "$SIGN_COMMITS" = "1" ]; then
+        if [ -n "${SIGNING_KEY:-}" ]; then
+            commit_args=(-S"${SIGNING_KEY}" "${commit_args[@]}")
+        else
+            commit_args=(-S "${commit_args[@]}")
+        fi
+    fi
+    git commit "${commit_args[@]}"
+
+    local sig
+    sig="$(git log -1 --pretty=%G?)"
+    echo "    synced -> ${upstream_sha:0:12} (commit $(git rev-parse --short HEAD), sig: $sig)"
+}
+
+for dep in "${DEPS[@]}"; do
+    IFS='|' read -r name prefix url ref <<< "$dep"
+    if [ -n "$FILTER" ] && [ "$FILTER" != "$name" ]; then
+        continue
+    fi
+    sync_one "$name" "$prefix" "$url" "$ref"
+done
