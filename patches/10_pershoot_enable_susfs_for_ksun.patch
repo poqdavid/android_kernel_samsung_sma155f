@@ -1,51 +1,74 @@
-From 765e77ee9ad1472eab9f0dd70001bb9b8bc06645 Mon Sep 17 00:00:00 2001
+From c620aff27be9c49dc6c4d39675aa19ce4f27c97f Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Thu, 30 Jul 2026 22:26:29 +0200
-Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
+Date: Sun, 9 Aug 2026 23:20:45 +0200
+Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
 
 ---
- kernel/Kbuild                      |  75 ++++--
- kernel/Kconfig                     | 107 ++++++++-
- kernel/core/init.c                 |  49 +++-
- kernel/extras.c                    |  22 +-
- kernel/feature/adb_root.c          | 160 ++++++++++++-
- kernel/feature/adb_root.h          |   4 +
- kernel/feature/kernel_umount.c     |  13 +-
- kernel/feature/selinux_hide.c      | 163 +++++++------
- kernel/feature/selinux_hide.h      |  15 ++
- kernel/feature/sucompat.c          | 354 ++++++++++++++++++++++++++++-
- kernel/feature/sucompat.h          |  21 +-
- kernel/hook/setuid_hook.c          |  81 ++++++-
- kernel/hook/setuid_hook.h          |   4 +
- kernel/hook/syscall_event_bridge.c |  74 +++---
- kernel/manager/apk_sign.c          |  23 +-
- kernel/manager/throne_tracker.c    |  92 +++++++-
- kernel/manager/throne_tracker.h    |  52 ++++-
- kernel/policy/allowlist.c          |   2 +
- kernel/policy/app_profile.c        |  21 +-
- kernel/policy/app_profile.h        |   2 +-
- kernel/runtime/boot_event.c        |  21 +-
- kernel/runtime/ksud.h              |  20 ++
- kernel/runtime/ksud_integration.c  | 195 ++++++++++++----
- kernel/selinux/rules.c             |  22 ++
- kernel/selinux/selinux.c           | 244 +++++++++++++-------
- kernel/selinux/selinux.h           |  10 +
- kernel/setup.sh                    |   2 +
- kernel/sulog/event.c               |  84 +++++++
- kernel/sulog/event.h               |   4 +
- kernel/supercall/dispatch.c        | 153 +++++++++++++
- kernel/supercall/internal.h        |   2 +
- kernel/supercall/supercall.c       | 189 +++++++++------
- kernel/supercall/supercall.h       |   4 +
- manager/app/build.gradle.kts       |   5 +
- manager/build.gradle.kts           |  69 +++++-
- userspace/ksud/build.rs            |  24 +-
- userspace/ksud/src/cli.rs          |   2 +-
- userspace/ksud/src/init_event.rs   |  34 ++-
- 38 files changed, 2017 insertions(+), 401 deletions(-)
+ kernel/Kbuild                                 |  75 ++--
+ kernel/Kconfig                                | 107 +++++-
+ kernel/core/init.c                            |  49 ++-
+ kernel/extras.c                               |  22 +-
+ kernel/feature/adb_root.c                     | 160 +++++++-
+ kernel/feature/adb_root.h                     |   4 +
+ kernel/feature/kernel_umount.c                |  13 +-
+ kernel/feature/selinux_hide.c                 | 163 ++++----
+ kernel/feature/selinux_hide.h                 |  15 +
+ kernel/feature/sucompat.c                     | 356 +++++++++++++++++-
+ kernel/feature/sucompat.h                     |  21 +-
+ kernel/hook/setuid_hook.c                     |  81 +++-
+ kernel/hook/setuid_hook.h                     |   4 +
+ kernel/hook/syscall_event_bridge.c            |  74 ++--
+ kernel/manager/apk_sign.c                     |  23 +-
+ kernel/manager/throne_tracker.c               |  92 ++++-
+ kernel/manager/throne_tracker.h               |  52 ++-
+ kernel/policy/allowlist.c                     |   2 +
+ kernel/policy/app_profile.c                   |  21 +-
+ kernel/policy/app_profile.h                   |   2 +-
+ kernel/runtime/boot_event.c                   |  21 +-
+ kernel/runtime/ksud.h                         |  20 +
+ kernel/runtime/ksud_integration.c             | 195 +++++++---
+ kernel/selinux/rules.c                        |  22 ++
+ kernel/selinux/selinux.c                      | 244 ++++++++----
+ kernel/selinux/selinux.h                      |  10 +
+ kernel/setup.sh                               |   2 +
+ kernel/sulog/event.c                          |  84 +++++
+ kernel/sulog/event.h                          |   4 +
+ kernel/supercall/dispatch.c                   | 153 ++++++++
+ kernel/supercall/internal.h                   |   2 +
+ kernel/supercall/supercall.c                  | 189 ++++++----
+ kernel/supercall/supercall.h                  |   4 +
+ manager/app/build.gradle.kts                  |   6 +
+ .../com/rifsxd/ksunext/ui/MainActivity.kt     | 143 ++++++-
+ .../rifsxd/ksunext/ui/screen/AppProfile.kt    |   2 +-
+ .../rifsxd/ksunext/ui/screen/BackupRestore.kt |   2 +-
+ .../rifsxd/ksunext/ui/screen/Customization.kt |  35 +-
+ .../com/rifsxd/ksunext/ui/screen/Developer.kt |   2 +-
+ .../java/com/rifsxd/ksunext/ui/screen/Home.kt |  32 +-
+ .../rifsxd/ksunext/ui/screen/MetaModule.kt    |   7 +-
+ .../com/rifsxd/ksunext/ui/screen/Module.kt    |   9 +-
+ .../rifsxd/ksunext/ui/screen/ModuleRepo.kt    |   6 +-
+ .../com/rifsxd/ksunext/ui/screen/Settings.kt  |  91 ++++-
+ .../com/rifsxd/ksunext/ui/screen/SuLog.kt     |  12 +-
+ .../com/rifsxd/ksunext/ui/screen/SuperUser.kt |   8 +-
+ .../com/rifsxd/ksunext/ui/screen/Template.kt  |   8 +-
+ .../ksunext/ui/screen/TemplateEditor.kt       |   2 +-
+ .../rifsxd/ksunext/ui/util/AppLockManager.kt  |  44 +++
+ .../rifsxd/ksunext/ui/util/BiometricAuth.kt   |  35 ++
+ .../rifsxd/ksunext/ui/webui/WebUIActivity.kt  | 100 ++++-
+ manager/app/src/main/res/values/strings.xml   |  11 +
+ manager/build.gradle.kts                      |  69 +++-
+ userspace/ksud/Cargo.lock                     |   7 -
+ userspace/ksud/Cargo.toml                     |   1 -
+ userspace/ksud/build.rs                       |  24 +-
+ userspace/ksud/src/cli.rs                     |   2 +-
+ userspace/ksud/src/init_event.rs              |  16 +-
+ userspace/ksud/src/utils.rs                   |  45 ++-
+ 59 files changed, 2575 insertions(+), 430 deletions(-)
+ create mode 100644 manager/app/src/main/java/com/rifsxd/ksunext/ui/util/AppLockManager.kt
+ create mode 100644 manager/app/src/main/java/com/rifsxd/ksunext/ui/util/BiometricAuth.kt
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index cec135d1..f51f739a 100644
+index cec135d13..f51f739a6 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
 @@ -1,21 +1,36 @@
@@ -181,7 +204,7 @@ index cec135d1..f51f739a 100644
 +
  # Keep a new line here!! Because someone may append config
 diff --git a/kernel/Kconfig b/kernel/Kconfig
-index 88e22811..1f30a997 100644
+index 88e228117..1f30a997c 100644
 --- a/kernel/Kconfig
 +++ b/kernel/Kconfig
 @@ -2,12 +2,12 @@ menu "KernelSU"
@@ -314,7 +337,7 @@ index 88e22811..1f30a997 100644
 +
  endmenu
 diff --git a/kernel/core/init.c b/kernel/core/init.c
-index db10afa7..84c2155d 100644
+index db10afa79..84c2155d2 100644
 --- a/kernel/core/init.c
 +++ b/kernel/core/init.c
 @@ -26,6 +26,13 @@
@@ -440,7 +463,7 @@ index db10afa7..84c2155d 100644
  	ksu_adb_root_exit();
  
 diff --git a/kernel/extras.c b/kernel/extras.c
-index 0cb3ffd0..434d4668 100644
+index 0cb3ffd02..434d46685 100644
 --- a/kernel/extras.c
 +++ b/kernel/extras.c
 @@ -8,6 +8,12 @@
@@ -508,7 +531,7 @@ index 0cb3ffd0..434d4668 100644
  	if (ret) {
  		pr_info("avc_spoof/init: sid grab fail!\n");
 diff --git a/kernel/feature/adb_root.c b/kernel/feature/adb_root.c
-index c41a9955..ae3c017f 100644
+index c41a99559..ae3c017f9 100644
 --- a/kernel/feature/adb_root.c
 +++ b/kernel/feature/adb_root.c
 @@ -9,9 +9,15 @@
@@ -754,7 +777,7 @@ index c41a9955..ae3c017f 100644
  static int kernel_adb_root_feature_get(u64 *value)
  {
 diff --git a/kernel/feature/adb_root.h b/kernel/feature/adb_root.h
-index 754dba23..5b9b855c 100644
+index 754dba232..5b9b855c2 100644
 --- a/kernel/feature/adb_root.h
 +++ b/kernel/feature/adb_root.h
 @@ -2,7 +2,11 @@
@@ -770,7 +793,7 @@ index 754dba23..5b9b855c 100644
  void ksu_adb_root_init(void);
  
 diff --git a/kernel/feature/kernel_umount.c b/kernel/feature/kernel_umount.c
-index dd741202..6ad23160 100644
+index dd741202a..6ad23160c 100644
 --- a/kernel/feature/kernel_umount.c
 +++ b/kernel/feature/kernel_umount.c
 @@ -83,6 +83,7 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
@@ -811,7 +834,7 @@ index dd741202..6ad23160 100644
  	ksu_unregister_feature_handler(KSU_FEATURE_KERNEL_UMOUNT);
  }
 diff --git a/kernel/feature/selinux_hide.c b/kernel/feature/selinux_hide.c
-index 5bb59bfe..e1384d92 100644
+index 5bb59bfe4..e1384d92a 100644
 --- a/kernel/feature/selinux_hide.c
 +++ b/kernel/feature/selinux_hide.c
 @@ -10,10 +10,12 @@
@@ -1098,7 +1121,7 @@ index 5bb59bfe..e1384d92 100644
  {
      struct policydb *policydb;
 diff --git a/kernel/feature/selinux_hide.h b/kernel/feature/selinux_hide.h
-index 5a043710..faecb73d 100644
+index 5a0437108..faecb73d8 100644
 --- a/kernel/feature/selinux_hide.h
 +++ b/kernel/feature/selinux_hide.h
 @@ -1,10 +1,25 @@
@@ -1128,7 +1151,7 @@ index 5a043710..faecb73d 100644
 +
  #endif
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index 553cb6ae..af6dd24d 100644
+index 553cb6ae9..c43ee897e 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
 @@ -13,6 +13,19 @@
@@ -1221,7 +1244,7 @@ index 553cb6ae..af6dd24d 100644
  static bool is_ksud_exists()
  {
  	struct path path;
-@@ -86,6 +115,303 @@ static bool is_ksud_exists()
+@@ -86,6 +115,305 @@ static bool is_ksud_exists()
  	return true;
  }
  
@@ -1270,6 +1293,8 @@ index 553cb6ae..af6dd24d 100644
 +        return ksu_str_ends_with(name, len, "/app_process32");
 +    if (last == '4')
 +        return ksu_str_ends_with(name, len, "/app_process64");
++    if (last == 'e')
++        return ksu_str_ends_with(name, len, "/stub_zygote");
 +
 +    return false;
 +}
@@ -1525,7 +1550,7 @@ index 553cb6ae..af6dd24d 100644
  long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  {
  	const char __user **filename_user, *orig_filename;
-@@ -103,6 +429,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -103,6 +431,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1536,7 +1561,7 @@ index 553cb6ae..af6dd24d 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('a');
-@@ -139,6 +469,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -139,6 +471,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1547,7 +1572,7 @@ index 553cb6ae..af6dd24d 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('s');
-@@ -189,6 +523,11 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
+@@ -189,6 +525,11 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
  	if (likely(memcmp(path, su_path, sizeof(su_path))))
  		goto do_orig_execve;
  
@@ -1559,7 +1584,7 @@ index 553cb6ae..af6dd24d 100644
  	ksu_compat_sulog('x');
  	pr_info("sys_execve su found\n");
  
-@@ -243,6 +582,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
+@@ -243,6 +584,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
  do_orig_execve:
  	return ksu_syscall_table[orig_nr](regs);
  }
@@ -1568,7 +1593,7 @@ index 553cb6ae..af6dd24d 100644
  // sucompat: permitted process can execute 'su' to gain root access.
  void __init ksu_sucompat_init()
 diff --git a/kernel/feature/sucompat.h b/kernel/feature/sucompat.h
-index bd7cc21f..1431557a 100644
+index bd7cc21f4..1431557a4 100644
 --- a/kernel/feature/sucompat.h
 +++ b/kernel/feature/sucompat.h
 @@ -2,15 +2,34 @@
@@ -1608,7 +1633,7 @@ index bd7cc21f..1431557a 100644
  
  #endif
 diff --git a/kernel/hook/setuid_hook.c b/kernel/hook/setuid_hook.c
-index 3cccc780..71fcd07c 100644
+index 3cccc7800..71fcd07cf 100644
 --- a/kernel/hook/setuid_hook.c
 +++ b/kernel/hook/setuid_hook.c
 @@ -3,6 +3,7 @@
@@ -1736,7 +1761,7 @@ index 3cccc780..71fcd07c 100644
  void __init ksu_setuid_hook_init(void)
  {
 diff --git a/kernel/hook/setuid_hook.h b/kernel/hook/setuid_hook.h
-index 3a3dfea8..d5ab0423 100644
+index 3a3dfea8e..d5ab04236 100644
 --- a/kernel/hook/setuid_hook.h
 +++ b/kernel/hook/setuid_hook.h
 @@ -8,6 +8,10 @@ void ksu_setuid_hook_init(void);
@@ -1751,7 +1776,7 @@ index 3a3dfea8..d5ab0423 100644
  
  #endif
 diff --git a/kernel/hook/syscall_event_bridge.c b/kernel/hook/syscall_event_bridge.c
-index a961321b..e1ead915 100644
+index a961321b4..e1ead915d 100644
 --- a/kernel/hook/syscall_event_bridge.c
 +++ b/kernel/hook/syscall_event_bridge.c
 @@ -45,61 +45,61 @@ static int ksu_handle_init_mark_tracker(const char __user **filename_user)
@@ -1863,10 +1888,10 @@ index a961321b..e1ead915 100644
      return ret;
  }
 diff --git a/kernel/manager/apk_sign.c b/kernel/manager/apk_sign.c
-index 2429b8c9..4f2c9530 100644
+index f63806ad0..63d3edd9d 100644
 --- a/kernel/manager/apk_sign.c
 +++ b/kernel/manager/apk_sign.c
-@@ -385,5 +385,26 @@ bool is_manager_apk(char *path)
+@@ -409,5 +409,26 @@ bool is_manager_apk(char *path)
  		return false;
  	}
  #endif
@@ -1895,7 +1920,7 @@ index 2429b8c9..4f2c9530 100644
 +	return false;
  }
 diff --git a/kernel/manager/throne_tracker.c b/kernel/manager/throne_tracker.c
-index e005c70b..fb9e0633 100644
+index e005c70b1..fb9e06338 100644
 --- a/kernel/manager/throne_tracker.c
 +++ b/kernel/manager/throne_tracker.c
 @@ -6,6 +6,15 @@
@@ -2030,7 +2055,7 @@ index e005c70b..fb9e0633 100644
  
  void __exit ksu_throne_tracker_exit()
 diff --git a/kernel/manager/throne_tracker.h b/kernel/manager/throne_tracker.h
-index 3ca346c1..616ba87a 100644
+index 3ca346c12..616ba87a7 100644
 --- a/kernel/manager/throne_tracker.h
 +++ b/kernel/manager/throne_tracker.h
 @@ -2,12 +2,15 @@
@@ -2107,7 +2132,7 @@ index 3ca346c1..616ba87a 100644
  
  #endif
 diff --git a/kernel/policy/allowlist.c b/kernel/policy/allowlist.c
-index 6996e365..537f5f9c 100644
+index 6996e365f..537f5f9c2 100644
 --- a/kernel/policy/allowlist.c
 +++ b/kernel/policy/allowlist.c
 @@ -297,6 +297,7 @@ bool ksu_uid_should_umount(uid_t uid)
@@ -2127,7 +2152,7 @@ index 6996e365..537f5f9c 100644
      return !__ksu_is_allow_uid(uid);
  #else
 diff --git a/kernel/policy/app_profile.c b/kernel/policy/app_profile.c
-index ce086beb..da6bc3c7 100644
+index ce086beb1..da6bc3c7d 100644
 --- a/kernel/policy/app_profile.c
 +++ b/kernel/policy/app_profile.c
 @@ -9,6 +9,10 @@
@@ -2202,7 +2227,7 @@ index ce086beb..da6bc3c7 100644
 +    return 0;
  }
 diff --git a/kernel/policy/app_profile.h b/kernel/policy/app_profile.h
-index 5a4097ae..f63c84a8 100644
+index 5a4097aed..f63c84a88 100644
 --- a/kernel/policy/app_profile.h
 +++ b/kernel/policy/app_profile.h
 @@ -8,6 +8,6 @@
@@ -2214,7 +2239,7 @@ index 5a4097ae..f63c84a8 100644
  
  #endif
 diff --git a/kernel/runtime/boot_event.c b/kernel/runtime/boot_event.c
-index eed9047d..7e064f36 100644
+index eed9047d1..7e064f36c 100644
 --- a/kernel/runtime/boot_event.c
 +++ b/kernel/runtime/boot_event.c
 @@ -1,9 +1,10 @@
@@ -2273,7 +2298,7 @@ index eed9047d..7e064f36 100644
  void on_module_mounted(void)
  {
 diff --git a/kernel/runtime/ksud.h b/kernel/runtime/ksud.h
-index 62cfaabf..2285e893 100644
+index 62cfaabf2..2285e8931 100644
 --- a/kernel/runtime/ksud.h
 +++ b/kernel/runtime/ksud.h
 @@ -8,7 +8,27 @@
@@ -2305,7 +2330,7 @@ index 62cfaabf..2285e893 100644
 +
  #endif
 diff --git a/kernel/runtime/ksud_integration.c b/kernel/runtime/ksud_integration.c
-index 38d1476f..9976a28c 100644
+index 38d1476f1..9976a28cd 100644
 --- a/kernel/runtime/ksud_integration.c
 +++ b/kernel/runtime/ksud_integration.c
 @@ -29,6 +29,16 @@
@@ -2655,7 +2680,7 @@ index 38d1476f..9976a28c 100644
      if (module_rc_buf) {
          free_module_rc();
 diff --git a/kernel/selinux/rules.c b/kernel/selinux/rules.c
-index b081294c..cb1da796 100644
+index b081294cf..cb1da7964 100644
 --- a/kernel/selinux/rules.c
 +++ b/kernel/selinux/rules.c
 @@ -98,6 +98,12 @@ void apply_kernelsu_rules()
@@ -2700,7 +2725,7 @@ index b081294c..cb1da796 100644
      mutex_unlock(&selinux_state.policy_mutex);
  }
 diff --git a/kernel/selinux/selinux.c b/kernel/selinux/selinux.c
-index 88c79568..b5220d38 100644
+index 88c795686..b5220d384 100644
 --- a/kernel/selinux/selinux.c
 +++ b/kernel/selinux/selinux.c
 @@ -23,6 +23,37 @@ static u32 cached_zygote_sid __read_mostly = 0;
@@ -3043,7 +3068,7 @@ index 88c79568..b5220d38 100644
  }
 +#endif
 diff --git a/kernel/selinux/selinux.h b/kernel/selinux/selinux.h
-index a17ed226..325b4305 100644
+index a17ed226b..325b43052 100644
 --- a/kernel/selinux/selinux.h
 +++ b/kernel/selinux/selinux.h
 @@ -39,4 +39,14 @@ void escape_to_root_for_adb_root();
@@ -3062,7 +3087,7 @@ index a17ed226..325b4305 100644
 +
  #endif
 diff --git a/kernel/setup.sh b/kernel/setup.sh
-index 292e2c02..d9f12087 100755
+index 292e2c022..d9f120873 100755
 --- a/kernel/setup.sh
 +++ b/kernel/setup.sh
 @@ -16,6 +16,8 @@ display_usage() {
@@ -3075,7 +3100,7 @@ index 292e2c02..d9f12087 100755
           DRIVER_DIR="$GKI_ROOT/drivers"
      else
 diff --git a/kernel/sulog/event.c b/kernel/sulog/event.c
-index 17375e1c..83c0f494 100644
+index 17375e1c8..83c0f4942 100644
 --- a/kernel/sulog/event.c
 +++ b/kernel/sulog/event.c
 @@ -364,18 +364,102 @@ static void ksu_sulog_free_pending(struct ksu_sulog_pending_event *pending)
@@ -3182,7 +3207,7 @@ index 17375e1c..83c0f494 100644
  {
      struct ksu_sulog_event *event;
 diff --git a/kernel/sulog/event.h b/kernel/sulog/event.h
-index 866fb6ad..5f4c50e1 100644
+index 866fb6ad9..5f4c50e11 100644
 --- a/kernel/sulog/event.h
 +++ b/kernel/sulog/event.h
 @@ -14,8 +14,12 @@ void __exit ksu_sulog_events_exit(void);
@@ -3199,7 +3224,7 @@ index 866fb6ad..5f4c50e1 100644
  int ksu_sulog_emit_grant_root(int retval, __u32 uid, __u32 euid, gfp_t gfp);
  
 diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
-index 902631d9..fd915c49 100644
+index 902631d99..fd915c493 100644
 --- a/kernel/supercall/dispatch.c
 +++ b/kernel/supercall/dispatch.c
 @@ -5,6 +5,13 @@
@@ -3438,7 +3463,7 @@ index 902631d9..fd915c49 100644
 +}
 +#endif
 diff --git a/kernel/supercall/internal.h b/kernel/supercall/internal.h
-index 89a97359..46036738 100644
+index 89a973596..460367382 100644
 --- a/kernel/supercall/internal.h
 +++ b/kernel/supercall/internal.h
 @@ -13,6 +13,8 @@ bool allowed_for_su(void);
@@ -3451,7 +3476,7 @@ index 89a97359..46036738 100644
  extern uint32_t ksuver_override;
  
 diff --git a/kernel/supercall/supercall.c b/kernel/supercall/supercall.c
-index 1a397320..edc6566e 100644
+index 1a397320b..edc6566ed 100644
 --- a/kernel/supercall/supercall.c
 +++ b/kernel/supercall/supercall.c
 @@ -21,6 +21,11 @@
@@ -3751,7 +3776,7 @@ index 1a397320..edc6566e 100644
      ksu_supercall_cleanup_state();
  }
 diff --git a/kernel/supercall/supercall.h b/kernel/supercall/supercall.h
-index fbedd11f..50a35a0f 100644
+index fbedd11f8..50a35a0fc 100644
 --- a/kernel/supercall/supercall.h
 +++ b/kernel/supercall/supercall.h
 @@ -19,6 +19,10 @@ struct ksu_ioctl_cmd_map {
@@ -3766,7 +3791,7 @@ index fbedd11f..50a35a0f 100644
  void ksu_supercalls_exit(void);
  #endif // __KSU_H_SUPERCALL
 diff --git a/manager/app/build.gradle.kts b/manager/app/build.gradle.kts
-index bba48947..6a3787bf 100644
+index bba48947c..cacc94a8f 100644
 --- a/manager/app/build.gradle.kts
 +++ b/manager/app/build.gradle.kts
 @@ -25,6 +25,11 @@ apksign {
@@ -3781,8 +3806,1005 @@ index bba48947..6a3787bf 100644
      buildTypes {
          release {
              isMinifyEnabled = true
+@@ -153,4 +158,5 @@ dependencies {
+     implementation(libs.lsposed.cxx)
+ 
+     implementation(libs.mmrl.ui)
++    implementation("androidx.biometric:biometric:1.2.0-alpha05")
+ }
+\ No newline at end of file
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt
+index bc130b232..0d652af9b 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt
+@@ -8,7 +8,7 @@ import android.os.Bundle
+ import android.os.Handler
+ import android.os.Looper
+ import android.widget.Toast
+-import androidx.activity.ComponentActivity
++import androidx.fragment.app.FragmentActivity
+ import androidx.activity.compose.BackHandler
+ import androidx.activity.compose.setContent
+ import androidx.activity.enableEdgeToEdge
+@@ -39,6 +39,8 @@ import androidx.compose.ui.res.stringResource
+ import androidx.compose.ui.unit.dp
+ import androidx.activity.viewModels
+ import androidx.navigation.NavBackStackEntry
++import androidx.compose.ui.draw.alpha
++import androidx.compose.ui.draw.scale
+ import androidx.navigation.NavHostController
+ import androidx.navigation.compose.currentBackStackEntryAsState
+ import androidx.navigation.compose.rememberNavController
+@@ -73,7 +75,9 @@ import com.rifsxd.ksunext.ui.viewmodel.SuperUserViewModel
+ data class ScrollState(
+     val isScrollingDown: MutableState<Boolean>,
+     val scrollOffset: MutableState<Float>,
+-    val previousScrollOffset: MutableState<Float>
++    val previousScrollOffset: MutableState<Float>,
++    val isNavBarEnabled: State<Boolean>,
++    val isHapticsEnabled: State<Boolean>
+ )
+ 
+ val LocalScrollState = compositionLocalOf<ScrollState?> { null }
+@@ -189,13 +193,18 @@ fun Modifier.trackScroll(
+     return this.nestedScroll(scrollConnection)
+ }
+ 
+-class MainActivity : ComponentActivity() {
++class MainActivity : FragmentActivity() {
+ 
++    private val appLockState = mutableStateOf(false)
++
++    private var pendingIntent: Intent? = null
+     var zipUri by mutableStateOf<ArrayList<Uri>?>(null)
+     enum class NavigateLocation { SUPERUSER, MODULES, SETTINGS }
+     var navigateLoc by mutableStateOf<NavigateLocation?>(null)
+     var moduleActionId by mutableStateOf<String?>(null)
+     var amoledModeState = mutableStateOf(false)
++    var navBarEnabled = mutableStateOf(true)
++    var hapticsEnabled = mutableStateOf(false)
+     private val handler = Handler(Looper.getMainLooper())
+ 
+     val moduleViewModel: ModuleViewModel by viewModels()
+@@ -226,6 +235,8 @@ class MainActivity : ComponentActivity() {
+         try {
+             val prefsInit = getSharedPreferences("settings", MODE_PRIVATE)
+             amoledModeState.value = prefsInit.getBoolean("enable_amoled", false)
++            navBarEnabled.value = prefsInit.getBoolean("enable_navbar", true)
++            hapticsEnabled.value = prefsInit.getBoolean("enable_haptics", false)
+         } catch (_: Exception) {}
+ 
+         val isManager = Natives.isManager
+@@ -236,10 +247,19 @@ class MainActivity : ComponentActivity() {
+             intent = null
+         }
+ 
++        val prefsInit = getSharedPreferences("settings", MODE_PRIVATE)
++        val requireBiometric = prefsInit.getBoolean("enable_biometric_lock", false)
++
++        if (savedInstanceState != null) {
++            appLockState.value = savedInstanceState.getBoolean("appLockState", requireBiometric)
++        } else {
++            appLockState.value = requireBiometric
++        }
++
+         if(intent != null)
+             handleIntent(intent)
+ 
+-        setContent {
++        setContent { Box(modifier = Modifier.fillMaxSize()) {
+             KernelSUTheme(amoledMode = amoledModeState.value) {
+                 val navController = rememberNavController()
+                 val snackBarHostState = remember { SnackbarHostState() }
+@@ -334,7 +354,7 @@ class MainActivity : ComponentActivity() {
+                 val showBottomBar = when (currentDestination?.route) {
+                     FlashScreenDestination.route -> false // Hide for FlashScreenDestination
+                     ExecuteModuleActionScreenDestination.route -> false // Hide for ExecuteModuleActionScreen
+-                    else -> !isScrollingDown.value
++                    else -> !isScrollingDown.value && navBarEnabled.value
+                 }
+ 
+                 Scaffold(
+@@ -346,7 +366,9 @@ class MainActivity : ComponentActivity() {
+                             LocalScrollState provides ScrollState(
+                                 isScrollingDown = isScrollingDown,
+                                 scrollOffset = scrollOffset,
+-                                previousScrollOffset = previousScrollOffset
++                                previousScrollOffset = previousScrollOffset,
++                                isNavBarEnabled = navBarEnabled,
++                                isHapticsEnabled = hapticsEnabled
+                             )
+                         ) {
+                             val visibleDestinations = remember(fullFeatured) {
+@@ -366,13 +388,20 @@ class MainActivity : ComponentActivity() {
+                                 }
+                             }
+ 
++                            val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
++
+                             val hostModifier = Modifier
+                                 .padding(innerPadding)
+                                 .fillMaxSize()
+                                 .horizontalSwipeNavigator(
+                                     currentRoute = currentRoute,
+                                     destinations = visibleDestinations,
+-                                    onNavigate = { navigateToIndex(it) }
++                                    onNavigate = {
++                                        if (hapticsEnabled.value) {
++                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
++                                        }
++                                        navigateToIndex(it)
++                                    }
+                                 )
+ 
+                             DestinationsNavHost(
+@@ -481,6 +510,64 @@ class MainActivity : ComponentActivity() {
+                     }
+                 }
+             }
++
++            AppLockOverlay(amoledModeState.value)
++
++        } } // Box & setContent
++    } // onCreate
++
++    @Composable
++    private fun AppLockOverlay(amoledMode: Boolean) {
++        if (appLockState.value) {
++            KernelSUTheme(amoledMode = amoledMode) {
++                androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize()) {
++                    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
++                    var isPromptShowing by remember { mutableStateOf(false) }
++                    DisposableEffect(lifecycleOwner) {
++                        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
++                            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
++                                val prefs = getSharedPreferences("settings", MODE_PRIVATE)
++                                val timeout = prefs.getLong("app_lock_timeout", 60000L)
++                                if (!com.rifsxd.ksunext.ui.util.AppLockManager.shouldPrompt(timeout)) {
++                                    appLockState.value = false
++                                    pendingIntent?.let {
++                                        handleIntent(it)
++                                        pendingIntent = null
++                                    }
++                                    return@LifecycleEventObserver
++                                }
++
++                                if (!isPromptShowing) {
++                                    isPromptShowing = true
++                                    com.rifsxd.ksunext.ui.util.BiometricAuthenticator(this@MainActivity)
++                                        .authenticate(
++                                            title = getString(com.rifsxd.ksunext.R.string.app_name),
++                                            subtitle = getString(com.rifsxd.ksunext.R.string.biometric_prompt_subtitle),
++                                            onSuccess = {
++                                                isPromptShowing = false
++                                                appLockState.value = false
++                                                com.rifsxd.ksunext.ui.util.AppLockManager.unlock()
++                                                pendingIntent?.let {
++                                                    handleIntent(it)
++                                                    pendingIntent = null
++                                                }
++                                            },
++                                            onError = {
++                                                isPromptShowing = false
++                                                Toast.makeText(this@MainActivity, "Auth failed: $it", Toast.LENGTH_SHORT).show()
++                                                finish()
++                                            }
++                                        )
++                                }
++                            }
++                        }
++                        lifecycleOwner.lifecycle.addObserver(observer)
++                        onDispose {
++                            lifecycleOwner.lifecycle.removeObserver(observer)
++                        }
++                    }
++                }
++            }
+         }
+     }
+ 
+@@ -492,13 +579,53 @@ class MainActivity : ComponentActivity() {
+         amoledModeState.value = enabled
+     }
+ 
++    fun setNavBarEnabled(enabled: Boolean) {
++        try {
++            val prefs = getSharedPreferences("settings", MODE_PRIVATE)
++            prefs.edit().putBoolean("enable_navbar", enabled).apply()
++        } catch (_: Exception) {}
++        navBarEnabled.value = enabled
++    }
++
++    fun setHapticsEnabled(enabled: Boolean) {
++        try {
++            val prefs = getSharedPreferences("settings", MODE_PRIVATE)
++            prefs.edit().putBoolean("enable_haptics", enabled).apply()
++        } catch (_: Exception) {}
++        hapticsEnabled.value = enabled
++    }
++
++    override fun onStart() {
++        super.onStart()
++        com.rifsxd.ksunext.ui.util.AppLockManager.onActivityStart()
++    }
++
+     override fun onNewIntent(intent: Intent) {
+         super.onNewIntent(intent)
+         handleIntent(intent)
+         setIntent(intent)
+     }
+ 
++    override fun onStop() {
++        super.onStop()
++        com.rifsxd.ksunext.ui.util.AppLockManager.onActivityStop()
++        val prefsInit = getSharedPreferences("settings", MODE_PRIVATE)
++        if (prefsInit.getBoolean("enable_biometric_lock", false)) {
++            appLockState.value = true
++        }
++    }
++
++    override fun onSaveInstanceState(outState: Bundle) {
++        super.onSaveInstanceState(outState)
++        outState.putBoolean("appLockState", appLockState.value)
++
++    }
++
+     private fun handleIntent(intent: Intent) {
++        if (appLockState.value) {
++            pendingIntent = intent
++            return
++        }
+         val shortcutType = intent.getStringExtra("shortcut_type")
+         if (shortcutType == "module_action") {
+             moduleActionId = intent.getStringExtra("module_id")
+@@ -734,4 +861,4 @@ private fun BottomBar(
+             }
+         }
+     }
+-}
+\ No newline at end of file
++}
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/AppProfile.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/AppProfile.kt
+index 5d6bdb2d1..debbff70c 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/AppProfile.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/AppProfile.kt
+@@ -88,7 +88,7 @@ fun AppProfileScreen(
+     }
+ 
+     val scrollState = LocalScrollState.current
+-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+     Scaffold(
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/BackupRestore.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/BackupRestore.kt
+index de718e0ee..96071d872 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/BackupRestore.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/BackupRestore.kt
+@@ -165,7 +165,7 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
+     val snackBarHost = LocalSnackbarHost.current
+ 
+     val scrollState = LocalScrollState.current
+-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+     Scaffold(
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Customization.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Customization.kt
+index 2870ab91d..9b72c3084 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Customization.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Customization.kt
+@@ -12,6 +12,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
+ import androidx.compose.material.icons.filled.Contrast
+ import androidx.compose.material.icons.filled.Translate
+ import androidx.compose.material.icons.filled.ViewCarousel
++import androidx.compose.material.icons.filled.Vibration
++import androidx.compose.material.icons.filled.Dock
+ import androidx.compose.material3.*
+ import androidx.compose.runtime.*
+ import androidx.compose.runtime.saveable.rememberSaveable
+@@ -70,7 +72,7 @@ fun CustomizationScreen(navigator: DestinationsNavigator) {
+     val ksuVersion = if (isManager) Natives.version else null
+ 
+     val scrollState = LocalScrollState.current
+-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+     Scaffold(
+@@ -300,6 +302,37 @@ fun CustomizationScreen(navigator: DestinationsNavigator) {
+                     enableAmoled = checked
+                 }
+             }
++
++            var enableNavBar by rememberSaveable {
++                mutableStateOf(
++                    prefs.getBoolean("enable_navbar", true)
++                )
++            }
++            val activity = LocalContext.current as? MainActivity
++            SwitchItem(
++                icon = Icons.Filled.Dock,
++                title = stringResource(id = R.string.settings_navbar),
++                summary = stringResource(id = R.string.settings_navbar_summary),
++                checked = enableNavBar
++            ) { checked ->
++                activity?.setNavBarEnabled(checked)
++                enableNavBar = checked
++            }
++
++            var enableHaptics by rememberSaveable {
++                mutableStateOf(
++                    prefs.getBoolean("enable_haptics", false)
++                )
++            }
++            SwitchItem(
++                icon = Icons.Filled.Vibration,
++                title = stringResource(id = R.string.settings_haptics),
++                summary = stringResource(id = R.string.settings_haptics_summary),
++                checked = enableHaptics
++            ) { checked ->
++                activity?.setHapticsEnabled(checked)
++                enableHaptics = checked
++            }
+         }
+     }
+ }
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Developer.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Developer.kt
+index acd0bce78..bcf023ac8 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Developer.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Developer.kt
+@@ -57,7 +57,7 @@ fun DeveloperScreen(navigator: DestinationsNavigator) {
+     val ksuVersion = if (isManager) Natives.version else null
+ 
+     val scrollState = LocalScrollState.current
+-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+     Scaffold(
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Home.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Home.kt
+index 49159dde1..07d5d885a 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Home.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Home.kt
+@@ -112,7 +112,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
+     val bottomBarScrollState = LocalScrollState.current
+ 
+     val scrollState = LocalScrollState.current
+-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+     
+     // Create scroll connection for bottom bar
+@@ -133,6 +133,16 @@ fun HomeScreen(navigator: DestinationsNavigator) {
+                 onInstallClick = {
+                     navigator.navigate(InstallScreenDestination)
+                 },
++                onSettingsClick = {
++                    navigator.navigate(SettingScreenDestination) {
++                        popUpTo(NavGraphs.root.startRoute) {
++                            saveState = true
++                        }
++                        launchSingleTop = true
++                        restoreState = true
++                    }
++                },
++                navBarEnabled = bottomBarScrollState?.isNavBarEnabled?.value ?: true,
+                 scrollBehavior = scrollBehavior
+             )
+         },
+@@ -638,6 +648,8 @@ private fun TopBar(
+     kernelVersion: KernelVersion,
+     ksuVersion: Int?,
+     onInstallClick: () -> Unit,
++    onSettingsClick: () -> Unit,
++    navBarEnabled: Boolean,
+     scrollBehavior: TopAppBarScrollBehavior? = null
+ ) {
+     var isSpinning by remember { mutableStateOf(false) }
+@@ -660,10 +672,13 @@ private fun TopBar(
+     ) { }
+ 
+     val context = LocalContext.current
++    val windowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
+ 
+-    LaunchedEffect(Unit) {
+-        isSpinning = true
+-        rotationTarget += 360f * 6
++    LaunchedEffect(windowInfo.isWindowFocused) {
++        if (windowInfo.isWindowFocused) {
++            isSpinning = true
++            rotationTarget += 360f * 6
++        }
+     }
+ 
+         TopAppBar(
+@@ -697,6 +712,15 @@ private fun TopBar(
+             }
+         },
+         actions = {
++            if (!navBarEnabled) {
++                IconButton(onClick = onSettingsClick) {
++                    Icon(
++                        imageVector = Icons.Filled.Settings,
++                        contentDescription = stringResource(id = R.string.settings)
++                    )
++                }
++            }
++
+             if (ksuVersion != null) {
+                 IconButton(onClick = onInstallClick) {
+                     Icon(
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/MetaModule.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/MetaModule.kt
+index b49c630a9..321b519af 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/MetaModule.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/MetaModule.kt
+@@ -100,11 +100,13 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
+     val snackBarHost = LocalSnackbarHost.current
+     val context = LocalContext.current
+     val scope = rememberCoroutineScope()
++    val scrollStateOuter = LocalScrollState.current
++    val hapticOuter = androidx.compose.ui.platform.LocalHapticFeedback.current
+ 
+     val isManager = Natives.isManager
+     val ksuVersion = if (isManager) Natives.version else null
+     val scrollState = LocalScrollState.current
+-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+     val modulesJsonUrl = "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next-Modules-Repo/refs/heads/main/meta_modules.json"
+ 
+@@ -251,6 +253,9 @@ fun MetaModuleScreen(navigator: DestinationsNavigator) {
+                         .padding(paddingValues),
+                     isRefreshing = isRefreshing,
+                     onRefresh = {
++                        if (scrollStateOuter?.isHapticsEnabled?.value == true) {
++                            hapticOuter.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
++                        }
+                         scope.launch {
+                             moduleState = MetaModuleState.Loading
+                             loadModules()
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt
+index d09e88d11..b777ba344 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt
+@@ -157,7 +157,7 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
+     val listState = rememberLazyListState()
+ 
+     val scrollState = LocalScrollState.current
+-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+     Scaffold(
+@@ -671,15 +671,20 @@ private fun ModuleList(
+             failedRestore.format(module.name)
+         }
+     }
++    val scrollStateOuter = LocalScrollState.current
++    val hapticOuter = androidx.compose.ui.platform.LocalHapticFeedback.current
+     PullToRefreshBox(
+         modifier = boxModifier,
+         isRefreshing = viewModel.isRefreshing,
+         onRefresh = {
++            if (scrollStateOuter?.isHapticsEnabled?.value == true) {
++                hapticOuter.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
++            }
+             viewModel.fetchModuleList()
+         }
+     ) {
+         val scrollState = LocalScrollState.current
+-        val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++        val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+         val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+         LazyColumn(
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/ModuleRepo.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/ModuleRepo.kt
+index e3a5b940b..93e7e2671 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/ModuleRepo.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/ModuleRepo.kt
+@@ -138,7 +138,8 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
+     val isManager = Natives.isManager
+     val ksuVersion = if (isManager) Natives.version else null
+     val scrollState = LocalScrollState.current
+-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
++    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+     var jsonUrls by remember { mutableStateOf(loadJsonUrls(context)) }
+@@ -604,6 +605,9 @@ fun ModuleRepoScreen(navigator: DestinationsNavigator) {
+                         .padding(paddingValues),
+                     isRefreshing = isRefreshing,
+                     onRefresh = {
++                        if (scrollState?.isHapticsEnabled?.value == true) {
++                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
++                        }
+                         scope.launch {
+                             moduleState = ModuleRepoState.Loading
+                             loadModules()
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Settings.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Settings.kt
+index 0d542078e..d389afe01 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Settings.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Settings.kt
+@@ -4,10 +4,16 @@ import android.content.Context
+ import android.content.Intent
+ import android.net.Uri
+ import android.system.OsConstants
++import androidx.compose.material.icons.filled.RadioButtonChecked
++import androidx.compose.material.icons.filled.RadioButtonUnchecked
+ import android.widget.Toast
+ import androidx.activity.compose.rememberLauncherForActivityResult
+ import androidx.activity.result.contract.ActivityResultContracts
++import androidx.compose.animation.animateContentSize
++import androidx.compose.animation.AnimatedVisibility
+ import androidx.compose.foundation.clickable
++import androidx.compose.foundation.selection.toggleable
++import androidx.compose.ui.semantics.Role
+ import androidx.compose.foundation.layout.*
+ import androidx.compose.foundation.background
+ import androidx.compose.foundation.shape.RoundedCornerShape
+@@ -80,7 +86,7 @@ fun SettingScreen(navigator: DestinationsNavigator) {
+     val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
+ 
+     val scrollState = LocalScrollState.current
+-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+     val bottomBarScrollState = LocalScrollState.current
+@@ -514,6 +520,89 @@ private fun AppSettingsCard(
+                 checkUpdate = it
+             }
+ 
++            var requireBiometric by rememberSaveable {
++                mutableStateOf(prefs.getBoolean("enable_biometric_lock", false))
++            }
++            var appLockTimeout by rememberSaveable {
++                mutableStateOf(prefs.getLong("app_lock_timeout", 60000L))
++            }
++            var showTimeoutMenu by remember { mutableStateOf(false) }
++
++            val timeoutOptions = remember {
++                listOf(
++                    0L to R.string.settings_app_lock_timeout_immediate,
++                    60000L to R.string.settings_app_lock_timeout_1m,
++                    300000L to R.string.settings_app_lock_timeout_5m
++                )
++            }
++
++            val timeoutLabelRes = timeoutOptions.find { it.first == appLockTimeout }?.second
++                ?: R.string.settings_app_lock_timeout_1m
++            val timeoutLabel = stringResource(timeoutLabelRes)
++
++            ListItem(
++                modifier = Modifier
++                    .fillMaxWidth()
++                    .clip(RoundedCornerShape(8.dp))
++                    .toggleable(
++                        value = requireBiometric,
++                        role = Role.Switch,
++                        onValueChange = { newValue ->
++                            requireBiometric = newValue
++                            prefs.edit { putBoolean("enable_biometric_lock", newValue) }
++                        }
++                    ),
++                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
++                    leadingContent = { Icon(Icons.Filled.Lock, null) },
++                    headlineContent = { Text(stringResource(R.string.settings_app_lock)) },
++                    supportingContent = {
++                        Column(modifier = Modifier.animateContentSize()) {
++                            Text(stringResource(R.string.settings_app_lock_summary))
++                            if (requireBiometric) {
++                                Box {
++                                    Text(
++                                        text = "${stringResource(R.string.settings_app_lock_timeout)}: $timeoutLabel",
++                                        color = MaterialTheme.colorScheme.primary,
++                                        modifier = Modifier
++                                            .padding(top = 4.dp)
++                                            .clickable { showTimeoutMenu = true }
++                                            .padding(vertical = 4.dp)
++                                    )
++                                    DropdownMenu(
++                                        expanded = showTimeoutMenu,
++                                        onDismissRequest = { showTimeoutMenu = false }
++                                    ) {
++                                        timeoutOptions.forEach { (time, stringRes) ->
++                                            DropdownMenuItem(
++                                                text = { Text(stringResource(stringRes)) },
++                                                trailingIcon = {
++                                                    Icon(
++                                                        imageVector = if (appLockTimeout == time) Icons.Filled.RadioButtonChecked else Icons.Filled.RadioButtonUnchecked,
++                                                        contentDescription = null,
++                                                        tint = if (appLockTimeout == time) androidx.compose.material3.MaterialTheme.colorScheme.primary else androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
++                                                    )
++                                                },
++                                                onClick = {
++                                                    appLockTimeout = time
++                                                    prefs.edit { putLong("app_lock_timeout", time) }
++                                                    showTimeoutMenu = false
++                                                }
++                                            )
++                                        }
++                                    }
++                                }
++                            }
++                        }
++                    },
++                    trailingContent = {
++                        Switch(
++                            checked = requireBiometric,
++                            onCheckedChange = null // Handled by toggleable
++                        )
++                    }
++                )
++
++
+             ListItem(
+                 modifier = Modifier
+                     .fillMaxWidth()
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuLog.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuLog.kt
+index 69db1f239..b8ee7f3ca 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuLog.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuLog.kt
+@@ -185,7 +185,7 @@ fun SuLogScreen(
+                         .fillMaxSize()
+                 ) {
+                     val scrollState = LocalScrollState.current
+-                    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++                    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+                     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+                     LazyColumn(
+@@ -507,9 +507,17 @@ fun SulogScreen(navigator: DestinationsNavigator) {
+         visibleEntries = uiState.visibleEntries,
+         errorMessage = uiState.errorMessage,
+     )
++    val scrollStateOuter = LocalScrollState.current
++    val hapticOuter = androidx.compose.ui.platform.LocalHapticFeedback.current
++
+     val actions = SulogActions(
+         onBack = dropUnlessResumed { navigator.popBackStack() },
+-        onRefresh = { viewModel.refreshLatest(refreshing = true) },
++        onRefresh = {
++            if (scrollStateOuter?.isHapticsEnabled?.value == true) {
++                hapticOuter.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
++            }
++            viewModel.refreshLatest(refreshing = true)
++        },
+         onEnableSulog = viewModel::enableSulog,
+         onCleanFile = viewModel::cleanFile,
+         onSearchTextChange = viewModel::setSearchText,
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuperUser.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuperUser.kt
+index dc20f29cf..4350981b6 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuperUser.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuperUser.kt
+@@ -137,15 +137,21 @@ fun SuperUserScreen(navigator: DestinationsNavigator) {
+         },
+         contentWindowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+     ) { innerPadding ->
++        val scrollStateOuter = LocalScrollState.current
++        val hapticOuter = androidx.compose.ui.platform.LocalHapticFeedback.current
++
+         PullToRefreshBox(
+             modifier = Modifier.padding(innerPadding),
+             onRefresh = {
++                if (scrollStateOuter?.isHapticsEnabled?.value == true) {
++                    hapticOuter.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
++                }
+                 scope.launch { viewModel.fetchAppList() }
+             },
+             isRefreshing = viewModel.isRefreshing
+         ) {
+             val scrollState = LocalScrollState.current
+-            val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++            val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+             val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+             LazyColumn(
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Template.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Template.kt
+index df7dfa781..137384488 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Template.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Template.kt
+@@ -86,6 +86,9 @@ fun AppProfileTemplateScreen(
+ 
+     val listState = rememberLazyListState()
+ 
++    val scrollStateOuter = LocalScrollState.current
++    val hapticOuter = androidx.compose.ui.platform.LocalHapticFeedback.current
++
+     Scaffold(
+         topBar = {
+             val clipboard = LocalClipboard.current
+@@ -147,11 +150,14 @@ fun AppProfileTemplateScreen(
+             modifier = Modifier.padding(innerPadding),
+             isRefreshing = viewModel.isRefreshing,
+             onRefresh = {
++                if (scrollStateOuter?.isHapticsEnabled?.value == true) {
++                    hapticOuter.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
++                }
+                 scope.launch { viewModel.fetchTemplates(true) }
+             }
+         ) {
+             val scrollState = LocalScrollState.current
+-            val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++            val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+             val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+             LazyColumn(
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/TemplateEditor.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/TemplateEditor.kt
+index 308d576a7..d6316453f 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/TemplateEditor.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/TemplateEditor.kt
+@@ -76,7 +76,7 @@ fun TemplateEditorScreen(
+     } else null
+ 
+     val scrollState = LocalScrollState.current
+-    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
++    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
+     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+ 
+     BackHandler {
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/AppLockManager.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/AppLockManager.kt
+new file mode 100644
+index 000000000..125d9f470
+--- /dev/null
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/AppLockManager.kt
+@@ -0,0 +1,44 @@
++package com.rifsxd.ksunext.ui.util
++
++import android.os.SystemClock
++
++object AppLockManager {
++    var activeActivities = 0
++    var lastBackgroundTime = 0L
++    var isUnlocked = false
++    var wasUnlockedBeforeBackground = false
++
++    fun onActivityStart() {
++        activeActivities++
++    }
++
++    fun onActivityStop() {
++        activeActivities--
++        if (activeActivities == 0) {
++            lastBackgroundTime = SystemClock.elapsedRealtime()
++            wasUnlockedBeforeBackground = isUnlocked
++            isUnlocked = false
++        }
++    }
++
++    fun shouldPrompt(timeout: Long): Boolean {
++        if (!isUnlocked) {
++            if (lastBackgroundTime == 0L) return true
++            if (!wasUnlockedBeforeBackground) return true
++
++            val timeInBackground = SystemClock.elapsedRealtime() - lastBackgroundTime
++            if (timeInBackground < timeout) {
++                isUnlocked = true
++                return false
++            }
++            return true
++        }
++        return false
++    }
++
++    fun unlock() {
++        isUnlocked = true
++        wasUnlockedBeforeBackground = true
++        lastBackgroundTime = 0L
++    }
++}
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/BiometricAuth.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/BiometricAuth.kt
+new file mode 100644
+index 000000000..b7c945e6c
+--- /dev/null
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/BiometricAuth.kt
+@@ -0,0 +1,35 @@
++package com.rifsxd.ksunext.ui.util
++
++import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
++import androidx.biometric.BiometricManager.Authenticators.DEVICE_CREDENTIAL
++import androidx.biometric.BiometricPrompt
++import androidx.core.content.ContextCompat
++import androidx.fragment.app.FragmentActivity
++
++class BiometricAuthenticator(private val activity: FragmentActivity) {
++
++    fun authenticate(title: String, subtitle: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
++        val executor = ContextCompat.getMainExecutor(activity)
++
++        val biometricPrompt = BiometricPrompt(activity, executor,
++            object : BiometricPrompt.AuthenticationCallback() {
++                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
++                    super.onAuthenticationSucceeded(result)
++                    onSuccess()
++                }
++
++                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
++                    super.onAuthenticationError(errorCode, errString)
++                    onError(errString.toString())
++                }
++            })
++
++        val promptInfo = BiometricPrompt.PromptInfo.Builder()
++            .setTitle(title)
++            .setSubtitle(subtitle)
++            .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
++            .build()
++
++        biometricPrompt.authenticate(promptInfo)
++    }
++}
+diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/webui/WebUIActivity.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/webui/WebUIActivity.kt
+index 84466c729..8d3a99d77 100644
+--- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/webui/WebUIActivity.kt
++++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/webui/WebUIActivity.kt
+@@ -38,8 +38,12 @@ import java.text.SimpleDateFormat
+ import java.util.Date
+ import java.util.Locale
+ 
++import androidx.fragment.app.FragmentActivity
++import androidx.compose.ui.Modifier
++import androidx.compose.foundation.layout.fillMaxSize
++
+ @SuppressLint("SetJavaScriptEnabled")
+-class WebUIActivity : ComponentActivity() {
++class WebUIActivity : FragmentActivity() {
+ 
+     private lateinit var webviewInterface: WebViewInterface
+     private val rootShell by lazy { createRootShell(true) }
+@@ -60,6 +64,11 @@ class WebUIActivity : ComponentActivity() {
+     private var insetsContinuation: CancellableContinuation<Unit>? = null
+     private var isInsetsEnabled = false
+ 
++
++    private var appLockState = false
++    private var isPromptShowing = false
++    private lateinit var lockOverlay: android.view.View
++
+     fun erudaConsole(context: android.content.Context): String {
+         return context.assets.open("eruda.min.js").bufferedReader().use { it.readText() }
+     }
+@@ -141,6 +150,13 @@ class WebUIActivity : ComponentActivity() {
+         val developerOptionsEnabled = prefs.getBoolean("enable_developer_options", false)
+         val enableWebDebugging = prefs.getBoolean("enable_web_debugging", false)
+ 
++        if (savedInstanceState != null) {
++            appLockState = savedInstanceState.getBoolean("appLockState", false)
++
++        } else {
++            appLockState = prefs.getBoolean("enable_biometric_lock", false)
++        }
++
+         WebView.setWebContentsDebuggingEnabled(developerOptionsEnabled && enableWebDebugging)
+ 
+         val moduleDir = "/data/adb/modules/$moduleId"
+@@ -306,6 +322,31 @@ class WebUIActivity : ComponentActivity() {
+         setupWebUIBackHandler()
+         
+         container.addView(webView)
++
++        val prefsInit = getSharedPreferences("settings", MODE_PRIVATE)
++        val requireBiometric = prefsInit.getBoolean("enable_biometric_lock", false)
++
++        if (requireBiometric || appLockState) {
++            val amoledMode = prefsInit.getBoolean("enable_amoled", false)
++            val isDarkTheme = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
++
++            lockOverlay = android.view.View(this).apply {
++                setBackgroundColor(
++                    if (amoledMode && isDarkTheme) {
++                        android.graphics.Color.BLACK
++                    } else {
++                        val typedValue = android.util.TypedValue()
++                        theme.resolveAttribute(android.R.attr.colorBackground, typedValue, true)
++                        typedValue.data
++                    }
++                )
++                visibility = if (appLockState) android.view.View.VISIBLE else android.view.View.GONE
++                isClickable = true
++                isFocusable = true
++            }
++            container.addView(lockOverlay)
++        }
++
+         setContentView(container)
+ 
+         // coroutine-safe inset wait
+@@ -412,6 +453,63 @@ class WebUIActivity : ComponentActivity() {
+         }
+     }
+ 
++    override fun onResume() {
++        super.onResume()
++        if (appLockState) {
++            val prefs = getSharedPreferences("settings", MODE_PRIVATE)
++            val timeout = prefs.getLong("app_lock_timeout", 60000L)
++
++            if (!com.rifsxd.ksunext.ui.util.AppLockManager.shouldPrompt(timeout)) {
++                appLockState = false
++                if (::lockOverlay.isInitialized) lockOverlay.visibility = android.view.View.GONE
++                return
++            }
++
++            if (!isPromptShowing) {
++                isPromptShowing = true
++                lockOverlay.visibility = android.view.View.VISIBLE
++                com.rifsxd.ksunext.ui.util.BiometricAuthenticator(this)
++                    .authenticate(
++                        title = getString(com.rifsxd.ksunext.R.string.app_name),
++                        subtitle = getString(com.rifsxd.ksunext.R.string.biometric_prompt_subtitle),
++                        onSuccess = {
++                            isPromptShowing = false
++                            appLockState = false
++                            if (::lockOverlay.isInitialized) lockOverlay.visibility = android.view.View.GONE
++                            com.rifsxd.ksunext.ui.util.AppLockManager.unlock()
++                        },
++                        onError = {
++                            isPromptShowing = false
++                            Toast.makeText(this, "Auth failed: $it", Toast.LENGTH_SHORT).show()
++                            finish()
++                        }
++                    )
++            }
++        } else {
++            if (::lockOverlay.isInitialized) lockOverlay.visibility = android.view.View.GONE
++        }
++    }
++
++    override fun onStart() {
++        super.onStart()
++        com.rifsxd.ksunext.ui.util.AppLockManager.onActivityStart()
++    }
++
++    override fun onStop() {
++        super.onStop()
++        com.rifsxd.ksunext.ui.util.AppLockManager.onActivityStop()
++        val prefs = getSharedPreferences("settings", MODE_PRIVATE)
++        if (prefs.getBoolean("enable_biometric_lock", false)) {
++            appLockState = true
++        }
++    }
++
++    override fun onSaveInstanceState(outState: Bundle) {
++        super.onSaveInstanceState(outState)
++        outState.putBoolean("appLockState", appLockState)
++
++    }
++
+     override fun onDestroy() {
+         webView?.apply {
+             stopLoading()
+diff --git a/manager/app/src/main/res/values/strings.xml b/manager/app/src/main/res/values/strings.xml
+index d1c431029..a2ce0373b 100644
+--- a/manager/app/src/main/res/values/strings.xml
++++ b/manager/app/src/main/res/values/strings.xml
+@@ -147,6 +147,10 @@
+     <string name="restart_app">Restart</string>
+     <string name="settings_amoled_mode">AMOLED mode</string>
+     <string name="settings_amoled_mode_summary">Enable a pure black theme useful for AMOLED screens to reduce eye strain and save battery.</string>
++    <string name="settings_navbar">Navigation bar</string>
++    <string name="settings_navbar_summary">Enable the bottom navigation bar.</string>
++    <string name="settings_haptics">Haptic feedback</string>
++    <string name="settings_haptics_summary">Enable haptic feedback on gestures.</string>
+     <string name="restart_required">Restart required</string>
+     <string name="restart_app_message">The app needs to restart for this change to take effect.</string>
+     <string name="failed_to_update_sepolicy">Failed to update SELinux rules for %s</string>
+@@ -307,4 +311,11 @@
+     <string name="sulog_uid">UID %1$s</string>
+     <string name="sulog_status_success">Success</string>
+     <string name="sulog_status_exit">Exit %1$d</string>
++    <string name="settings_app_lock">App lock</string>
++    <string name="settings_app_lock_summary">Require authentication when opening the app.</string>
++    <string name="settings_app_lock_timeout">Grace period</string>
++    <string name="settings_app_lock_timeout_immediate">Immediate</string>
++    <string name="settings_app_lock_timeout_1m">1 minute</string>
++    <string name="settings_app_lock_timeout_5m">5 minutes</string>
++    <string name="biometric_prompt_subtitle">Authenticate to access manager</string>
+ </resources>
 diff --git a/manager/build.gradle.kts b/manager/build.gradle.kts
-index 56f21ef7..27b415a9 100644
+index 56f21ef7a..27b415a92 100644
 --- a/manager/build.gradle.kts
 +++ b/manager/build.gradle.kts
 @@ -37,26 +37,79 @@ val androidTargetCompatibility = JavaVersion.VERSION_21
@@ -3873,8 +4895,45 @@ index 56f21ef7..27b415a9 100644
  subprojects {
      plugins.withType(AndroidBasePlugin::class.java) {
          extensions.configure(CommonExtension::class.java) {
+diff --git a/userspace/ksud/Cargo.lock b/userspace/ksud/Cargo.lock
+index 89c599840..dc1c0b911 100644
+--- a/userspace/ksud/Cargo.lock
++++ b/userspace/ksud/Cargo.lock
+@@ -46,12 +46,6 @@ dependencies = [
+  "zopfli",
+ ]
+ 
+-[[package]]
+-name = "android-properties"
+-version = "0.2.2"
+-source = "registry+https://github.com/rust-lang/crates.io-index"
+-checksum = "fc7eb209b1518d6bb87b283c20095f5228ecda460da70b44f0802523dea6da04"
+-
+ [[package]]
+ name = "android_log-sys"
+ version = "0.3.2"
+@@ -997,7 +991,6 @@ name = "ksud"
+ version = "0.1.0"
+ dependencies = [
+  "android-bootimg",
+- "android-properties",
+  "android_logger",
+  "anyhow",
+  "base16ct",
+diff --git a/userspace/ksud/Cargo.toml b/userspace/ksud/Cargo.toml
+index 74f58222b..370479999 100644
+--- a/userspace/ksud/Cargo.toml
++++ b/userspace/ksud/Cargo.toml
+@@ -29,7 +29,6 @@ android-bootimg = { git = "https://github.com/5ec1cff/android_bootimg", rev = "1
+ rustix = { version = "1", features = [
+     "all-apis",
+ ] }
+-android-properties = { version = "0.2", features = ["bionic-deprecated"] }
+ android_logger = { version = "0.15", default-features = false }
+ zip = { version = "8",  features = [
+     "deflate",
 diff --git a/userspace/ksud/build.rs b/userspace/ksud/build.rs
-index 9f881966..7e5a123e 100644
+index 9f8819666..7e5a123ea 100644
 --- a/userspace/ksud/build.rs
 +++ b/userspace/ksud/build.rs
 @@ -4,9 +4,29 @@ use std::io::Write;
@@ -3918,7 +4977,7 @@ index 9f881966..7e5a123e 100644
              .stdout,
      )
 diff --git a/userspace/ksud/src/cli.rs b/userspace/ksud/src/cli.rs
-index f1bb8bcc..d5d088bd 100644
+index f1bb8bcc2..d5d088bd1 100644
 --- a/userspace/ksud/src/cli.rs
 +++ b/userspace/ksud/src/cli.rs
 @@ -511,7 +511,7 @@ pub fn run() -> Result<()> {
@@ -3931,7 +4990,7 @@ index f1bb8bcc..d5d088bd 100644
              init_event::on_boot_completed();
              Ok(())
 diff --git a/userspace/ksud/src/init_event.rs b/userspace/ksud/src/init_event.rs
-index d133c116..a4a02d3f 100644
+index d133c1160..47a8b2a7b 100644
 --- a/userspace/ksud/src/init_event.rs
 +++ b/userspace/ksud/src/init_event.rs
 @@ -13,7 +13,7 @@ use rustix::process::chdir;
@@ -3952,33 +5011,7 @@ index d133c116..a4a02d3f 100644
          // Then exec common post-fs-data scripts
          if let Err(e) = crate::module::exec_common_scripts("post-fs-data.d", true) {
              warn!("exec common post-fs-data scripts failed: {e}");
-@@ -99,15 +99,17 @@ pub fn on_post_data_fs() -> Result<()> {
-         warn!("init features failed: {e}");
-     }
- 
--    // execute metamodule post-fs-data script first (priority)
--    if let Err(e) = metamodule::exec_stage_script("post-fs-data", true) {
--        warn!("exec metamodule post-fs-data script failed: {e}");
--    }
-+    if !is_soft_reboot {
-+        // execute metamodule post-fs-data script first (priority)
-+        if let Err(e) = metamodule::exec_stage_script("post-fs-data", true) {
-+            warn!("exec metamodule post-fs-data script failed: {e}");
-+        }
- 
--    // exec modules post-fs-data scripts
--    // TODO: Add timeout
--    if let Err(e) = crate::module::exec_stage_script("post-fs-data", true) {
--        warn!("exec post-fs-data scripts failed: {e}");
-+        // exec modules post-fs-data scripts
-+        // TODO: Add timeout
-+        if let Err(e) = crate::module::exec_stage_script("post-fs-data", true) {
-+            warn!("exec post-fs-data scripts failed: {e}");
-+        }
-     }
- 
-     // load system.prop
-@@ -269,7 +271,7 @@ pub fn soft_reboot() -> Result<()> {
+@@ -269,7 +269,7 @@ pub fn soft_reboot() -> Result<()> {
          warn!("stop exited with status: {status}");
      }
      info!("post-fs-data");
@@ -3987,7 +5020,7 @@ index d133c116..a4a02d3f 100644
      info!("start");
      let status = Command::new("start").status().context("start failed")?;
      if !status.success() {
-@@ -282,6 +284,16 @@ pub fn soft_reboot() -> Result<()> {
+@@ -282,6 +282,16 @@ pub fn soft_reboot() -> Result<()> {
      }
      on_boot_completed();
  
@@ -4004,6 +5037,76 @@ index d133c116..a4a02d3f 100644
      unsafe {
          _exit(0);
      }
+diff --git a/userspace/ksud/src/utils.rs b/userspace/ksud/src/utils.rs
+index a43f1bc86..3c8399c45 100644
+--- a/userspace/ksud/src/utils.rs
++++ b/userspace/ksud/src/utils.rs
+@@ -3,6 +3,7 @@ use rustix::fs::{Mode, OFlags, open};
+ use rustix::process::setpgid;
+ use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout};
+ use std::{
++    ffi::{CStr, CString, c_char, c_void},
+     fs::{File, OpenOptions, create_dir_all, remove_file, write},
+     io::{
+         ErrorKind::{AlreadyExists, NotFound},
+@@ -27,6 +28,17 @@ use rustix::{
+     thread::{LinkNameSpaceType, move_into_link_name_space},
+ };
+ 
++type PropertyReadCallback = unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char, u32);
++
++unsafe extern "C" {
++    fn __system_property_find(name: *const c_char) -> *const c_void;
++    fn __system_property_read_callback(
++        property_info: *const c_void,
++        callback: PropertyReadCallback,
++        cookie: *mut c_void,
++    );
++}
++
+ #[macro_export]
+ macro_rules! debug_select {
+     ($debug:expr, $release:expr) => {{
+@@ -103,8 +115,37 @@ pub fn ensure_binary<T: AsRef<Path>>(
+     Ok(())
+ }
+ 
+-pub fn getprop(prop: &str) -> Option<String> {
+-    android_properties::getprop(prop).value()
++unsafe extern "C" fn property_read_callback(
++    cookie: *mut c_void,
++    _name: *const c_char,
++    value: *const c_char,
++    _serial: u32,
++) {
++    if cookie.is_null() || value.is_null() {
++        return;
++    }
++
++    let result = unsafe { &mut *cookie.cast::<Option<String>>() };
++    let value = unsafe { CStr::from_ptr(value) };
++    *result = Some(value.to_string_lossy().into_owned());
++}
++
++pub fn getprop(name: &str) -> Option<String> {
++    let name = CString::new(name).ok()?;
++    let property_info = unsafe { __system_property_find(name.as_ptr()) };
++    if property_info.is_null() {
++        return None;
++    }
++
++    let mut value = None;
++    unsafe {
++        __system_property_read_callback(
++            property_info,
++            property_read_callback,
++            std::ptr::addr_of_mut!(value).cast(),
++        );
++    }
++    value
+ }
+ 
+ pub fn is_safe_mode() -> bool {
 -- 
 2.43.0
 
