@@ -1066,7 +1066,7 @@ index 5bb59bfe..1b34903f 100644
  {
      struct policydb *policydb;
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index 33df9d15..9d3c203f 100644
+index 33df9d15..3a659495 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
 @@ -1,5 +1,3 @@
@@ -1238,7 +1238,7 @@ index 33df9d15..9d3c203f 100644
  
 -do_orig_facessat:
 -    return ksu_syscall_table[orig_nr](regs);
-+    if (likely(!strstr(filename->name, "/app_process") && !strstr(filename->name, "/adbd"))) {
++    if (likely(!strstr(filename->name, "/app_process") && !strstr(filename->name, "/adbd") && !strstr(filename->name, "/stub_zygote"))) {
 +        pr_info("susfs: mark no sucompat checks for pid: '%d', exec: '%s'\n", current->pid, filename->name);
 +        susfs_set_current_proc_umounted();
 +        return 0;
@@ -1628,10 +1628,10 @@ index 3a3dfea8..b8486238 100644
 -
  #endif
 diff --git a/kernel/hook/syscall_event_bridge.c b/kernel/hook/syscall_event_bridge.c
-index f866a498..eb7ea937 100644
+index a961321b..c5c8ad03 100644
 --- a/kernel/hook/syscall_event_bridge.c
 +++ b/kernel/hook/syscall_event_bridge.c
-@@ -49,18 +49,36 @@ static int ksu_handle_init_mark_tracker(const char __user **filename_user)
+@@ -50,18 +50,36 @@ static int ksu_handle_init_mark_tracker(const char __user **filename_user)
  
  long __nocfi ksu_hook_newfstatat(int orig_nr, const struct pt_regs *regs)
  {
@@ -1670,7 +1670,7 @@ index f866a498..eb7ea937 100644
  }
  
  DEFINE_STATIC_KEY_TRUE(ksud_execve_key);
-@@ -91,7 +109,7 @@ long __nocfi ksu_hook_execve(int orig_nr, const struct pt_regs *regs)
+@@ -92,7 +110,7 @@ long __nocfi ksu_hook_execve(int orig_nr, const struct pt_regs *regs)
              pr_err("adb root failed: %ld\n", ret);
          }
      } else if (ksu_su_compat_enabled) {
