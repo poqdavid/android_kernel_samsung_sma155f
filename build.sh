@@ -601,12 +601,18 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                 
                 REJ_FILES=$(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;)
                 
+                if [[ "$KSU_VARIANT" != "ksun" ]]; then
+                    FIX_PATCH_BASE="$KERNEL_PATCHES/next/susfs_fix_patches/"
+                else
+                    FIX_PATCH_BASE="$KERNEL_PATCHES/ksu/susfs_fix_patches/"
+                fi
+                
                 if [[ -z "$REJ_FILES" ]]; then
                     info -n "No .rej files found. Nothing to patch."
                 else
                     info -n "Patching .rej fixes in $KSU_LABEL..."
                     for rej in $REJ_FILES; do
-                        FIX_PATCH="$KERNEL_PATCHES/next/susfs_fix_patches/$SUSFS_VER/fix_$rej.patch"
+                        FIX_PATCH="$FIX_PATCH_BASE/fix_$rej.patch"
                         
                         if [[ -f "$FIX_PATCH" ]]; then
                             info -n "Patching $rej"
