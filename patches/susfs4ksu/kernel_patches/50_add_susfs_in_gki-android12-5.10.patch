@@ -40,7 +40,7 @@ index c7851875b..e951f5487 100644
  obj-y +=	buffer.o block_dev.o direct-io.o mpage.o
  else
 diff --git a/fs/exec.c b/fs/exec.c
-index 16da4778c..659f2df76 100644
+index 16da4778c..1058ded7b 100644
 --- a/fs/exec.c
 +++ b/fs/exec.c
 @@ -64,6 +64,9 @@
@@ -75,7 +75,7 @@ index 16da4778c..659f2df76 100644
  		return PTR_ERR(filename);
  
 +#ifdef CONFIG_KSU_SUSFS
-+	if (likely(susfs_is_current_proc_umounted()))
++	if (likely(susfs_is_current_proc_no_su()))
 +		goto orig_flow;
 +
 +	if (static_branch_likely(&ksu_su_compat_enabled)) {
@@ -962,7 +962,7 @@ index 765b50aea..4f764ffed 100644
  			   inode_mark->wd, inode->i_ino, inode->i_sb->s_dev,
  			   inotify_mark_user_mask(mark));
 diff --git a/fs/open.c b/fs/open.c
-index ee284a930..30001034f 100644
+index ee284a930..ee125ea58 100644
 --- a/fs/open.c
 +++ b/fs/open.c
 @@ -32,6 +32,9 @@
@@ -975,38 +975,52 @@ index ee284a930..30001034f 100644
  
  #include "internal.h"
  #include <trace/hooks/syscall_check.h>
-@@ -395,6 +398,13 @@ static const struct cred *access_override_creds(void)
+@@ -395,6 +398,12 @@ static const struct cred *access_override_creds(void)
  	return old_cred;
  }
  
 +#ifdef CONFIG_KSU_SUSFS
 +extern struct static_key_true ksu_su_compat_enabled;
 +extern bool __ksu_is_allow_uid_for_current(uid_t uid);
-+extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
-+			int *flags);
++extern int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *__unused_flags);
 +#endif
 +
  static long do_faccessat(int dfd, const char __user *filename, int mode, int flags)
  {
  	struct path path;
-@@ -403,6 +413,18 @@ static long do_faccessat(int dfd, const char __user *filename, int mode, int fla
+@@ -402,6 +411,9 @@ static long do_faccessat(int dfd, const char __user *filename, int mode, int fla
+ 	int res;
  	unsigned int lookup_flags = LOOKUP_FOLLOW;
  	const struct cred *old_cred = NULL;
- 
 +#ifdef CONFIG_KSU_SUSFS
-+	if (likely(susfs_is_current_proc_umounted()))
++	struct filename *fname = NULL;
++#endif
+ 
+ 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
+ 		return -EINVAL;
+@@ -421,7 +433,23 @@ static long do_faccessat(int dfd, const char __user *filename, int mode, int fla
+ 	}
+ 
+ retry:
++#ifdef CONFIG_KSU_SUSFS
++	fname = getname_flags(filename, lookup_flags, NULL);
++
++	if (likely(susfs_is_current_proc_no_su()))
 +		goto orig_flow;
 +
 +	if (static_branch_likely(&ksu_su_compat_enabled)) {
 +		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
-+			ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
++			ksu_handle_faccessat(&dfd, &fname, &mode, NULL);
 +	}
 +
 +orig_flow:
++	res = filename_lookup(dfd, fname, lookup_flags, &path, NULL);
++	// no putname(fname) here as filename_lookup() has it done for us already;
++#else
+ 	res = user_path_at(dfd, filename, lookup_flags, &path);
 +#endif
-+
- 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
- 		return -EINVAL;
+ 	if (res)
+ 		goto out;
  
 diff --git a/fs/proc/base.c b/fs/proc/base.c
 index d0884f38c..3af2965f8 100644
@@ -1979,7 +1993,7 @@ index 09e8ed7d4..5813bc37e 100644
  }
  #endif
 diff --git a/fs/stat.c b/fs/stat.c
-index c6a2e1098..705a8781c 100644
+index c6a2e1098..79607ab1f 100644
 --- a/fs/stat.c
 +++ b/fs/stat.c
 @@ -17,6 +17,10 @@
@@ -2050,7 +2064,7 @@ index c6a2e1098..705a8781c 100644
  int vfs_fstat(int fd, struct kstat *stat)
  {
  	struct fd f;
-@@ -152,10 +183,24 @@ int vfs_fstat(int fd, struct kstat *stat)
+@@ -152,10 +183,20 @@ int vfs_fstat(int fd, struct kstat *stat)
  	if (!f.file)
  		return -EBADF;
  	error = vfs_getattr(&f.file->f_path, stat, STATX_BASIC_STATS, 0);
@@ -2065,36 +2079,44 @@ index c6a2e1098..705a8781c 100644
 +#ifdef CONFIG_KSU_SUSFS
 +extern struct static_key_true ksu_su_compat_enabled;
 +extern bool __ksu_is_allow_uid_for_current(uid_t uid);
-+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 +extern int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
-+#else
-+extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
-+#endif
 +#endif
 +
  /**
   * vfs_statx - Get basic and extra attributes by filename
   * @dfd: A file descriptor representing the base dir for a relative filename
-@@ -178,6 +223,18 @@ static int vfs_statx(int dfd, const char __user *filename, int flags,
+@@ -177,6 +218,9 @@ static int vfs_statx(int dfd, const char __user *filename, int flags,
+ 	struct path path;
  	unsigned lookup_flags = 0;
  	int error;
- 
 +#ifdef CONFIG_KSU_SUSFS
-+	if (likely(susfs_is_current_proc_umounted()))
++	struct filename *fname = NULL;
++#endif
+ 
+ 	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH |
+ 		      AT_STATX_SYNC_TYPE))
+@@ -190,12 +234,36 @@ static int vfs_statx(int dfd, const char __user *filename, int flags,
+ 		lookup_flags |= LOOKUP_EMPTY;
+ 
+ retry:
++#ifdef CONFIG_KSU_SUSFS
++	fname = getname_flags(filename, lookup_flags, NULL);
++
++	if (likely(susfs_is_current_proc_no_su()))
 +		goto orig_flow;
 +
 +	if (static_branch_likely(&ksu_su_compat_enabled)) {
 +		if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
-+			ksu_handle_stat(&dfd, &filename, &flags);
++			ksu_handle_stat(&dfd, &fname, &flags);
 +	}
 +
 +orig_flow:
++	error = filename_lookup(dfd, fname, lookup_flags, &path, NULL);
++	// no putname(fname) here as filename_lookup() has it done for us already;
++#else
+ 	error = user_path_at(dfd, filename, lookup_flags, &path);
 +#endif
-+
- 	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT | AT_EMPTY_PATH |
- 		      AT_STATX_SYNC_TYPE))
- 		return -EINVAL;
-@@ -195,7 +252,15 @@ static int vfs_statx(int dfd, const char __user *filename, int flags,
+ 	if (error)
  		goto out;
  
  	error = vfs_getattr(&path, stat, request_mask, flags);
