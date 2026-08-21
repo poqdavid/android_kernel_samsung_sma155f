@@ -1,23 +1,23 @@
-From c620aff27be9c49dc6c4d39675aa19ce4f27c97f Mon Sep 17 00:00:00 2001
+From 1b636041a9cb9cb615d05b52681f2587bec2876c Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Sun, 9 Aug 2026 23:20:45 +0200
+Date: Thu, 20 Aug 2026 18:55:18 +0200
 Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
 
 ---
  kernel/Kbuild                                 |  75 ++--
  kernel/Kconfig                                | 107 +++++-
- kernel/core/init.c                            |  49 ++-
+ kernel/core/init.c                            |  47 +++
  kernel/extras.c                               |  22 +-
- kernel/feature/adb_root.c                     | 160 +++++++-
+ kernel/feature/adb_root.c                     | 163 ++++++++-
  kernel/feature/adb_root.h                     |   4 +
  kernel/feature/kernel_umount.c                |  13 +-
- kernel/feature/selinux_hide.c                 | 163 ++++----
+ kernel/feature/selinux_hide.c                 | 163 +++++----
  kernel/feature/selinux_hide.h                 |  15 +
- kernel/feature/sucompat.c                     | 356 +++++++++++++++++-
- kernel/feature/sucompat.h                     |  21 +-
- kernel/hook/setuid_hook.c                     |  81 +++-
+ kernel/feature/sucompat.c                     | 338 +++++++++++++++++-
+ kernel/feature/sucompat.h                     |  16 +-
+ kernel/hook/setuid_hook.c                     |  89 ++++-
  kernel/hook/setuid_hook.h                     |   4 +
- kernel/hook/syscall_event_bridge.c            |  74 ++--
+ kernel/hook/syscall_event_bridge.c            |  92 ++---
  kernel/manager/apk_sign.c                     |  23 +-
  kernel/manager/throne_tracker.c               |  92 ++++-
  kernel/manager/throne_tracker.h               |  52 ++-
@@ -25,10 +25,10 @@ Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
  kernel/policy/app_profile.c                   |  21 +-
  kernel/policy/app_profile.h                   |   2 +-
  kernel/runtime/boot_event.c                   |  21 +-
- kernel/runtime/ksud.h                         |  20 +
+ kernel/runtime/ksud.h                         |  20 ++
  kernel/runtime/ksud_integration.c             | 195 +++++++---
  kernel/selinux/rules.c                        |  22 ++
- kernel/selinux/selinux.c                      | 244 ++++++++----
+ kernel/selinux/selinux.c                      | 244 +++++++++----
  kernel/selinux/selinux.h                      |  10 +
  kernel/setup.sh                               |   2 +
  kernel/sulog/event.c                          |  84 +++++
@@ -38,32 +38,29 @@ Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
  kernel/supercall/supercall.c                  | 189 ++++++----
  kernel/supercall/supercall.h                  |   4 +
  manager/app/build.gradle.kts                  |   6 +
- .../com/rifsxd/ksunext/ui/MainActivity.kt     | 143 ++++++-
+ .../com/rifsxd/ksunext/ui/MainActivity.kt     | 143 +++++++-
  .../rifsxd/ksunext/ui/screen/AppProfile.kt    |   2 +-
  .../rifsxd/ksunext/ui/screen/BackupRestore.kt |   2 +-
  .../rifsxd/ksunext/ui/screen/Customization.kt |  35 +-
  .../com/rifsxd/ksunext/ui/screen/Developer.kt |   2 +-
  .../java/com/rifsxd/ksunext/ui/screen/Home.kt |  32 +-
  .../rifsxd/ksunext/ui/screen/MetaModule.kt    |   7 +-
- .../com/rifsxd/ksunext/ui/screen/Module.kt    |   9 +-
+ .../com/rifsxd/ksunext/ui/screen/Module.kt    |  19 +-
  .../rifsxd/ksunext/ui/screen/ModuleRepo.kt    |   6 +-
  .../com/rifsxd/ksunext/ui/screen/Settings.kt  |  91 ++++-
  .../com/rifsxd/ksunext/ui/screen/SuLog.kt     |  12 +-
  .../com/rifsxd/ksunext/ui/screen/SuperUser.kt |   8 +-
  .../com/rifsxd/ksunext/ui/screen/Template.kt  |   8 +-
  .../ksunext/ui/screen/TemplateEditor.kt       |   2 +-
- .../rifsxd/ksunext/ui/util/AppLockManager.kt  |  44 +++
- .../rifsxd/ksunext/ui/util/BiometricAuth.kt   |  35 ++
- .../rifsxd/ksunext/ui/webui/WebUIActivity.kt  | 100 ++++-
- manager/app/src/main/res/values/strings.xml   |  11 +
+ .../rifsxd/ksunext/ui/util/AppLockManager.kt  |  50 +++
+ .../rifsxd/ksunext/ui/util/BiometricAuth.kt   |  39 ++
+ .../rifsxd/ksunext/ui/webui/WebUIActivity.kt  | 116 +++++-
+ manager/app/src/main/res/values/strings.xml   |  12 +
  manager/build.gradle.kts                      |  69 +++-
- userspace/ksud/Cargo.lock                     |   7 -
- userspace/ksud/Cargo.toml                     |   1 -
  userspace/ksud/build.rs                       |  24 +-
  userspace/ksud/src/cli.rs                     |   2 +-
- userspace/ksud/src/init_event.rs              |  16 +-
- userspace/ksud/src/utils.rs                   |  45 ++-
- 59 files changed, 2575 insertions(+), 430 deletions(-)
+ userspace/ksud/src/init_event.rs              |  27 +-
+ 56 files changed, 2568 insertions(+), 436 deletions(-)
  create mode 100644 manager/app/src/main/java/com/rifsxd/ksunext/ui/util/AppLockManager.kt
  create mode 100644 manager/app/src/main/java/com/rifsxd/ksunext/ui/util/BiometricAuth.kt
 
@@ -337,7 +334,7 @@ index 88e228117..1f30a997c 100644
 +
  endmenu
 diff --git a/kernel/core/init.c b/kernel/core/init.c
-index db10afa79..84c2155d2 100644
+index 7e9b08816..db56683c2 100644
 --- a/kernel/core/init.c
 +++ b/kernel/core/init.c
 @@ -26,6 +26,13 @@
@@ -365,7 +362,7 @@ index db10afa79..84c2155d2 100644
  #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
      // If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set
      if (!boot_cpu_has(X86_FEATURE_INDIRECT_SAFE)) {
-@@ -128,20 +139,33 @@ int __init kernelsu_init(void)
+@@ -128,17 +139,32 @@ int __init kernelsu_init(void)
  	}
  
  	ksu_init_symbol_resolver();
@@ -375,22 +372,19 @@ index db10afa79..84c2155d2 100644
 +#endif
  
  	ksu_feature_init();
- 
  	ksu_sulog_init();
- 
--	ksu_adb_root_init();
--
+ 	ksu_adb_root_init();
++
 +#ifndef CONFIG_KSU_SUSFS
 +#ifdef CONFIG_KPROBES
  	ksu_lsm_hook_init();
 +#endif
 +#endif
- 
++
  	ksu_selinux_hide_init();
  
-+	ksu_adb_root_init();
-+
  	ksu_supercalls_init();
+ 	ksu_app_profile_init();
  
 +#ifdef CONFIG_KSU_SUSFS
 +	ksu_sucompat_init();
@@ -401,7 +395,7 @@ index db10afa79..84c2155d2 100644
  	if (ksu_late_loaded) {
  		pr_info("late load mode, skipping kprobe hooks\n");
  
-@@ -157,7 +181,9 @@ int __init kernelsu_init(void)
+@@ -154,7 +180,9 @@ int __init kernelsu_init(void)
  		ksu_allowlist_init();
  		ksu_load_allow_list();
  
@@ -411,7 +405,7 @@ index db10afa79..84c2155d2 100644
  
  		ksu_throne_tracker_init();
  		ksu_observer_init();
-@@ -166,13 +192,20 @@ int __init kernelsu_init(void)
+@@ -163,13 +191,20 @@ int __init kernelsu_init(void)
  		ksu_boot_completed = true;
  		track_throne(false);
  
@@ -432,7 +426,7 @@ index db10afa79..84c2155d2 100644
  
  		ksu_allowlist_init();
  
-@@ -194,7 +227,9 @@ int __init kernelsu_init(void)
+@@ -191,7 +226,9 @@ int __init kernelsu_init(void)
  void __exit kernelsu_exit(void)
  {
  	// Phase 1: Stop all hooks first to prevent new callbacks
@@ -442,7 +436,7 @@ index db10afa79..84c2155d2 100644
  
  	ksu_supercalls_exit();
  
-@@ -211,9 +246,19 @@ void __exit kernelsu_exit(void)
+@@ -208,9 +245,19 @@ void __exit kernelsu_exit(void)
  
  	ksu_allowlist_exit();
  
@@ -531,7 +525,7 @@ index 0cb3ffd02..434d46685 100644
  	if (ret) {
  		pr_info("avc_spoof/init: sid grab fail!\n");
 diff --git a/kernel/feature/adb_root.c b/kernel/feature/adb_root.c
-index c41a99559..ae3c017f9 100644
+index bcf93bc4d..5340fdb9f 100644
 --- a/kernel/feature/adb_root.c
 +++ b/kernel/feature/adb_root.c
 @@ -9,9 +9,15 @@
@@ -564,10 +558,10 @@ index c41a99559..ae3c017f9 100644
 +                susfs_ends_with(filename, "/adbd"));
 +}
 +#else
- static long is_exec_adbd(struct pt_regs *regs)
+ static long is_exec_adbd(const char __user *filename_user)
  {
      static const char kAdbd[] = "/adbd";
-@@ -44,8 +60,9 @@ static long is_exec_adbd(struct pt_regs *regs)
+@@ -43,8 +59,9 @@ static long is_exec_adbd(const char __user *filename_user)
  
      return 1;
  }
@@ -578,7 +572,7 @@ index c41a99559..ae3c017f9 100644
  {
      static const char kLibAdbRoot[] = "/data/adb/ksu/lib/libadbroot.so";
      struct path path;
-@@ -65,6 +82,101 @@ static long is_libadbroot_ok()
+@@ -64,6 +81,135 @@ static long is_libadbroot_ok()
      return ret;
  }
  
@@ -591,12 +585,12 @@ index c41a99559..ae3c017f9 100644
 +    static const size_t kPtrSize = sizeof(unsigned long);
 +    unsigned long stackp = current_user_stack_pointer();
 +    unsigned long envp, ld_preload_p, ld_library_path_p;
-+    unsigned long *envp_p = (unsigned long)envp_user_ptr;
++    unsigned long *envp_p = (unsigned long *)envp_user_ptr;
 +    unsigned long *tmp_env_p = NULL, *tmp_env_p2 = NULL;
 +    size_t env_count = 0, total_size;
 +    long ret;
 +
-+    envp = (char __user **)untagged_addr((unsigned long)*envp_p);
++    envp = (unsigned long)untagged_addr((unsigned long)*envp_p);
 +
 +    ld_preload_p = stackp = ALIGN_DOWN(stackp - sizeof(kLdPreload), 8);
 +    ret = copy_to_user((void __user *)ld_preload_p, kLdPreload, sizeof(kLdPreload));
@@ -651,8 +645,6 @@ index c41a99559..ae3c017f9 100644
 +            break;
 +    }
 +
-+    // We should have allocated enough memory
-+    // TODO: handle existing LD_PRELOAD
 +    tmp_env_p[env_count++] = ld_preload_p;
 +    tmp_env_p[env_count++] = ld_library_path_p;
 +    tmp_env_p[env_count++] = 0;
@@ -676,12 +668,52 @@ index c41a99559..ae3c017f9 100644
 +
 +    return ret;
 +}
++
++static long do_ksu_adb_root_handle_execveat(const char *filename, void ***envp_user_ptr)
++{
++    if (likely(is_exec_adbd(filename) != 1)) {
++        return 0;
++    }
++
++    if (!is_libadbroot_ok()) {
++        pr_info("libadbroot.so is not ready\n");
++        return 0;
++    }
++
++    long ret = setup_ld_preload(envp_user_ptr);
++    if (ret) {
++        return ret;
++    }
++
++    pr_info("escape to root for adb\n");
++    escape_to_root_for_adb_root();
++
++    ret = escape_with_root_profile();
++    if (ret)
++        pr_err("escape_with_root_profile() failed: %d\n", (int)ret);
++
++    return 0;
++}
++
++long ksu_adb_root_handle_execveat(const char *filename, void __user ***envp_user_ptr)
++{
++    if (static_branch_unlikely(&ksu_adb_root)) {
++        return do_ksu_adb_root_handle_execveat(filename, (void ***)envp_user_ptr);
++    }
++    return 0;
++}
++
 +#else
- static long setup_ld_preload(struct pt_regs *regs)
++
+ static long setup_ld_preload(struct pt_regs *regs, unsigned long *envp_p)
  {
      static const char kLdPreload[] = "LD_PRELOAD=/data/adb/ksu/lib/libadbroot.so";
-@@ -81,14 +193,14 @@ static long setup_ld_preload(struct pt_regs *regs)
-     envp = (char __user **)untagged_addr((unsigned long)*envp_p);
+@@ -76,17 +222,17 @@ static long setup_ld_preload(struct pt_regs *regs, unsigned long *envp_p)
+     size_t env_count = 0, total_size;
+     long ret;
+ 
+-    envp = (char __user **)untagged_addr((unsigned long)*envp_p);
++    envp = (unsigned long)untagged_addr((unsigned long)*envp_p);
  
      ld_preload_p = stackp = ALIGN_DOWN(stackp - sizeof(kLdPreload), 8);
 -    ret = copy_to_user(ld_preload_p, kLdPreload, sizeof(kLdPreload));
@@ -697,7 +729,7 @@ index c41a99559..ae3c017f9 100644
      if (ret != 0) {
          pr_warn("write ld_library_path when adb_root_handle_execve failed: %ld\n", ret);
          return -EFAULT;
-@@ -102,7 +214,7 @@ static long setup_ld_preload(struct pt_regs *regs)
+@@ -100,7 +246,7 @@ static long setup_ld_preload(struct pt_regs *regs, unsigned long *envp_p)
              goto out_release_env_p;
          }
          tmp_env_p = tmp_env_p2;
@@ -706,7 +738,15 @@ index c41a99559..ae3c017f9 100644
          if (ret < 0) {
              pr_warn("Access envp when adb_root_handle_execve failed: %ld\n", ret);
              ret = -EFAULT;
-@@ -141,7 +253,7 @@ static long setup_ld_preload(struct pt_regs *regs)
+@@ -131,15 +277,13 @@ static long setup_ld_preload(struct pt_regs *regs, unsigned long *envp_p)
+             break;
+     }
+ 
+-    // We should have allocated enough memory
+-    // TODO: handle existing LD_PRELOAD
+     tmp_env_p[env_count++] = ld_preload_p;
+     tmp_env_p[env_count++] = ld_library_path_p;
+     tmp_env_p[env_count++] = 0;
      total_size = env_count * kPtrSize;
  
      stackp -= total_size;
@@ -715,79 +755,34 @@ index c41a99559..ae3c017f9 100644
      if (ret != 0) {
          pr_err("copy new env failed: %ld\n", ret);
          ret = -EFAULT;
-@@ -158,7 +270,34 @@ out_release_env_p:
- 
-     return ret;
- }
-+#endif
-+
-+#ifdef CONFIG_KSU_SUSFS
-+static long do_ksu_adb_root_handle_execve(const char *filename, void ***envp_user_ptr)
-+{
-+    if (likely(is_exec_adbd(filename) != 1)) {
-+        return 0;
-+    }
-+
-+    if (unlikely(is_libadbroot_ok() != 1)) {
-+        return 0;
-+    }
-+
-+    long ret = setup_ld_preload(envp_user_ptr);
-+    if (ret) {
-+        return ret;
-+    }
-+
-+    pr_info("escape to root for adb\n");
-+    escape_to_root_for_adb_root();
-+
-+    ret = (long)escape_with_root_profile();
-+    if (ret)
-+        pr_err("escape_with_root_profile() failed: %d\n", (int)ret);
- 
-+    return 0;
-+}
-+#else
- static long do_ksu_adb_root_handle_execve(struct pt_regs *regs)
- {
-     if (likely(is_exec_adbd(regs) != 1)) {
-@@ -178,7 +317,17 @@ static long do_ksu_adb_root_handle_execve(struct pt_regs *regs)
-     escape_to_root_for_adb_root();
-     return 0;
- }
-+#endif
- 
-+#ifdef CONFIG_KSU_SUSFS
-+long ksu_adb_root_handle_execve(const char *filename, void ***envp_user_ptr)
-+{
-+    if (static_branch_unlikely(&ksu_adb_root)) {
-+        return do_ksu_adb_root_handle_execve(filename, envp_user_ptr);
-+    }
-+    return 0;
-+}
-+#else
- long ksu_adb_root_handle_execve(struct pt_regs *regs)
- {
-     if (static_branch_unlikely(&ksu_adb_root)) {
-@@ -186,6 +335,7 @@ long ksu_adb_root_handle_execve(struct pt_regs *regs)
+@@ -194,13 +338,12 @@ long ksu_adb_root_handle_execveat(struct pt_regs *regs)
      }
      return 0;
  }
+-
 +#endif
- 
  static int kernel_adb_root_feature_get(u64 *value)
  {
+     *value = static_key_enabled(&ksu_adb_root) ? 1 : 0;
+     return 0;
+ }
+-
+ static int kernel_adb_root_feature_set(u64 value)
+ {
+     bool enable = value != 0;
 diff --git a/kernel/feature/adb_root.h b/kernel/feature/adb_root.h
-index 754dba232..5b9b855c2 100644
+index 154a466de..f808ac06a 100644
 --- a/kernel/feature/adb_root.h
 +++ b/kernel/feature/adb_root.h
-@@ -2,7 +2,11 @@
+@@ -2,8 +2,12 @@
  #define __KSU_H_ADB_ROOT
  #include <asm/ptrace.h>
  
 +#ifdef CONFIG_KSU_SUSFS
-+long ksu_adb_root_handle_execve(const char *filename, void __user ***envp_user_ptr);
++long ksu_adb_root_handle_execveat(const char *filename, void __user ***envp_user_ptr);
 +#else
  long ksu_adb_root_handle_execve(struct pt_regs *regs);
+ long ksu_adb_root_handle_execveat(struct pt_regs *regs);
 +#endif
  
  void ksu_adb_root_init(void);
@@ -1151,10 +1146,10 @@ index 5a0437108..faecb73d8 100644
 +
  #endif
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index 553cb6ae9..c43ee897e 100644
+index e9aab2209..792701036 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
-@@ -13,6 +13,19 @@
+@@ -14,6 +14,19 @@
  #include <linux/version.h>
  #include <linux/sched/task_stack.h>
  #include <linux/ptrace.h>
@@ -1174,7 +1169,7 @@ index 553cb6ae9..c43ee897e 100644
  
  #include "arch.h"
  #include "policy/allowlist.h"
-@@ -20,6 +33,7 @@
+@@ -21,6 +34,7 @@
  #include "klog.h" // IWYU pragma: keep
  #include "runtime/ksud.h"
  #include "feature/sucompat.h"
@@ -1182,7 +1177,7 @@ index 553cb6ae9..c43ee897e 100644
  #include "policy/app_profile.h"
  #include "hook/syscall_hook.h"
  #include "sulog/event.h"
-@@ -29,18 +43,28 @@
+@@ -30,18 +44,28 @@
  #define SU_PATH "/system/bin/su"
  #define SH_PATH "/system/bin/sh"
  
@@ -1214,7 +1209,7 @@ index 553cb6ae9..c43ee897e 100644
  	pr_info("su_compat: set to %d\n", enable);
  	return 0;
  }
-@@ -61,11 +85,18 @@ static void __user *userspace_stack_buffer(const void *d, size_t len)
+@@ -62,11 +86,18 @@ static void __user *userspace_stack_buffer(const void *d, size_t len)
  	return copy_to_user(p, d, len) ? NULL : p;
  }
  
@@ -1235,7 +1230,7 @@ index 553cb6ae9..c43ee897e 100644
  }
  
  static char __user *empty_user_path(void)
-@@ -73,8 +104,6 @@ static char __user *empty_user_path(void)
+@@ -74,8 +105,6 @@ static char __user *empty_user_path(void)
  	return userspace_stack_buffer("", sizeof(""));
  }
  
@@ -1244,7 +1239,7 @@ index 553cb6ae9..c43ee897e 100644
  static bool is_ksud_exists()
  {
  	struct path path;
-@@ -86,6 +115,305 @@ static bool is_ksud_exists()
+@@ -87,6 +116,287 @@ static bool is_ksud_exists()
  	return true;
  }
  
@@ -1326,21 +1321,21 @@ index 553cb6ae9..c43ee897e 100644
 +        } else {
 +            size_t len = strlen(filename->name);
 +            if (likely(!ksu_is_zygote_or_adbd(filename->name, len)) &&
-+                        !susfs_is_current_proc_umounted())
++                        !susfs_is_current_proc_no_su())
 +            {
 +                pr_info("susfs: mark no sucompat checks for pid: '%d', exec: '%s'\n", current->pid, filename->name);
-+                susfs_set_current_proc_umounted();
++                susfs_set_current_proc_no_su();
 +                return 0;
 +            }
 +        }
 +
 +#ifdef CONFIG_COMPAT
 +        if (unlikely(envp_user->is_compat))
-+            ret = ksu_adb_root_handle_execve(filename->name, (void ***)&envp_user->ptr.compat);
++            ret = ksu_adb_root_handle_execveat(filename->name, (void ***)&envp_user->ptr.compat);
 +        else
-+            ret = ksu_adb_root_handle_execve(filename->name, (void ***)&envp_user->ptr.native);
++            ret = ksu_adb_root_handle_execveat(filename->name, (void ***)&envp_user->ptr.native);
 +#else
-+        ret = ksu_adb_root_handle_execve(filename->name, (void ***)&envp_user->ptr.native);
++        ret = ksu_adb_root_handle_execveat(filename->name, (void ***)&envp_user->ptr.native);
 +#endif
 +
 +        if (ret) {
@@ -1433,29 +1428,33 @@ index 553cb6ae9..c43ee897e 100644
 +}
 +#endif
 +
++#ifdef CONFIG_KSU_SUSFS
++int ksu_handle_faccessat(int *dfd, struct filename **filename,
++		int *mode, int *__unused_flags)
++{
++	if (unlikely(IS_ERR(*filename) || (*filename)->name == NULL))
++		return 0;
++
++	if (likely(memcmp((*filename)->name, su_path, sizeof(su_path))))
++		return 0;
++
++	if (current_chrooted()) {
++		pr_err("ksu_handle_faccessat: su found but NOT allowed! Because current process is running in chrooted environment\n");
++		return 0;
++	}
++
++	if (!ksu_is_allow_uid_for_current(current_uid().val))
++		return 0;
++
++	ksu_compat_sulog('a');
++	pr_info("ksu_handle_faccessat: su->sh!\n");
++	memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
++	return 0;
++}
++#else
 +int ksu_handle_faccessat(int *dfd, const char __user **filename_user,
 +		int *mode, int *__unused_flags)
 +{
-+#ifdef CONFIG_KSU_SUSFS
-+    char path[sizeof(su_path) + 1] = {0};
-+    if (strncpy_from_user_nofault(path, *filename_user, sizeof(path)) < 0)
-+        return 0;
-+
-+    if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
-+        if (current_chrooted())
-+        {
-+            pr_err("ksu_handle_faccessat: su found but NOT allowed! Because current process is running in chrooted environment\n");
-+            return 0;
-+        }
-+
-+        if (!ksu_is_allow_uid_for_current(current_uid().val))
-+            return 0;
-+
-+        ksu_compat_sulog('a');
-+        pr_info("ksu_handle_faccessat: su->sh!\n");
-+        *filename_user = sh_user_path();
-+    }
-+#else
 +	const char su[] = SU_PATH;
 +
 +	if (!ksu_is_allow_uid_for_current(current_uid().val)) {
@@ -1471,56 +1470,35 @@ index 553cb6ae9..c43ee897e 100644
 +		pr_info("faccessat su->sh!\n");
 +		*filename_user = sh_user_path();
 +	}
-+#endif
 +
 +	return 0;
 +}
++#endif
 +
-+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && defined(CONFIG_KSU_SUSFS)
++#ifdef CONFIG_KSU_SUSFS
 +int ksu_handle_stat(int *dfd, struct filename **filename, int *flags) {
-+    if (unlikely(IS_ERR(*filename) || (*filename)->name == NULL))
-+        return 0;
++	if (unlikely(IS_ERR(*filename) || (*filename)->name == NULL))
++		return 0;
 +
-+    if (likely(memcmp((*filename)->name, su_path, sizeof(su_path))))
-+        return 0;
++	if (likely(memcmp((*filename)->name, su_path, sizeof(su_path))))
++		return 0;
 +
-+    if (current_chrooted())
-+    {
-+        pr_err("ksu_handle_stat: su found but NOT allowed! Because current process is running in chrooted environment\n");
-+        return 0;
-+    }
++	if (current_chrooted()) {
++		pr_err("ksu_handle_stat: su found but NOT allowed! Because current process is running in chrooted environment\n");
++		return 0;
++	}
 +
-+    if (!ksu_is_allow_uid_for_current(current_uid().val))
-+        return 0;
++	if (!ksu_is_allow_uid_for_current(current_uid().val))
++		return 0;
 +
-+    ksu_compat_sulog('s');
-+    pr_info("ksu_handle_stat: su->sh!\n");
-+    memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
-+    return 0;
++	ksu_compat_sulog('s');
++	pr_info("ksu_handle_stat: su->sh!\n");
++	memcpy((void *)((*filename)->name), sh_path, sizeof(sh_path));
++	return 0;
 +}
 +#else
 +int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags)
 +{
-+#ifdef CONFIG_KSU_SUSFS
-+    char path[sizeof(su_path) + 1] = {0};
-+    if (strncpy_from_user_nofault(path, *filename_user, sizeof(path)) < 0)
-+        return 0;
-+
-+    if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
-+        if (current_chrooted())
-+        {
-+            pr_err("ksu_handle_stat: su found but NOT allowed! Because current process is running in chrooted environment\n");
-+            return 0;
-+        }
-+
-+        if (!ksu_is_allow_uid_for_current(current_uid().val))
-+            return 0;
-+
-+        ksu_compat_sulog('s');
-+        pr_info("ksu_handle_stat: su->sh!\n");
-+        *filename_user = sh_user_path();
-+    }
-+#else
 +	const char su[] = SU_PATH;
 +
 +	if (!ksu_is_allow_uid_for_current(current_uid().val)) {
@@ -1540,7 +1518,6 @@ index 553cb6ae9..c43ee897e 100644
 +		pr_info("newfstatat su->sh!\n");
 +		*filename_user = sh_user_path();
 +	}
-+#endif
 +
 +	return 0;
 +}
@@ -1550,7 +1527,7 @@ index 553cb6ae9..c43ee897e 100644
  long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  {
  	const char __user **filename_user, *orig_filename;
-@@ -103,6 +431,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -104,6 +414,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1561,7 +1538,7 @@ index 553cb6ae9..c43ee897e 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('a');
-@@ -139,6 +471,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -140,6 +454,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1572,7 +1549,7 @@ index 553cb6ae9..c43ee897e 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('s');
-@@ -189,6 +525,11 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
+@@ -194,6 +512,11 @@ static long ksu_handle_execve_sucompat_common(const char __user **filename_user,
  	if (likely(memcmp(path, su_path, sizeof(su_path))))
  		goto do_orig_execve;
  
@@ -1584,19 +1561,19 @@ index 553cb6ae9..c43ee897e 100644
  	ksu_compat_sulog('x');
  	pr_info("sys_execve su found\n");
  
-@@ -243,6 +584,7 @@ long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr,
- do_orig_execve:
- 	return ksu_syscall_table[orig_nr](regs);
+@@ -260,6 +583,7 @@ long ksu_handle_execveat_sucompat(const char __user **filename_user, int orig_nr
+ 	return ksu_handle_execve_sucompat_common(filename_user, (const char __user *const __user *)PT_REGS_PARM3(regs),
+ 						 PT_REGS_SYSCALL_PARM4(regs), true, orig_nr, regs);
  }
 +#endif
  
  // sucompat: permitted process can execute 'su' to gain root access.
  void __init ksu_sucompat_init()
 diff --git a/kernel/feature/sucompat.h b/kernel/feature/sucompat.h
-index bd7cc21f4..1431557a4 100644
+index 5e2cfe11b..fca60b336 100644
 --- a/kernel/feature/sucompat.h
 +++ b/kernel/feature/sucompat.h
-@@ -2,15 +2,34 @@
+@@ -2,16 +2,30 @@
  #define __KSU_H_SUCOMPAT
  #include <asm/ptrace.h>
  #include <linux/types.h>
@@ -1612,13 +1589,8 @@ index bd7cc21f4..1431557a4 100644
  
  // Handler functions exported for hook_manager
 +#ifdef CONFIG_KSU_SUSFS
-+int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
-+                         int *__unused_flags);
-+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
++int ksu_handle_faccessat(int *dfd, struct filename **filename, int *mode, int *__unused_flags);
 +int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
-+#else
-+int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
-+#endif // #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
 +
 +int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
 +            void *envp, int *flags);
@@ -1628,12 +1600,13 @@ index bd7cc21f4..1431557a4 100644
  long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs);
  long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs);
  long ksu_handle_execve_sucompat(const char __user **filename_user, int orig_nr, struct pt_regs *regs);
+ long ksu_handle_execveat_sucompat(const char __user **filename_user, int orig_nr, struct pt_regs *regs);
 +#endif
 +#endif
  
  #endif
 diff --git a/kernel/hook/setuid_hook.c b/kernel/hook/setuid_hook.c
-index 3cccc7800..71fcd07cf 100644
+index 3cccc7800..c08310870 100644
 --- a/kernel/hook/setuid_hook.c
 +++ b/kernel/hook/setuid_hook.c
 @@ -3,6 +3,7 @@
@@ -1656,7 +1629,7 @@ index 3cccc7800..71fcd07cf 100644
  #include "policy/allowlist.h"
  #include "hook/setuid_hook.h"
  #include "klog.h" // IWYU pragma: keep
-@@ -21,6 +27,69 @@
+@@ -21,6 +27,77 @@
  #include "hook/tp_marker.h"
  #include "feature/kernel_umount.h"
  
@@ -1682,8 +1655,11 @@ index 3cccc7800..71fcd07cf 100644
 +        return 0;
 +
 +    // Check if spawned process is isolated service first, and force to do umount if so
-+    if (is_isolated_process(ruid))
++    if (is_isolated_process(ruid)) {
++        susfs_set_current_proc_no_su();
++        susfs_set_current_proc_umounted();
 +        goto do_umount;
++    }
 +
 +    // - Since ksu maanger app uid is excluded in allow_list_arr, so ksu_uid_should_umount(manager_uid)
 +    //   will always return true, that's why we need to explicitly check if new_uid belongs to
@@ -1698,16 +1674,24 @@ index 3cccc7800..71fcd07cf 100644
 +    }
 +
 +    // we should not umount for webview zygote
-+    if (unlikely(ruid == WEBVIEW_ZYGOTE_UID))
++    if (unlikely(ruid == WEBVIEW_ZYGOTE_UID)) {
++        susfs_set_current_proc_no_su();
 +        return 0;
++    }
 +
 +    // Check if spawned process is normal user app and needs to be umounted
-+    if (likely(is_appuid(ruid) && ksu_uid_should_umount(ruid)))
++    if (likely(is_appuid(ruid) && ksu_uid_should_umount(ruid))) {
++        susfs_set_current_proc_no_su();
++        susfs_set_current_proc_umounted();
 +        goto do_umount;
++    }
 +
-+    if (ksu_is_allow_uid_for_current(ruid))
++    if (ksu_is_allow_uid_for_current(ruid)) {
 +        disable_seccomp();
++        return 0;
++    }
 +
++    susfs_set_current_proc_no_su();
 +    return 0;
 +
 +do_umount:
@@ -1717,16 +1701,13 @@ index 3cccc7800..71fcd07cf 100644
 +    // Handle extra susfs work
 +    ksu_handle_extra_susfs_work();
 +
-+    // Mark current proc as umounted
-+    susfs_set_current_proc_umounted();
-+
 +    return 0;
 +}
 +#else
  int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
  {
      // we rely on the fact that zygote always call setresuid(3) with same uids
-@@ -28,10 +97,8 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
+@@ -28,10 +105,8 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
      pr_info("handle_setresuid from %d to %d\n", old_uid, new_uid);
  
      if (unlikely(is_uid_manager(new_uid))) {
@@ -1738,7 +1719,7 @@ index 3cccc7800..71fcd07cf 100644
  
          pr_info("install fd for manager: %d\n", new_uid);
          ksu_install_fd();
-@@ -39,12 +106,7 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
+@@ -39,12 +114,7 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
      }
  
      if (ksu_is_allow_uid_for_current(new_uid)) {
@@ -1752,7 +1733,7 @@ index 3cccc7800..71fcd07cf 100644
          ksu_set_task_tracepoint_flag(current);
      } else {
          ksu_clear_task_tracepoint_flag_if_needed(current);
-@@ -55,6 +117,7 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
+@@ -55,6 +125,7 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
  
      return 0;
  }
@@ -1776,10 +1757,10 @@ index 3a3dfea8e..d5ab04236 100644
  
  #endif
 diff --git a/kernel/hook/syscall_event_bridge.c b/kernel/hook/syscall_event_bridge.c
-index a961321b4..e1ead915d 100644
+index 48ab764db..9fcd5f3ee 100644
 --- a/kernel/hook/syscall_event_bridge.c
 +++ b/kernel/hook/syscall_event_bridge.c
-@@ -45,61 +45,61 @@ static int ksu_handle_init_mark_tracker(const char __user **filename_user)
+@@ -45,70 +45,70 @@ static int ksu_handle_init_mark_tracker(const char __user **filename_user)
          ksu_clear_task_tracepoint_flag_if_needed(current);
      }
  
@@ -1817,28 +1798,37 @@ index a961321b4..e1ead915d 100644
 +	static_branch_disable(&ksud_execve_key);
  }
  
- long __nocfi ksu_hook_execve(int orig_nr, const struct pt_regs *regs)
+ static long __nocfi ksu_hook_execve_common(int orig_nr, const struct pt_regs *regs, bool execveat)
  {
--    const char __user **filename_user = (const char __user **)&PT_REGS_PARM1(regs);
--    const char __user *const __user *argv_user = (const char __user *const __user *)PT_REGS_PARM2(regs);
+-    const char __user **filename_user =
+-        execveat ? (const char __user **)&PT_REGS_PARM2(regs) : (const char __user **)&PT_REGS_PARM1(regs);
+-    const char __user *const __user *argv_user = execveat ? (const char __user *const __user *)PT_REGS_PARM3(regs) :
+-                                                            (const char __user *const __user *)PT_REGS_PARM2(regs);
 -    bool current_is_init = is_init(current_cred());
 -    struct ksu_sulog_pending_event *pending_root_execve = NULL;
 -    long ret;
 -
--    if (static_branch_unlikely(&ksud_execve_key))
--        ksu_execve_hook_ksud(regs);
+-    if (static_branch_unlikely(&ksud_execve_key)) {
+-        if (execveat) {
+-            ksu_execveat_hook_ksud(regs);
+-        } else {
+-            ksu_execve_hook_ksud(regs);
+-        }
+-    }
 -
 -    if (current_euid().val == 0)
 -        pending_root_execve = ksu_sulog_capture_root_execve(*filename_user, argv_user, GFP_KERNEL);
 -
 -    if (current->pid != 1 && current_is_init) {
 -        ksu_handle_init_mark_tracker(filename_user);
--        ret = ksu_adb_root_handle_execve((struct pt_regs *)regs);
+-        ret = execveat ? ksu_adb_root_handle_execveat((struct pt_regs *)regs) :
+-                         ksu_adb_root_handle_execve((struct pt_regs *)regs);
 -        if (ret) {
 -            pr_err("adb root failed: %ld\n", ret);
 -        }
 -    } else if (ksu_su_compat_enabled) {
--        ret = ksu_handle_execve_sucompat(filename_user, orig_nr, (struct pt_regs *)regs);
+-        ret = execveat ? ksu_handle_execveat_sucompat(filename_user, orig_nr, (struct pt_regs *)regs) :
+-                         ksu_handle_execve_sucompat(filename_user, orig_nr, (struct pt_regs *)regs);
 -        ksu_sulog_emit_pending(pending_root_execve, ret, GFP_KERNEL);
 -        return ret;
 -    }
@@ -1846,26 +1836,35 @@ index a961321b4..e1ead915d 100644
 -    ret = ksu_syscall_table[orig_nr](regs);
 -    ksu_sulog_emit_pending(pending_root_execve, ret, GFP_KERNEL);
 -    return ret;
-+	const char __user **filename_user = (const char __user **)&PT_REGS_PARM1(regs);
-+	const char __user *const __user *argv_user = (const char __user *const __user *)PT_REGS_PARM2(regs);
++	const char __user **filename_user =
++		execveat ? (const char __user **)&PT_REGS_PARM2(regs) : (const char __user **)&PT_REGS_PARM1(regs);
++	const char __user *const __user *argv_user = execveat ? (const char __user *const __user *)PT_REGS_PARM3(regs) :
++								(const char __user *const __user *)PT_REGS_PARM2(regs);
 +	bool current_is_init = is_init(current_cred());
 +	struct ksu_sulog_pending_event *pending_root_execve = NULL;
 +	long ret;
 +
-+	if (static_branch_unlikely(&ksud_execve_key))
-+		ksu_execve_hook_ksud(regs);
++	if (static_branch_unlikely(&ksud_execve_key)) {
++		if (execveat) {
++			ksu_execveat_hook_ksud(regs);
++		} else {
++			ksu_execve_hook_ksud(regs);
++		}
++	}
 +
 +	if (current_euid().val == 0)
 +		pending_root_execve = ksu_sulog_capture_root_execve(*filename_user, argv_user, GFP_KERNEL);
 +
 +	if (current->pid != 1 && current_is_init) {
 +		ksu_handle_init_mark_tracker(filename_user);
-+		ret = ksu_adb_root_handle_execve((struct pt_regs *)regs);
++		ret = execveat ? ksu_adb_root_handle_execveat((struct pt_regs *)regs) :
++				 ksu_adb_root_handle_execve((struct pt_regs *)regs);
 +		if (ret) {
 +			pr_err("adb root failed: %ld\n", ret);
 +		}
 +	} else if (static_branch_likely(&ksu_su_compat_enabled)) {
-+		ret = ksu_handle_execve_sucompat(filename_user, orig_nr, (struct pt_regs *)regs);
++		ret = execveat ? ksu_handle_execveat_sucompat(filename_user, orig_nr, (struct pt_regs *)regs) :
++				 ksu_handle_execve_sucompat(filename_user, orig_nr, (struct pt_regs *)regs);
 +		ksu_sulog_emit_pending(pending_root_execve, ret, GFP_KERNEL);
 +		return ret;
 +	}
@@ -1875,8 +1874,8 @@ index a961321b4..e1ead915d 100644
 +	return ret;
  }
  
- long __nocfi ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs)
-@@ -110,6 +110,10 @@ long __nocfi ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs)
+ long __nocfi ksu_hook_execve(int orig_nr, const struct pt_regs *regs)
+@@ -129,6 +129,10 @@ long __nocfi ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs)
      if (ret < 0)
          return ret;
  
@@ -1888,10 +1887,10 @@ index a961321b4..e1ead915d 100644
      return ret;
  }
 diff --git a/kernel/manager/apk_sign.c b/kernel/manager/apk_sign.c
-index f63806ad0..63d3edd9d 100644
+index f37655cdc..e40aa9eea 100644
 --- a/kernel/manager/apk_sign.c
 +++ b/kernel/manager/apk_sign.c
-@@ -409,5 +409,26 @@ bool is_manager_apk(char *path)
+@@ -368,5 +368,26 @@ bool is_manager_apk(char *path)
  		return false;
  	}
  #endif
@@ -2152,10 +2151,10 @@ index 6996e365f..537f5f9c2 100644
      return !__ksu_is_allow_uid(uid);
  #else
 diff --git a/kernel/policy/app_profile.c b/kernel/policy/app_profile.c
-index ce086beb1..da6bc3c7d 100644
+index bc895f8e1..b6ccbdb59 100644
 --- a/kernel/policy/app_profile.c
 +++ b/kernel/policy/app_profile.c
-@@ -9,6 +9,10 @@
+@@ -12,6 +12,10 @@
  #include <linux/uidgid.h>
  #include <linux/version.h>
  
@@ -2166,16 +2165,16 @@ index ce086beb1..da6bc3c7d 100644
  #include "policy/allowlist.h"
  #include "policy/app_profile.h"
  #include "klog.h" // IWYU pragma: keep
-@@ -63,7 +67,7 @@ void setup_groups(struct root_profile *profile, struct cred *cred)
- 
- void seccomp_filter_release(struct task_struct *tsk);
+@@ -77,7 +81,7 @@ void seccomp_filter_release(struct task_struct *tsk);
+ static bool has_call_to_spin_lock = false;
+ #endif
  
 -static void disable_seccomp(void)
 +void disable_seccomp(void)
  {
      struct task_struct *fake;
  
-@@ -118,7 +122,11 @@ int escape_with_root_profile(void)
+@@ -138,7 +142,11 @@ int escape_with_root_profile(void)
          return -ENOMEM;
      }
  
@@ -2187,7 +2186,7 @@ index ce086beb1..da6bc3c7d 100644
          pr_warn("Already root, don't escape!\n");
          goto out_abort_creds;
      }
-@@ -181,15 +189,18 @@ int escape_with_root_profile(void)
+@@ -201,15 +209,18 @@ int escape_with_root_profile(void)
  
      commit_creds(cred);
  
@@ -2207,7 +2206,7 @@ index ce086beb1..da6bc3c7d 100644
  
      setup_mount_ns(profile->namespaces);
      ksu_put_root_profile(profile);
-@@ -202,14 +213,16 @@ out_abort_creds:
+@@ -222,16 +233,18 @@ out_abort_creds:
      return ret;
  }
  
@@ -2226,18 +2225,21 @@ index ce086beb1..da6bc3c7d 100644
 +
 +    return 0;
  }
+ 
+ void __init ksu_app_profile_init(void)
 diff --git a/kernel/policy/app_profile.h b/kernel/policy/app_profile.h
-index 5a4097aed..f63c84a88 100644
+index 0e223df73..56b144670 100644
 --- a/kernel/policy/app_profile.h
 +++ b/kernel/policy/app_profile.h
-@@ -8,6 +8,6 @@
+@@ -9,7 +9,7 @@
  // Escalate current process to root with the appropriate profile
  int escape_with_root_profile(void);
  
 -void escape_to_root_for_init(void);
 +int escape_to_root_for_init(void);
  
- #endif
+ void __init ksu_app_profile_init(void);
+ 
 diff --git a/kernel/runtime/boot_event.c b/kernel/runtime/boot_event.c
 index eed9047d1..7e064f36c 100644
 --- a/kernel/runtime/boot_event.c
@@ -2298,15 +2300,16 @@ index eed9047d1..7e064f36c 100644
  void on_module_mounted(void)
  {
 diff --git a/kernel/runtime/ksud.h b/kernel/runtime/ksud.h
-index 62cfaabf2..2285e8931 100644
+index 09384deff..c7ab9dcef 100644
 --- a/kernel/runtime/ksud.h
 +++ b/kernel/runtime/ksud.h
-@@ -8,7 +8,27 @@
+@@ -8,8 +8,28 @@
  void ksu_ksud_init();
  void ksu_ksud_exit();
  
 +void ksu_handle_sys_read(unsigned int fd, char __user **buf_ptr, size_t *count_ptr);
  void ksu_execve_hook_ksud(const struct pt_regs *regs);
+ void ksu_execveat_hook_ksud(const struct pt_regs *regs);
  void ksu_stop_input_hook_runtime(void);
  
 +#define MAX_ARG_STRINGS 0x7FFFFFFF
@@ -2330,7 +2333,7 @@ index 62cfaabf2..2285e8931 100644
 +
  #endif
 diff --git a/kernel/runtime/ksud_integration.c b/kernel/runtime/ksud_integration.c
-index 38d1476f1..9976a28cd 100644
+index 5bf84cb66..335963259 100644
 --- a/kernel/runtime/ksud_integration.c
 +++ b/kernel/runtime/ksud_integration.c
 @@ -29,6 +29,16 @@
@@ -2624,7 +2627,7 @@ index 38d1476f1..9976a28cd 100644
  
      pr_info("volumedown_pressed_count: %d\n", volumedown_pressed_count);
      if (is_volumedown_enough(volumedown_pressed_count)) {
-@@ -542,17 +645,20 @@ void ksu_execve_hook_ksud(const struct pt_regs *regs)
+@@ -540,7 +643,11 @@ static void ksu_execve_hook_ksud_common(const char __user *filename_user, const
          return;
      }
  
@@ -2633,6 +2636,11 @@ index 38d1476f1..9976a28cd 100644
 +#else
      ksu_handle_execveat_ksud(path, &argv);
 +#endif
+ }
+ 
+ void ksu_execve_hook_ksud(const struct pt_regs *regs)
+@@ -559,14 +666,13 @@ void ksu_execveat_hook_ksud(const struct pt_regs *regs)
+     ksu_execve_hook_ksud_common(filename_user, argv_user);
  }
  
 +#ifndef CONFIG_KSU_SUSFS
@@ -2648,7 +2656,7 @@ index 38d1476f1..9976a28cd 100644
      return orig_sys_read(regs);
  }
  
-@@ -631,10 +737,12 @@ void ksu_stop_input_hook_runtime(void)
+@@ -645,10 +751,12 @@ void ksu_stop_input_hook_runtime(void)
      bool ret = schedule_work(&stop_input_hook_work);
      pr_info("unregister input kprobe: %d!\n", ret);
  }
@@ -2661,7 +2669,7 @@ index 38d1476f1..9976a28cd 100644
      int ret;
  
      ksu_syscall_table_hook(__NR_read, ksu_sys_read, &orig_sys_read);
-@@ -644,14 +752,17 @@ void __init ksu_ksud_init()
+@@ -658,14 +766,17 @@ void __init ksu_ksud_init()
      pr_info("ksud: input_event_kp: %d\n", ret);
  
      INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
@@ -3224,7 +3232,7 @@ index 866fb6ad9..5f4c50e11 100644
  int ksu_sulog_emit_grant_root(int retval, __u32 uid, __u32 euid, gfp_t gfp);
  
 diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
-index 902631d99..fd915c493 100644
+index 902631d99..66a86331f 100644
 --- a/kernel/supercall/dispatch.c
 +++ b/kernel/supercall/dispatch.c
 @@ -5,6 +5,13 @@
@@ -3282,7 +3290,7 @@ index 902631d99..fd915c493 100644
      case KSU_MARK_GET: {
          // Get task mark status
 +#ifdef CONFIG_KSU_SUSFS
-+        if (susfs_is_current_proc_umounted()) {
++        if (susfs_is_current_proc_no_su()) {
 +            ret = 0; // SYSCALL_TRACEPOINT is NOT flagged
 +        } else {
 +            ret = 1; // SYSCALL_TRACEPOINT is flagged
@@ -3814,7 +3822,7 @@ index bba48947c..cacc94a8f 100644
  }
 \ No newline at end of file
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt
-index bc130b232..0d652af9b 100644
+index bc130b232..004ad716a 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt
 @@ -8,7 +8,7 @@ import android.os.Bundle
@@ -3973,8 +3981,8 @@ index bc130b232..0d652af9b 100644
 +                                    isPromptShowing = true
 +                                    com.rifsxd.ksunext.ui.util.BiometricAuthenticator(this@MainActivity)
 +                                        .authenticate(
-+                                            title = getString(com.rifsxd.ksunext.R.string.app_name),
-+                                            subtitle = getString(com.rifsxd.ksunext.R.string.biometric_prompt_subtitle),
++                                            title = getString(com.rifsxd.ksunext.R.string.biometric_prompt_subtitle),
++                                            subtitle = null,
 +                                            onSuccess = {
 +                                                isPromptShowing = false
 +                                                appLockState.value = false
@@ -4036,7 +4044,7 @@ index bc130b232..0d652af9b 100644
  
 +    override fun onStop() {
 +        super.onStop()
-+        com.rifsxd.ksunext.ui.util.AppLockManager.onActivityStop()
++        com.rifsxd.ksunext.ui.util.AppLockManager.onActivityStop(this)
 +        val prefsInit = getSharedPreferences("settings", MODE_PRIVATE)
 +        if (prefsInit.getBoolean("enable_biometric_lock", false)) {
 +            appLockState.value = true
@@ -4265,7 +4273,7 @@ index b49c630a9..321b519af 100644
                              moduleState = MetaModuleState.Loading
                              loadModules()
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt
-index d09e88d11..b777ba344 100644
+index d09e88d11..dc61c173f 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt
 @@ -157,7 +157,7 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
@@ -4277,7 +4285,24 @@ index d09e88d11..b777ba344 100644
      val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
  
      Scaffold(
-@@ -671,15 +671,20 @@ private fun ModuleList(
+@@ -484,10 +484,12 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
+                     onClickModule = { id, name, hasWebUi ->
+                         if (hasWebUi) {
+                             webUILauncher.launch(
+-                                Intent(context, WebUIActivity::class.java)
+-                                    .setData("kernelsu://webui/$id".toUri())
+-                                    .putExtra("id", id)
+-                                    .putExtra("name", name)
++                                Intent(context, WebUIActivity::class.java).apply {
++                                    putExtra("is_internal_transition", true)
++                                    setData("kernelsu://webui/$id".toUri())
++                                    putExtra("id", id)
++                                    putExtra("name", name)
++                                }
+                             )
+                         }
+                     },
+@@ -671,15 +673,20 @@ private fun ModuleList(
              failedRestore.format(module.name)
          }
      }
@@ -4547,10 +4572,10 @@ index 308d576a7..d6316453f 100644
      BackHandler {
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/AppLockManager.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/AppLockManager.kt
 new file mode 100644
-index 000000000..125d9f470
+index 000000000..6ed399d0c
 --- /dev/null
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/AppLockManager.kt
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,50 @@
 +package com.rifsxd.ksunext.ui.util
 +
 +import android.os.SystemClock
@@ -4565,11 +4590,17 @@ index 000000000..125d9f470
 +        activeActivities++
 +    }
 +
-+    fun onActivityStop() {
++    fun onActivityStop(context: android.content.Context) {
 +        activeActivities--
 +        if (activeActivities == 0) {
++            val prefs = context.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
++            val timeout = prefs.getLong("app_lock_timeout", 60000L)
++
++            val timeInBackground = SystemClock.elapsedRealtime() - lastBackgroundTime
++            val isLogicallyUnlocked = isUnlocked || (wasUnlockedBeforeBackground && timeInBackground < timeout)
++
 +            lastBackgroundTime = SystemClock.elapsedRealtime()
-+            wasUnlockedBeforeBackground = isUnlocked
++            wasUnlockedBeforeBackground = isLogicallyUnlocked
 +            isUnlocked = false
 +        }
 +    }
@@ -4597,10 +4628,10 @@ index 000000000..125d9f470
 +}
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/BiometricAuth.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/BiometricAuth.kt
 new file mode 100644
-index 000000000..b7c945e6c
+index 000000000..b55143de4
 --- /dev/null
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/util/BiometricAuth.kt
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,39 @@
 +package com.rifsxd.ksunext.ui.util
 +
 +import androidx.biometric.BiometricManager.Authenticators.BIOMETRIC_STRONG
@@ -4611,7 +4642,7 @@ index 000000000..b7c945e6c
 +
 +class BiometricAuthenticator(private val activity: FragmentActivity) {
 +
-+    fun authenticate(title: String, subtitle: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
++    fun authenticate(title: String, subtitle: String? = null, onSuccess: () -> Unit, onError: (String) -> Unit) {
 +        val executor = ContextCompat.getMainExecutor(activity)
 +
 +        val biometricPrompt = BiometricPrompt(activity, executor,
@@ -4627,17 +4658,21 @@ index 000000000..b7c945e6c
 +                }
 +            })
 +
-+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
++        val promptInfoBuilder = BiometricPrompt.PromptInfo.Builder()
 +            .setTitle(title)
-+            .setSubtitle(subtitle)
 +            .setAllowedAuthenticators(BIOMETRIC_STRONG or DEVICE_CREDENTIAL)
-+            .build()
++
++        if (!subtitle.isNullOrBlank()) {
++            promptInfoBuilder.setSubtitle(subtitle)
++        }
++
++        val promptInfo = promptInfoBuilder.build()
 +
 +        biometricPrompt.authenticate(promptInfo)
 +    }
 +}
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/webui/WebUIActivity.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/webui/WebUIActivity.kt
-index 84466c729..8d3a99d77 100644
+index 84466c729..373d3ce33 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/webui/WebUIActivity.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/webui/WebUIActivity.kt
 @@ -38,8 +38,12 @@ import java.text.SimpleDateFormat
@@ -4654,7 +4689,14 @@ index 84466c729..8d3a99d77 100644
  
      private lateinit var webviewInterface: WebViewInterface
      private val rootShell by lazy { createRootShell(true) }
-@@ -60,6 +64,11 @@ class WebUIActivity : ComponentActivity() {
+@@ -54,12 +58,18 @@ class WebUIActivity : ComponentActivity() {
+     private lateinit var saveFileLauncher: ActivityResultLauncher<Intent>
+     private var pendingDownloadData: ByteArray? = null
+     private var pendingDownloadSuggestedFilename: String? = null
++    private var moduleName: String = ""
+ 
+     private val superUserViewModel: SuperUserViewModel by viewModels()
+ 
      private var insetsContinuation: CancellableContinuation<Unit>? = null
      private var isInsetsEnabled = false
  
@@ -4666,21 +4708,33 @@ index 84466c729..8d3a99d77 100644
      fun erudaConsole(context: android.content.Context): String {
          return context.assets.open("eruda.min.js").bufferedReader().use { it.readText() }
      }
-@@ -141,6 +150,13 @@ class WebUIActivity : ComponentActivity() {
+@@ -125,6 +135,7 @@ class WebUIActivity : ComponentActivity() {
+             finishAndRemoveTask()
+             return
+         }
++        moduleName = name
+ 
+         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+             @Suppress("DEPRECATION")
+@@ -141,6 +152,17 @@ class WebUIActivity : ComponentActivity() {
          val developerOptionsEnabled = prefs.getBoolean("enable_developer_options", false)
          val enableWebDebugging = prefs.getBoolean("enable_web_debugging", false)
  
 +        if (savedInstanceState != null) {
 +            appLockState = savedInstanceState.getBoolean("appLockState", false)
-+
++            moduleName = savedInstanceState.getString("moduleName", "")
 +        } else {
-+            appLockState = prefs.getBoolean("enable_biometric_lock", false)
++            val isInternal = intent?.getBooleanExtra("is_internal_transition", false) ?: false
++            if (isInternal) {
++                com.rifsxd.ksunext.ui.util.AppLockManager.unlock()
++            }
++            appLockState = if (isInternal) false else prefs.getBoolean("enable_biometric_lock", false)
 +        }
 +
          WebView.setWebContentsDebuggingEnabled(developerOptionsEnabled && enableWebDebugging)
  
          val moduleDir = "/data/adb/modules/$moduleId"
-@@ -306,6 +322,31 @@ class WebUIActivity : ComponentActivity() {
+@@ -306,6 +328,31 @@ class WebUIActivity : ComponentActivity() {
          setupWebUIBackHandler()
          
          container.addView(webView)
@@ -4712,7 +4766,7 @@ index 84466c729..8d3a99d77 100644
          setContentView(container)
  
          // coroutine-safe inset wait
-@@ -412,6 +453,63 @@ class WebUIActivity : ComponentActivity() {
+@@ -412,6 +459,73 @@ class WebUIActivity : ComponentActivity() {
          }
      }
  
@@ -4731,10 +4785,19 @@ index 84466c729..8d3a99d77 100644
 +            if (!isPromptShowing) {
 +                isPromptShowing = true
 +                lockOverlay.visibility = android.view.View.VISIBLE
++
++                val promptTitle = if (moduleName.isNotBlank()) {
++                    getString(com.rifsxd.ksunext.R.string.biometric_prompt_subtitle_module, moduleName)
++                } else {
++                    getString(com.rifsxd.ksunext.R.string.biometric_prompt_subtitle)
++                }
++
++                val promptSubtitle: String? = null
++
 +                com.rifsxd.ksunext.ui.util.BiometricAuthenticator(this)
 +                    .authenticate(
-+                        title = getString(com.rifsxd.ksunext.R.string.app_name),
-+                        subtitle = getString(com.rifsxd.ksunext.R.string.biometric_prompt_subtitle),
++                        title = promptTitle,
++                        subtitle = promptSubtitle,
 +                        onSuccess = {
 +                            isPromptShowing = false
 +                            appLockState = false
@@ -4760,7 +4823,7 @@ index 84466c729..8d3a99d77 100644
 +
 +    override fun onStop() {
 +        super.onStop()
-+        com.rifsxd.ksunext.ui.util.AppLockManager.onActivityStop()
++        com.rifsxd.ksunext.ui.util.AppLockManager.onActivityStop(this)
 +        val prefs = getSharedPreferences("settings", MODE_PRIVATE)
 +        if (prefs.getBoolean("enable_biometric_lock", false)) {
 +            appLockState = true
@@ -4770,6 +4833,7 @@ index 84466c729..8d3a99d77 100644
 +    override fun onSaveInstanceState(outState: Bundle) {
 +        super.onSaveInstanceState(outState)
 +        outState.putBoolean("appLockState", appLockState)
++        outState.putString("moduleName", moduleName)
 +
 +    }
 +
@@ -4777,7 +4841,7 @@ index 84466c729..8d3a99d77 100644
          webView?.apply {
              stopLoading()
 diff --git a/manager/app/src/main/res/values/strings.xml b/manager/app/src/main/res/values/strings.xml
-index d1c431029..a2ce0373b 100644
+index d1c431029..69fb58bc5 100644
 --- a/manager/app/src/main/res/values/strings.xml
 +++ b/manager/app/src/main/res/values/strings.xml
 @@ -147,6 +147,10 @@
@@ -4791,7 +4855,7 @@ index d1c431029..a2ce0373b 100644
      <string name="restart_required">Restart required</string>
      <string name="restart_app_message">The app needs to restart for this change to take effect.</string>
      <string name="failed_to_update_sepolicy">Failed to update SELinux rules for %s</string>
-@@ -307,4 +311,11 @@
+@@ -307,4 +311,12 @@
      <string name="sulog_uid">UID %1$s</string>
      <string name="sulog_status_success">Success</string>
      <string name="sulog_status_exit">Exit %1$d</string>
@@ -4801,7 +4865,8 @@ index d1c431029..a2ce0373b 100644
 +    <string name="settings_app_lock_timeout_immediate">Immediate</string>
 +    <string name="settings_app_lock_timeout_1m">1 minute</string>
 +    <string name="settings_app_lock_timeout_5m">5 minutes</string>
-+    <string name="biometric_prompt_subtitle">Authenticate to access manager</string>
++    <string name="biometric_prompt_subtitle">Unlock Manager</string>
++    <string name="biometric_prompt_subtitle_module">Unlock %1$s</string>
  </resources>
 diff --git a/manager/build.gradle.kts b/manager/build.gradle.kts
 index 56f21ef7a..27b415a92 100644
@@ -4895,50 +4960,13 @@ index 56f21ef7a..27b415a92 100644
  subprojects {
      plugins.withType(AndroidBasePlugin::class.java) {
          extensions.configure(CommonExtension::class.java) {
-diff --git a/userspace/ksud/Cargo.lock b/userspace/ksud/Cargo.lock
-index 89c599840..dc1c0b911 100644
---- a/userspace/ksud/Cargo.lock
-+++ b/userspace/ksud/Cargo.lock
-@@ -46,12 +46,6 @@ dependencies = [
-  "zopfli",
- ]
- 
--[[package]]
--name = "android-properties"
--version = "0.2.2"
--source = "registry+https://github.com/rust-lang/crates.io-index"
--checksum = "fc7eb209b1518d6bb87b283c20095f5228ecda460da70b44f0802523dea6da04"
--
- [[package]]
- name = "android_log-sys"
- version = "0.3.2"
-@@ -997,7 +991,6 @@ name = "ksud"
- version = "0.1.0"
- dependencies = [
-  "android-bootimg",
-- "android-properties",
-  "android_logger",
-  "anyhow",
-  "base16ct",
-diff --git a/userspace/ksud/Cargo.toml b/userspace/ksud/Cargo.toml
-index 74f58222b..370479999 100644
---- a/userspace/ksud/Cargo.toml
-+++ b/userspace/ksud/Cargo.toml
-@@ -29,7 +29,6 @@ android-bootimg = { git = "https://github.com/5ec1cff/android_bootimg", rev = "1
- rustix = { version = "1", features = [
-     "all-apis",
- ] }
--android-properties = { version = "0.2", features = ["bionic-deprecated"] }
- android_logger = { version = "0.15", default-features = false }
- zip = { version = "8",  features = [
-     "deflate",
 diff --git a/userspace/ksud/build.rs b/userspace/ksud/build.rs
-index 9f8819666..7e5a123ea 100644
+index c21f33a38..688e22d43 100644
 --- a/userspace/ksud/build.rs
 +++ b/userspace/ksud/build.rs
-@@ -4,9 +4,29 @@ use std::io::Write;
- use std::path::Path;
- use std::process::Command;
+@@ -9,9 +9,29 @@ const BOOTSTRAP_SOURCE: &str = "src/lkm_image_bootstrap.S";
+ const BOOTSTRAP_OBJECT: &str = "lkm_image_bootstrap.o";
+ const PREPARED_BOOTSTRAP_OBJECT: &str = ".lkm_image_bootstrap.o";
  
 +fn get_base_commit() -> String {
 +    let branch = Command::new("git").args(["rev-parse", "--abbrev-ref", "HEAD"]).output()
@@ -4967,7 +4995,7 @@ index 9f8819666..7e5a123ea 100644
          .output()?;
  
      let output = output.stdout;
-@@ -19,7 +39,7 @@ fn get_git_version() -> Result<(u32, String), std::io::Error> {
+@@ -24,7 +44,7 @@ fn get_git_version() -> Result<(u32, String), std::io::Error> {
  
      let version_name = String::from_utf8(
          Command::new("git")
@@ -4977,10 +5005,10 @@ index 9f8819666..7e5a123ea 100644
              .stdout,
      )
 diff --git a/userspace/ksud/src/cli.rs b/userspace/ksud/src/cli.rs
-index f1bb8bcc2..d5d088bd1 100644
+index 812894cea..cf777e969 100644
 --- a/userspace/ksud/src/cli.rs
 +++ b/userspace/ksud/src/cli.rs
-@@ -511,7 +511,7 @@ pub fn run() -> Result<()> {
+@@ -517,7 +517,7 @@ pub fn run() -> Result<()> {
      log::info!("command: {:?}", cli.command);
  
      let result = match cli.command {
@@ -4990,7 +5018,7 @@ index f1bb8bcc2..d5d088bd1 100644
              init_event::on_boot_completed();
              Ok(())
 diff --git a/userspace/ksud/src/init_event.rs b/userspace/ksud/src/init_event.rs
-index d133c1160..47a8b2a7b 100644
+index d133c1160..b8d58b632 100644
 --- a/userspace/ksud/src/init_event.rs
 +++ b/userspace/ksud/src/init_event.rs
 @@ -13,7 +13,7 @@ use rustix::process::chdir;
@@ -5011,16 +5039,28 @@ index d133c1160..47a8b2a7b 100644
          // Then exec common post-fs-data scripts
          if let Err(e) = crate::module::exec_common_scripts("post-fs-data.d", true) {
              warn!("exec common post-fs-data scripts failed: {e}");
-@@ -269,7 +269,7 @@ pub fn soft_reboot() -> Result<()> {
+@@ -268,8 +268,19 @@ pub fn soft_reboot() -> Result<()> {
+     if !status.success() {
          warn!("stop exited with status: {status}");
      }
++
++    // Wait for Zygote teardown to prevent injection race conditions
++    let rp = resetprop();
++    let timeout = Some(std::time::Duration::from_secs(2));
++    if sys_prop::get("init.svc.zygote").is_some() {
++        let _ = rp.wait("init.svc.zygote", Some("stopped"), timeout);
++    }
++    if sys_prop::get("init.svc.zygote_secondary").is_some() {
++        let _ = rp.wait("init.svc.zygote_secondary", Some("stopped"), timeout);
++    }
++
      info!("post-fs-data");
 -    on_post_data_fs()?;
 +    on_post_data_fs(true)?;
      info!("start");
      let status = Command::new("start").status().context("start failed")?;
      if !status.success() {
-@@ -282,6 +282,16 @@ pub fn soft_reboot() -> Result<()> {
+@@ -282,6 +293,16 @@ pub fn soft_reboot() -> Result<()> {
      }
      on_boot_completed();
  
@@ -5037,76 +5077,6 @@ index d133c1160..47a8b2a7b 100644
      unsafe {
          _exit(0);
      }
-diff --git a/userspace/ksud/src/utils.rs b/userspace/ksud/src/utils.rs
-index a43f1bc86..3c8399c45 100644
---- a/userspace/ksud/src/utils.rs
-+++ b/userspace/ksud/src/utils.rs
-@@ -3,6 +3,7 @@ use rustix::fs::{Mode, OFlags, open};
- use rustix::process::setpgid;
- use rustix::stdio::{dup2_stderr, dup2_stdin, dup2_stdout};
- use std::{
-+    ffi::{CStr, CString, c_char, c_void},
-     fs::{File, OpenOptions, create_dir_all, remove_file, write},
-     io::{
-         ErrorKind::{AlreadyExists, NotFound},
-@@ -27,6 +28,17 @@ use rustix::{
-     thread::{LinkNameSpaceType, move_into_link_name_space},
- };
- 
-+type PropertyReadCallback = unsafe extern "C" fn(*mut c_void, *const c_char, *const c_char, u32);
-+
-+unsafe extern "C" {
-+    fn __system_property_find(name: *const c_char) -> *const c_void;
-+    fn __system_property_read_callback(
-+        property_info: *const c_void,
-+        callback: PropertyReadCallback,
-+        cookie: *mut c_void,
-+    );
-+}
-+
- #[macro_export]
- macro_rules! debug_select {
-     ($debug:expr, $release:expr) => {{
-@@ -103,8 +115,37 @@ pub fn ensure_binary<T: AsRef<Path>>(
-     Ok(())
- }
- 
--pub fn getprop(prop: &str) -> Option<String> {
--    android_properties::getprop(prop).value()
-+unsafe extern "C" fn property_read_callback(
-+    cookie: *mut c_void,
-+    _name: *const c_char,
-+    value: *const c_char,
-+    _serial: u32,
-+) {
-+    if cookie.is_null() || value.is_null() {
-+        return;
-+    }
-+
-+    let result = unsafe { &mut *cookie.cast::<Option<String>>() };
-+    let value = unsafe { CStr::from_ptr(value) };
-+    *result = Some(value.to_string_lossy().into_owned());
-+}
-+
-+pub fn getprop(name: &str) -> Option<String> {
-+    let name = CString::new(name).ok()?;
-+    let property_info = unsafe { __system_property_find(name.as_ptr()) };
-+    if property_info.is_null() {
-+        return None;
-+    }
-+
-+    let mut value = None;
-+    unsafe {
-+        __system_property_read_callback(
-+            property_info,
-+            property_read_callback,
-+            std::ptr::addr_of_mut!(value).cast(),
-+        );
-+    }
-+    value
- }
- 
- pub fn is_safe_mode() -> bool {
 -- 
 2.43.0
 
