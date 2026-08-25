@@ -657,6 +657,9 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
     patch -p1 --forward < "$KERNEL_PATCHES/common/reduce_cache_pressure.patch"
     patch -p1 --forward < "$KERNEL_PATCHES/common/mem_opt_prefetch.patch"
     
+    info -n "Applying zram-kernel-fixes_android12_5.10 patch..."
+    patch -p1 --forward < "$PATCHES/zram-kernel-fixes_android12_5.10.patch"
+
     info -n "Applying optimise_noneon_memcmp_android12_5.10 patch..."
     patch -p1 --forward < "$PATCHES/optimise_noneon_memcmp_android12_5.10.patch"
     
