@@ -484,6 +484,10 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-val NF_NAT_IPV6 y \
         --set-val IP6_NF_TARGET_MASQUERADE y
         
+        info "Adding CRYPTO_LZO Support..."
+        $CONFIG_TOOL --file $DEFCONFIG \
+        --set-val CRYPTO_LZO y
+        
         if [[ "$KSU_VARIANT" != "none" ]]; then
             info -n "Setting $KSU_LABEL & SUSFS configs..."
             # KernelSU & SUSFS
@@ -578,9 +582,6 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                 info -n "Patching SUSFS into Kernel..."
                 patch -p1 < $SUSFS_PATCHES/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch || true
                 
-                info -n "Fixing set_nameidata() call in fs/namei.c..."
-                sed -i 's/set_nameidata(nd, old_dfd, fake_filename, NULL);/set_nameidata(nd, old_dfd, fake_filename);/g' fs/namei.c
-                
                 # Samsung Specific Patches
                 info -n "Applying Samsung device patches..."
                 for rej in $(find ./ -maxdepth 8 -name "*.rej" -exec basename {} .rej \;); do
@@ -604,12 +605,18 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                 
                 REJ_FILES=$(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;)
                 
+                if [[ "$KSU_VARIANT" != "ksun" ]]; then
+                    FIX_PATCH_BASE="$KERNEL_PATCHES/next/susfs_fix_patches/"
+                else
+                    FIX_PATCH_BASE="$KERNEL_PATCHES/ksu/susfs_fix_patches/"
+                fi
+                
                 if [[ -z "$REJ_FILES" ]]; then
                     info -n "No .rej files found. Nothing to patch."
                 else
                     info -n "Patching .rej fixes in $KSU_LABEL..."
                     for rej in $REJ_FILES; do
-                        FIX_PATCH="$KERNEL_PATCHES/next/susfs_fix_patches/$SUSFS_VER/fix_$rej.patch"
+                        FIX_PATCH="$FIX_PATCH_BASE/fix_$rej.patch"
                         
                         if [[ -f "$FIX_PATCH" ]]; then
                             info -n "Patching $rej"
@@ -659,7 +666,7 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
     
     info -n "Applying zram-kernel-fixes_android12_5.10 patch..."
     patch -p1 --forward < "$PATCHES/zram-kernel-fixes_android12_5.10.patch"
-
+    
     info -n "Applying optimise_noneon_memcmp_android12_5.10 patch..."
     patch -p1 --forward < "$PATCHES/optimise_noneon_memcmp_android12_5.10.patch"
     
