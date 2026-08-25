@@ -1,0 +1,128 @@
+From 8c68cc4290d8e6a31de2ffbfbb09fabc327235bb Mon Sep 17 00:00:00 2001
+From: poqdavid <poq-david@live.com>
+Date: Tue, 25 Aug 2026 23:30:21 +0200
+Subject: [PATCH] zram: fix writeback NULL pointer crash and false lzo-rle availability
+
+Two independent zram bugs, both found while debugging a boot-time
+kernel panic:
+
+1. is_bdev_avail() dereferences zram->bdev to check ->bd_disk
+   without first checking that zram->bdev itself is non-NULL.
+   zram->bdev is only set once a backing device is configured via
+   /sys/block/zramX/backing_dev.
+
+   zram_wb_available() -> is_bdev_avail() is reached from the SQZR/
+   RAMPLUS writeback path (zram_writeback_oem_func ->
+   zram_add_to_writeback_list) with no caller-side guard - no
+   init_lock, no init_done() check, no backing_dev check. This path
+   can fire from ordinary memory-reclaim activity (madvise-driven
+   pageout) as early as ~7s into boot, before userspace has
+   configured the backing device, producing:
+
+     PC: zram_wb_available+0x48/0x174 [zram]
+     LR: zram_add_to_writeback_list+0x3c/0x284 [zram]
+     Call trace: walk_pgd_range -> madvise_writeback_pte_range ->
+       zram_writeback_oem_func -> zram_add_to_writeback_list ->
+       zram_wb_available -> is_bdev_avail -> die
+
+   Fix by adding the missing NULL check in is_bdev_avail(), plus an
+   explicit backing_dev check in zram_wb_available() itself as a
+   cheap short-circuit - matching the guard every other
+   zram_wb_available() call site already has before reaching it.
+
+2. zcomp's backends[] array gates every compressor behind an
+   IS_ENABLED() check for its crypto config except "lzo" and
+   "lzo-rle", which were listed unconditionally. This let
+   comp_algorithm advertise both as selectable even with
+   CONFIG_CRYPTO_LZO disabled and neither actually registered,
+   because zcomp_available_algorithm()'s sysfs_match_string()
+   fast path returned true purely from the string being present
+   in the array - the request only failed later, when
+   disksize_store() tried to actually allocate the stream:
+
+     Can't allocate a compression stream
+     zram: Cannot initialise lzo-rle compressing backend
+
+   Fix by adding the missing guard to backends[], and by dropping
+   the sysfs_match_string() fast path from
+   zcomp_available_algorithm() entirely in favor of
+   crypto_has_comp() alone, closing the same bug class for any
+   future backend rather than just this instance.
+
+3. default_compressor was hardcoded to "lzo-rle", but vendor init
+   (init.mt6789.rc) unconditionally overwrites comp_algorithm to
+   "lz4" on every boot regardless of this compiled-in value - it
+   has no observable effect in normal operation. With
+   CONFIG_CRYPTO_LZO now enabled (making lzo-rle genuinely
+   functional rather than just falsely advertised, per fix 2
+   above), set default_compressor to "lz4" explicitly so the
+   compiled-in fallback matches actual runtime behavior rather
+   than naming an algorithm the device never actually starts
+   with.
+---
+ kernel-5.10/drivers/block/zram/zcomp.c    | 8 ++------
+ kernel-5.10/drivers/block/zram/zram_drv.c | 6 +++---
+ 2 files changed, 5 insertions(+), 9 deletions(-)
+
+diff --git a/drivers/block/zram/zcomp.c b/drivers/block/zram/zcomp.c
+index b684cb666..7a3d8620f 100755
+--- a/drivers/block/zram/zcomp.c
++++ b/drivers/block/zram/zcomp.c
+@@ -15,8 +15,10 @@
+ #include "zcomp.h"
+ 
+ static const char * const backends[] = {
++#if IS_ENABLED(CONFIG_CRYPTO_LZO)
+ 	"lzo",
+ 	"lzo-rle",
++#endif
+ #if IS_ENABLED(CONFIG_CRYPTO_LZ4)
+ 	"lz4",
+ #endif
+@@ -70,12 +72,6 @@ static int zcomp_strm_init(struct zcomp_strm *zstrm, struct zcomp *comp)
+ 
+ bool zcomp_available_algorithm(const char *comp)
+ {
+-	int i;
+-
+-	i = sysfs_match_string(backends, comp);
+-	if (i >= 0)
+-		return true;
+-
+ 	/*
+ 	 * Crypto does not ignore a trailing new line symbol,
+ 	 * so make sure you don't supply a string containing
+diff --git a/drivers/block/zram/zram_drv.c b/drivers/block/zram/zram_drv.c
+index 19f718489..165f32c18 100755
+--- a/drivers/block/zram/zram_drv.c
++++ b/drivers/block/zram/zram_drv.c
+@@ -59,7 +59,7 @@ static DEFINE_IDR(zram_index_idr);
+ static DEFINE_MUTEX(zram_index_mutex);
+ 
+ static int zram_major;
+-static const char *default_compressor = "lzo-rle";
++static const char *default_compressor = "lz4";
+ 
+ static bool is_lzorle;
+ static unsigned char lzo_marker[4] = {0x11, 0x00, 0x00};
+@@ -947,7 +947,7 @@ static bool is_bdev_avail(struct zram *zram)
+ 	u64 min_free_blocks;
+ 	int ret;
+ 
+-	if (!zram->bdev->bd_disk)
++	if (!zram->bdev || !zram->bdev->bd_disk)
+ 		return false;
+ 
+ 	lo = zram->bdev->bd_disk->private_data;
+@@ -987,7 +987,7 @@ static inline bool zram_throttle_writeback_size(struct zram *zram)
+ 
+ static bool zram_wb_available(struct zram *zram)
+ {
+-	if (!is_bdev_avail(zram))
++	if (!zram->backing_dev || !is_bdev_avail(zram))
+ 		return false;
+ 
+ 	if (!zram->wb_table)
+-- 
+2.43.0
+

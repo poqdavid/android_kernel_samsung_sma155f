@@ -484,6 +484,10 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-val NF_NAT_IPV6 y \
         --set-val IP6_NF_TARGET_MASQUERADE y
         
+        info "Adding CRYPTO_LZO Support..."
+        $CONFIG_TOOL --file $DEFCONFIG \
+        --set-val CRYPTO_LZO y
+        
         if [[ "$KSU_VARIANT" != "none" ]]; then
             info -n "Setting $KSU_LABEL & SUSFS configs..."
             # KernelSU & SUSFS
@@ -659,6 +663,9 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
     patch -p1 --forward < "$KERNEL_PATCHES/common/file_struct_8bytes_align.patch"
     patch -p1 --forward < "$KERNEL_PATCHES/common/reduce_cache_pressure.patch"
     patch -p1 --forward < "$KERNEL_PATCHES/common/mem_opt_prefetch.patch"
+    
+    info -n "Applying zram-kernel-fixes_android12_5.10 patch..."
+    patch -p1 --forward < "$PATCHES/zram-kernel-fixes_android12_5.10.patch"
     
     info -n "Applying optimise_noneon_memcmp_android12_5.10 patch..."
     patch -p1 --forward < "$PATCHES/optimise_noneon_memcmp_android12_5.10.patch"
