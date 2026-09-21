@@ -1,0 +1,107 @@
+From 0d18de045eba0dce19cd30b114d121ffe815f949 Mon Sep 17 00:00:00 2001
+From: Oswald Buddenhagen <oswald.buddenhagen@gmx.de>
+Date: Mon, 16 Mar 2026 12:38:07 -0400
+Subject: [PATCH] ALSA: pcm: fix wait_time calculations
+
+[ Upstream commit 3ed2b549b39f57239aad50a255ece353997183fd ]
+
+... in wait_for_avail() and snd_pcm_drain().
+
+t was calculated in seconds, so it would be pretty much always zero, to
+be subsequently de-facto ignored due to being max(t, 10)'d. And then it
+(i.e., 10) would be treated as secs, which doesn't seem right.
+
+However, fixing it to properly calculate msecs would potentially cause
+timeouts when using twice the period size for the default timeout (which
+seems reasonable to me), so instead use the buffer size plus 10 percent
+to be on the safe side ... but that still seems insufficient, presumably
+because the hardware typically needs a moment to fire up. To compensate
+for this, we up the minimal timeout to 100ms, which is still two orders
+of magnitude less than the bogus minimum.
+
+substream->wait_time was also misinterpreted as jiffies, despite being
+documented as being in msecs. Only the soc/sof driver sets it - to 500,
+which looks very much like msecs were intended.
+
+Speaking of which, shouldn't snd_pcm_drain() also use substream->
+wait_time?
+
+As a drive-by, make the debug messages on timeout less confusing.
+
+Signed-off-by: Oswald Buddenhagen <oswald.buddenhagen@gmx.de>
+Link: https://lore.kernel.org/r/20230405201219.2197774-1-oswald.buddenhagen@gmx.de
+Signed-off-by: Takashi Iwai <tiwai@suse.de>
+Stable-dep-of: 9b1dbd69ba6f ("ALSA: pcm: fix use-after-free on linked stream runtime in snd_pcm_drain()")
+Signed-off-by: Sasha Levin <sashal@kernel.org>
+Signed-off-by: Greg Kroah-Hartman <gregkh@linuxfoundation.org>
+---
+ sound/core/pcm_lib.c    | 11 +++++------
+ sound/core/pcm_native.c |  8 ++++----
+ 2 files changed, 9 insertions(+), 10 deletions(-)
+
+diff --git a/sound/core/pcm_lib.c b/sound/core/pcm_lib.c
+index 02fd65993e7e5..af1eb136feb09 100644
+--- a/sound/core/pcm_lib.c
++++ b/sound/core/pcm_lib.c
+@@ -1878,15 +1878,14 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
+ 		if (substream->wait_time) {
+ 			wait_time = substream->wait_time;
+ 		} else {
+-			wait_time = 10;
++			wait_time = 100;
+ 
+ 			if (runtime->rate) {
+-				long t = runtime->period_size * 2 /
+-					 runtime->rate;
++				long t = runtime->buffer_size * 1100 / runtime->rate;
+ 				wait_time = max(t, wait_time);
+ 			}
+-			wait_time = msecs_to_jiffies(wait_time * 1000);
+ 		}
++		wait_time = msecs_to_jiffies(wait_time);
+ 	}
+ 
+ 	for (;;) {
+@@ -1934,8 +1933,8 @@ static int wait_for_avail(struct snd_pcm_substream *substream,
+ 		}
+ 		if (!tout) {
+ 			pcm_dbg(substream->pcm,
+-				"%s write error (DMA or IRQ trouble?)\n",
+-				is_playback ? "playback" : "capture");
++				"%s timeout (DMA or IRQ trouble?)\n",
++				is_playback ? "playback write" : "capture read");
+ 			err = -EIO;
+ 			break;
+ 		}
+diff --git a/sound/core/pcm_native.c b/sound/core/pcm_native.c
+index cfd072a41fef4..256fcadf8e599 100644
+--- a/sound/core/pcm_native.c
++++ b/sound/core/pcm_native.c
+@@ -2172,12 +2172,12 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
+ 		if (runtime->no_period_wakeup)
+ 			tout = MAX_SCHEDULE_TIMEOUT;
+ 		else {
+-			tout = 10;
++			tout = 100;
+ 			if (runtime->rate) {
+-				long t = runtime->period_size * 2 / runtime->rate;
++				long t = runtime->buffer_size * 1100 / runtime->rate;
+ 				tout = max(t, tout);
+ 			}
+-			tout = msecs_to_jiffies(tout * 1000);
++			tout = msecs_to_jiffies(tout);
+ 		}
+ 		tout = schedule_timeout(tout);
+ 
+@@ -2200,7 +2200,7 @@ static int snd_pcm_drain(struct snd_pcm_substream *substream,
+ 				result = -ESTRPIPE;
+ 			else {
+ 				dev_dbg(substream->pcm->card->dev,
+-					"playback drain error (DMA or IRQ trouble?)\n");
++					"playback drain timeout (DMA or IRQ trouble?)\n");
+ 				snd_pcm_stop(substream, SNDRV_PCM_STATE_SETUP);
+ 				result = -EIO;
+ 			}
+-- 
+GitLab
+
