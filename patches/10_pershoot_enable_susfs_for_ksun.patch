@@ -1,19 +1,19 @@
-From fba14b20e5af16110d604c10f427ef5745482219 Mon Sep 17 00:00:00 2001
+From 1055baa4468f818af68588ef36bd7706dd8d8be0 Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Wed, 26 Aug 2026 00:59:00 +0200
-Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
+Date: Tue, 22 Sep 2026 01:17:30 +0200
+Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
 
 ---
- kernel/Kbuild                                 |  75 ++--
- kernel/Kconfig                                | 107 +++++-
+ kernel/Kbuild                                 |  81 ++--
+ kernel/Kconfig                                | 106 +++++-
  kernel/core/init.c                            |  47 +++
  kernel/extras.c                               |  22 +-
- kernel/feature/adb_root.c                     | 163 ++++++++-
+ kernel/feature/adb_root.c                     | 163 +++++++-
  kernel/feature/adb_root.h                     |   4 +
  kernel/feature/kernel_umount.c                |   9 +-
- kernel/feature/selinux_hide.c                 | 163 +++++----
+ kernel/feature/selinux_hide.c                 | 163 ++++----
  kernel/feature/selinux_hide.h                 |  15 +
- kernel/feature/sucompat.c                     | 338 +++++++++++++++++-
+ kernel/feature/sucompat.c                     | 350 +++++++++++++++++-
  kernel/feature/sucompat.h                     |  16 +-
  kernel/hook/setuid_hook.c                     | 169 ++++++++-
  kernel/hook/setuid_hook.h                     |   4 +
@@ -22,28 +22,28 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  kernel/manager/throne_tracker.c               |  92 ++++-
  kernel/manager/throne_tracker.h               |  52 ++-
  kernel/policy/allowlist.c                     |   2 +
- kernel/policy/app_profile.c                   |  21 +-
+ kernel/policy/app_profile.c                   |  27 +-
  kernel/policy/app_profile.h                   |   2 +-
  kernel/runtime/boot_event.c                   |  21 +-
- kernel/runtime/ksud.h                         |  20 ++
- kernel/runtime/ksud_integration.c             | 195 +++++++---
+ kernel/runtime/ksud.h                         |  20 +
+ kernel/runtime/ksud_integration.c             | 197 +++++++---
  kernel/selinux/rules.c                        |  22 ++
- kernel/selinux/selinux.c                      | 251 +++++++++----
+ kernel/selinux/selinux.c                      | 105 +++++-
  kernel/selinux/selinux.h                      |  11 +
  kernel/setup.sh                               |   2 +
  kernel/sulog/event.c                          |  84 +++++
  kernel/sulog/event.h                          |   4 +
  kernel/supercall/dispatch.c                   | 153 ++++++++
  kernel/supercall/internal.h                   |   2 +
- kernel/supercall/supercall.c                  | 189 ++++++----
+ kernel/supercall/supercall.c                  | 195 ++++++----
  kernel/supercall/supercall.h                  |   4 +
  manager/app/build.gradle.kts                  |   6 +
- .../com/rifsxd/ksunext/ui/MainActivity.kt     | 143 +++++++-
+ .../com/rifsxd/ksunext/ui/MainActivity.kt     | 149 +++++++-
  .../rifsxd/ksunext/ui/screen/AppProfile.kt    |   2 +-
  .../rifsxd/ksunext/ui/screen/BackupRestore.kt |   2 +-
  .../rifsxd/ksunext/ui/screen/Customization.kt |  35 +-
  .../com/rifsxd/ksunext/ui/screen/Developer.kt |   2 +-
- .../java/com/rifsxd/ksunext/ui/screen/Home.kt |  32 +-
+ .../java/com/rifsxd/ksunext/ui/screen/Home.kt |  24 +-
  .../rifsxd/ksunext/ui/screen/MetaModule.kt    |   7 +-
  .../com/rifsxd/ksunext/ui/screen/Module.kt    |  19 +-
  .../rifsxd/ksunext/ui/screen/ModuleRepo.kt    |   6 +-
@@ -58,18 +58,24 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  manager/app/src/main/res/values/strings.xml   |  12 +
  manager/build.gradle.kts                      |  69 +++-
  userspace/ksud/build.rs                       |  24 +-
- userspace/ksud/src/init_event.rs              |  10 +
- 55 files changed, 2640 insertions(+), 429 deletions(-)
+ userspace/ksud/src/init_event.rs              |  21 ++
+ 55 files changed, 2604 insertions(+), 359 deletions(-)
  create mode 100644 manager/app/src/main/java/com/rifsxd/ksunext/ui/util/AppLockManager.kt
  create mode 100644 manager/app/src/main/java/com/rifsxd/ksunext/ui/util/BiometricAuth.kt
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index cec135d13..f51f739a6 100644
+index b9a89800f..535f7d136 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
-@@ -1,21 +1,36 @@
- kernelsu-objs := core/init.o
--
+@@ -1,21 +1,42 @@
+-kernelsu-objs := core/init.o
++ifneq ($(strip $(CONFIG_KPROBES)),y)
++ifneq ($(strip $(CONFIG_KSU_SUSFS)),y)
++$(error "KernelSU requires either CONFIG_KPROBES=y or CONFIG_KSU_SUSFS=y")
++endif
++endif
+ 
++kernelsu-objs := core/init.o
  kernelsu-objs += feature/kernel_umount.o
  kernelsu-objs += feature/sulog.o
  kernelsu-objs += feature/sucompat.o
@@ -105,14 +111,14 @@ index cec135d13..f51f739a6 100644
 +ifdef KSU_ARCH
 +kernelsu-objs += hook/$(KSU_ARCH)/syscall_hook.o
 +endif
-+endif
  endif
++endif
 +
 +kernelsu-objs += hook/setuid_hook.o
  kernelsu-objs += extras.o
  
  kernelsu-objs += infra/file_wrapper.o
-@@ -24,7 +39,7 @@ kernelsu-objs += infra/seccomp_cache.o
+@@ -24,7 +45,7 @@ kernelsu-objs += infra/seccomp_cache.o
  kernelsu-objs += infra/su_mount_ns.o
  kernelsu-objs += infra/symbol_resolver.o
  
@@ -121,7 +127,7 @@ index cec135d13..f51f739a6 100644
  kernelsu-objs += manager/apk_sign.o
  kernelsu-objs += manager/pkg_observer.o
  kernelsu-objs += manager/throne_tracker.o
-@@ -53,13 +68,13 @@ kernelsu-objs += feature/adb_root.o
+@@ -53,13 +74,13 @@ kernelsu-objs += feature/adb_root.o
  kernelsu-objs += feature/selinux_hide.o
  
  ifdef KBUILD_EXTMOD
@@ -138,7 +144,7 @@ index cec135d13..f51f739a6 100644
  ccflags-y += -DCONFIG_KSU_DEBUG=1
  endif
  ifeq ($(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER),y)
-@@ -91,8 +106,12 @@ KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplev
+@@ -98,8 +119,12 @@ KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplev
  ifneq ($(GIT_ROOT),$(KERNEL_GIT_ROOT))
  # Only set version if it's a different repo from kernel
  $(shell cd $(GIT_ROOT) && [ -f .git/shallow ] && $(LPATH) git fetch --unshallow 2>/dev/null || true)
@@ -153,7 +159,7 @@ index cec135d13..f51f739a6 100644
  KSU_GIT_VERSION_VALID := 1
  $(info -- KernelSU-Next Git repo detected at: $(GIT_ROOT))
  endif
-@@ -126,12 +145,9 @@ endif
+@@ -133,12 +158,9 @@ endif
  KSU_NEW_DCACHE_FLUSH := $(shell grep -q __flush_dcache_area $(srctree)/arch/arm64/include/asm/cacheflush.h ; echo $$?)
  $(info -- KernelSU-Next new DCACHE flush: $(KSU_NEW_DCACHE_FLUSH))
  
@@ -169,7 +175,7 @@ index cec135d13..f51f739a6 100644
  endif
  
  ifdef KSU_MANAGER_PACKAGE
-@@ -139,15 +155,24 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
+@@ -146,15 +168,24 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
  $(info -- KernelSU-Next Manager package name: $(KSU_MANAGER_PACKAGE))
  endif
  
@@ -183,7 +189,7 @@ index cec135d13..f51f739a6 100644
  
  ccflags-y += -DKSU_NEW_DCACHE_FLUSH=$(KSU_NEW_DCACHE_FLUSH)
  
- ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
+ ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes -Wno-missing-declarations
  ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable
  
 +## For susfs stuff ##
@@ -200,15 +206,14 @@ index cec135d13..f51f739a6 100644
 +
  # Keep a new line here!! Because someone may append config
 diff --git a/kernel/Kconfig b/kernel/Kconfig
-index 88e228117..1f30a997c 100644
+index 88e228117..ceb94e175 100644
 --- a/kernel/Kconfig
 +++ b/kernel/Kconfig
-@@ -2,12 +2,12 @@ menu "KernelSU"
+@@ -2,12 +2,11 @@ menu "KernelSU"
  
  config KSU
  	tristate "KernelSU function support"
 -	depends on KPROBES && EXT4_FS
-+	depends on KPROBES || SUSFS
  	default y
  	help
  	  Enable kernel-level root privileges on Android System.
@@ -219,7 +224,7 @@ index 88e228117..1f30a997c 100644
  	  To compile as a module, choose M here: the
  	  module will be called kernelsu.
  
-@@ -18,6 +18,16 @@ config KSU_DEBUG
+@@ -18,6 +17,16 @@ config KSU_DEBUG
  	help
  	  Enable KernelSU debug mode.
  
@@ -236,7 +241,7 @@ index 88e228117..1f30a997c 100644
  config KSU_DISABLE_MANAGER
  	bool "Disable KernelSU manager integration"
  	depends on KSU
-@@ -43,4 +53,95 @@ config KSU_X86_PATCH_SYSCALL_DISPATCHER
+@@ -43,4 +52,95 @@ config KSU_X86_PATCH_SYSCALL_DISPATCHER
  	  Dynamically patch x64's hardened syscall dispatcher to support syscall hooks. This is a
  	  replacement for a kernel source code patch, and is useful for x86_64 LKM mode.
  
@@ -333,7 +338,7 @@ index 88e228117..1f30a997c 100644
 +
  endmenu
 diff --git a/kernel/core/init.c b/kernel/core/init.c
-index 7e9b08816..db56683c2 100644
+index f60c2fd09..d99da109d 100644
 --- a/kernel/core/init.c
 +++ b/kernel/core/init.c
 @@ -26,6 +26,13 @@
@@ -350,7 +355,7 @@ index 7e9b08816..db56683c2 100644
  #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
  #include <asm/cpufeature.h>
  #include <linux/version.h>
-@@ -86,6 +93,10 @@ module_param_named(norc, ksu_no_custom_rc, bool, 0);
+@@ -91,6 +98,10 @@ module_param_named(bundled, ksu_bundled, bool, 0);
  
  int __init kernelsu_init(void)
  {
@@ -361,7 +366,7 @@ index 7e9b08816..db56683c2 100644
  #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
      // If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set
      if (!boot_cpu_has(X86_FEATURE_INDIRECT_SAFE)) {
-@@ -128,17 +139,32 @@ int __init kernelsu_init(void)
+@@ -133,17 +144,32 @@ int __init kernelsu_init(void)
  	}
  
  	ksu_init_symbol_resolver();
@@ -394,7 +399,7 @@ index 7e9b08816..db56683c2 100644
  	if (ksu_late_loaded) {
  		pr_info("late load mode, skipping kprobe hooks\n");
  
-@@ -154,7 +180,9 @@ int __init kernelsu_init(void)
+@@ -159,7 +185,9 @@ int __init kernelsu_init(void)
  		ksu_allowlist_init();
  		ksu_load_allow_list();
  
@@ -404,7 +409,7 @@ index 7e9b08816..db56683c2 100644
  
  		ksu_throne_tracker_init();
  		ksu_observer_init();
-@@ -163,13 +191,20 @@ int __init kernelsu_init(void)
+@@ -168,13 +196,20 @@ int __init kernelsu_init(void)
  		ksu_boot_completed = true;
  		track_throne(false);
  
@@ -425,7 +430,7 @@ index 7e9b08816..db56683c2 100644
  
  		ksu_allowlist_init();
  
-@@ -191,7 +226,9 @@ int __init kernelsu_init(void)
+@@ -196,7 +231,9 @@ int __init kernelsu_init(void)
  void __exit kernelsu_exit(void)
  {
  	// Phase 1: Stop all hooks first to prevent new callbacks
@@ -435,7 +440,7 @@ index 7e9b08816..db56683c2 100644
  
  	ksu_supercalls_exit();
  
-@@ -208,9 +245,19 @@ void __exit kernelsu_exit(void)
+@@ -213,9 +250,19 @@ void __exit kernelsu_exit(void)
  
  	ksu_allowlist_exit();
  
@@ -456,10 +461,10 @@ index 7e9b08816..db56683c2 100644
  	ksu_adb_root_exit();
  
 diff --git a/kernel/extras.c b/kernel/extras.c
-index 0cb3ffd02..434d46685 100644
+index 85be4d296..e2f77a44d 100644
 --- a/kernel/extras.c
 +++ b/kernel/extras.c
-@@ -8,6 +8,12 @@
+@@ -9,6 +9,12 @@
  #include "runtime/ksud.h"
  #include "infra/seccomp_cache.h"
  
@@ -472,7 +477,7 @@ index 0cb3ffd02..434d46685 100644
  // sorry for the ifdef hell
  // but im too lazy to fragment this out.
  // theres only one feature so far anyway
-@@ -22,7 +28,7 @@ static atomic_t disable_spoof = ATOMIC_INIT(1);
+@@ -23,7 +29,7 @@ static atomic_t disable_spoof = ATOMIC_INIT(1);
  void ksu_avc_spoof_enable();
  void ksu_avc_spoof_disable();
  
@@ -481,7 +486,7 @@ index 0cb3ffd02..434d46685 100644
  static bool boot_completed = false;
  
  static int avc_spoof_feature_get(u64 *value)
-@@ -35,6 +41,13 @@ static int avc_spoof_feature_set(u64 value)
+@@ -36,6 +42,13 @@ static int avc_spoof_feature_set(u64 value)
  {
  	bool enable = value != 0;
  
@@ -495,7 +500,7 @@ index 0cb3ffd02..434d46685 100644
  	if (enable == ksu_avc_spoof_enabled) {
  		pr_info("avc_spoof: no need to change\n");
  		return 0;
-@@ -86,6 +99,11 @@ int ksu_handle_slow_avc_audit(u32 *tsid)
+@@ -87,6 +100,11 @@ int ksu_handle_slow_avc_audit(u32 *tsid)
  	if (atomic_read(&disable_spoof))
  		return 0;
  
@@ -507,7 +512,7 @@ index 0cb3ffd02..434d46685 100644
  	// if tsid is su, we just replace it
  	// unsure if its enough, but this is how it is aye?
  	if (*tsid == su_sid) {
-@@ -162,6 +180,7 @@ static void destroy_kprobe(struct kprobe **kp_ptr)
+@@ -163,6 +181,7 @@ static void destroy_kprobe(struct kprobe **kp_ptr)
  
  void ksu_avc_spoof_disable(void)
  {
@@ -515,7 +520,7 @@ index 0cb3ffd02..434d46685 100644
  #ifdef CONFIG_KPROBES
  	pr_info("avc_spoof/exit: unregister slow_avc_audit kprobe!\n");
  	destroy_kprobe(&slow_avc_audit_kp);
-@@ -172,6 +191,7 @@ void ksu_avc_spoof_disable(void)
+@@ -173,6 +192,7 @@ void ksu_avc_spoof_disable(void)
  
  void ksu_avc_spoof_enable(void) 
  {
@@ -787,10 +792,10 @@ index 154a466de..f808ac06a 100644
  void ksu_adb_root_init(void);
  
 diff --git a/kernel/feature/kernel_umount.c b/kernel/feature/kernel_umount.c
-index 317575c53..8c4076d61 100644
+index 693414198..c22f72cda 100644
 --- a/kernel/feature/kernel_umount.c
 +++ b/kernel/feature/kernel_umount.c
-@@ -106,6 +106,7 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
+@@ -83,6 +83,7 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
  		return 0;
  	}
  
@@ -798,7 +803,7 @@ index 317575c53..8c4076d61 100644
  	// There are 6 scenarios:
  	// 1. Normal app: zygote -> appuid
  	// 2. Isolated process forked from zygote: zygote -> isolated_process
-@@ -130,6 +131,8 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
+@@ -107,6 +108,8 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
  		pr_info("handle umount ignore non zygote child: %d\n", current->pid);
  		return 0;
  	}
@@ -807,7 +812,7 @@ index 317575c53..8c4076d61 100644
  	// umount the target mnt
  	pr_info("handle umount for uid: %d, pid: %d\n", new_uid, current->pid);
  
-@@ -148,7 +151,9 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
+@@ -125,14 +128,16 @@ int ksu_handle_umount(uid_t old_uid, uid_t new_uid)
  	return 0;
  }
  
@@ -818,15 +823,14 @@ index 317575c53..8c4076d61 100644
  {
  	if (ksu_register_feature_handler(&kernel_umount_handler)) {
  		pr_err("Failed to register kernel_umount feature handler\n");
-@@ -158,7 +163,7 @@ void __init ksu_kernel_umount_init(void)
  	}
  }
  
 -void __exit ksu_kernel_umount_exit(void)
 +void __exit ksu_kernel_umount_exit()
  {
- 	ksu_unregister_feature_handler(KSU_FEATURE_WEBVIEW_ZYGOTE_UMOUNT);
  	ksu_unregister_feature_handler(KSU_FEATURE_KERNEL_UMOUNT);
+ }
 diff --git a/kernel/feature/selinux_hide.c b/kernel/feature/selinux_hide.c
 index fbb6c44f5..f2a49cf5c 100644
 --- a/kernel/feature/selinux_hide.c
@@ -1145,10 +1149,10 @@ index 5a0437108..faecb73d8 100644
 +
  #endif
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index e9aab2209..792701036 100644
+index cbe320a79..8d79b1f52 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
-@@ -14,6 +14,19 @@
+@@ -14,6 +14,20 @@
  #include <linux/version.h>
  #include <linux/sched/task_stack.h>
  #include <linux/ptrace.h>
@@ -1158,6 +1162,7 @@ index e9aab2209..792701036 100644
 +
 +#include <linux/fs_struct.h>
 +
++#include <linux/task_work.h>
 +#ifdef CONFIG_KSU_SUSFS
 +#include <linux/susfs_def.h>
 +#include <linux/minmax.h>
@@ -1168,15 +1173,15 @@ index e9aab2209..792701036 100644
  
  #include "arch.h"
  #include "policy/allowlist.h"
-@@ -21,6 +34,7 @@
+@@ -21,6 +35,7 @@
  #include "klog.h" // IWYU pragma: keep
  #include "runtime/ksud.h"
  #include "feature/sucompat.h"
 +#include "feature/adb_root.h"
  #include "policy/app_profile.h"
  #include "hook/syscall_hook.h"
- #include "sulog/event.h"
-@@ -30,18 +44,28 @@
+ #include "supercall/supercall.h"
+@@ -31,18 +46,28 @@
  #define SU_PATH "/system/bin/su"
  #define SH_PATH "/system/bin/sh"
  
@@ -1208,7 +1213,7 @@ index e9aab2209..792701036 100644
  	pr_info("su_compat: set to %d\n", enable);
  	return 0;
  }
-@@ -62,11 +86,18 @@ static void __user *userspace_stack_buffer(const void *d, size_t len)
+@@ -63,11 +88,18 @@ static void __user *userspace_stack_buffer(const void *d, size_t len)
  	return copy_to_user(p, d, len) ? NULL : p;
  }
  
@@ -1229,7 +1234,7 @@ index e9aab2209..792701036 100644
  }
  
  static char __user *empty_user_path(void)
-@@ -74,8 +105,6 @@ static char __user *empty_user_path(void)
+@@ -75,8 +107,6 @@ static char __user *empty_user_path(void)
  	return userspace_stack_buffer("", sizeof(""));
  }
  
@@ -1238,7 +1243,7 @@ index e9aab2209..792701036 100644
  static bool is_ksud_exists()
  {
  	struct path path;
-@@ -87,6 +116,287 @@ static bool is_ksud_exists()
+@@ -88,6 +118,298 @@ static bool is_ksud_exists()
  	return true;
  }
  
@@ -1357,26 +1362,26 @@ index e9aab2209..792701036 100644
 +    int ret;
 +
 +    if (unlikely(!filename_ptr))
-+        return 0;
++        return -EINVAL;
 +
 +    filename = *filename_ptr;
 +    if (IS_ERR(filename))
-+        return 0;
++        return -EINVAL;
 +
 +    if (!ksu_handle_execveat_init(filename, (struct user_arg_ptr*)argv_user, (struct user_arg_ptr*)envp_user))
-+        return 0;
++        return -EINVAL;
 +
 +    if (likely(memcmp(filename->name, su_path, sizeof(su_path))))
-+        return 0;
++        return -EINVAL;
 +
 +    if (current_chrooted())
 +    {
 +        pr_err("ksu_handle_execveat_sucompat: su found but NOT allowed! Because current process is running in chrooted environment\n");
-+        return 0;
++        return -EINVAL;
 +    }
 +
 +    if (!ksu_is_allow_uid_for_current(current_uid().val))
-+        return 0;
++        return -EINVAL;
 +
 +    ksu_compat_sulog('x');
 +    pr_info("ksu_handle_execveat_sucompat: su found\n");
@@ -1388,11 +1393,23 @@ index e9aab2209..792701036 100644
 +    memcpy((void *)filename->name, ksud_path, sizeof(ksud_path));
 +
 +    ret = escape_with_root_profile();
-+    if (ret)
++    if (ret) {
 +        pr_err("escape_with_root_profile() failed: %d\n", ret);
++        return -EINVAL;
++    }
 +
 +    ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
 +
++    return 0;
++}
++
++int ksu_handle_post_execveat_sucompat(int *fd, struct filename **filename_ptr,
++                 void *argv_user, void *envp_user,
++                 int *__never_use_flags, int *retval)
++{
++    if (*retval >= 0) {
++        (void)ksu_install_su_fd();
++    }
 +    return 0;
 +}
 +
@@ -1404,10 +1421,10 @@ index e9aab2209..792701036 100644
 +    struct ksu_sulog_pending_event *pending_root_execve = NULL;
 +
 +    if (unlikely(!filename_ptr))
-+        return 0;
++        return -EINVAL;
 +
 +    if (IS_ERR(*filename_ptr))
-+        return 0;
++        return -EINVAL;
 +
 +    if (current_euid().val == 0) {
 +        struct user_arg_ptr *argv_ptr = (struct user_arg_ptr *)argv;
@@ -1418,8 +1435,7 @@ index e9aab2209..792701036 100644
 +    }
 +
 +    if (static_branch_unlikely(&is_first_zygote)) {
-+        if (ksu_handle_execveat_ksud(fd, filename_ptr, argv, envp, flags))
-+            return 0;
++        (void)ksu_handle_execveat_ksud(fd, filename_ptr, argv, envp, flags);
 +    }
 +
 +    return ksu_handle_execveat_sucompat(fd, filename_ptr, argv, envp,
@@ -1526,7 +1542,7 @@ index e9aab2209..792701036 100644
  long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  {
  	const char __user **filename_user, *orig_filename;
-@@ -104,6 +414,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -105,6 +427,10 @@ long ksu_handle_faccessat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1537,7 +1553,7 @@ index e9aab2209..792701036 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('a');
-@@ -140,6 +454,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
+@@ -141,6 +467,10 @@ long ksu_handle_stat_sucompat(int orig_nr, struct pt_regs *regs)
  	strncpy_from_user_nofault(path, *filename_user, sizeof(path));
  
  	if (unlikely(!memcmp(path, su_path, sizeof(su_path)))) {
@@ -1548,7 +1564,7 @@ index e9aab2209..792701036 100644
  		old_cred = override_creds(ksu_cred);
  		if (is_ksud_exists()) {
  			ksu_compat_sulog('s');
-@@ -194,6 +512,11 @@ static long ksu_handle_execve_sucompat_common(const char __user **filename_user,
+@@ -196,6 +526,11 @@ static long ksu_handle_execve_sucompat_common(const char __user **filename_user,
  	if (likely(memcmp(path, su_path, sizeof(su_path))))
  		goto do_orig_execve;
  
@@ -1560,7 +1576,7 @@ index e9aab2209..792701036 100644
  	ksu_compat_sulog('x');
  	pr_info("sys_execve su found\n");
  
-@@ -260,6 +583,7 @@ long ksu_handle_execveat_sucompat(const char __user **filename_user, int orig_nr
+@@ -269,6 +604,7 @@ long ksu_handle_execveat_sucompat(const char __user **filename_user, int orig_nr
  	return ksu_handle_execve_sucompat_common(filename_user, (const char __user *const __user *)PT_REGS_PARM3(regs),
  						 PT_REGS_SYSCALL_PARM4(regs), true, orig_nr, regs);
  }
@@ -1605,7 +1621,7 @@ index 5e2cfe11b..fca60b336 100644
  
  #endif
 diff --git a/kernel/hook/setuid_hook.c b/kernel/hook/setuid_hook.c
-index 3cccc7800..72a6a4228 100644
+index 3cccc7800..424d7f105 100644
 --- a/kernel/hook/setuid_hook.c
 +++ b/kernel/hook/setuid_hook.c
 @@ -3,6 +3,7 @@
@@ -1669,7 +1685,7 @@ index 3cccc7800..72a6a4228 100644
 +
 +    // Check if webview zygote should be umounted
 +    if (unlikely(ruid == WEBVIEW_ZYGOTE_UID)) {
-+        if (ksu_webview_zygote_umount_enabled) {
++        if (ksu_uid_should_umount(ruid)) {
 +            susfs_set_current_proc_no_su();
 +            susfs_set_current_proc_umounted();
 +            goto do_umount;
@@ -1728,7 +1744,7 @@ index 3cccc7800..72a6a4228 100644
 +
 +    // Check if webview zygote should be umounted
 +    if (unlikely(ruid == WEBVIEW_ZYGOTE_UID)) {
-+        if (ksu_webview_zygote_umount_enabled) {
++        if (ksu_uid_should_umount(ruid)) {
 +            susfs_set_current_proc_no_su();
 +            susfs_set_current_proc_umounted();
 +            susfs_set_current_proc_umounted_for_zygote_next();
@@ -1966,10 +1982,10 @@ index 48ab764db..9fcd5f3ee 100644
      return ret;
  }
 diff --git a/kernel/manager/apk_sign.c b/kernel/manager/apk_sign.c
-index f37655cdc..e40aa9eea 100644
+index a9b0a7160..07fe5f21d 100644
 --- a/kernel/manager/apk_sign.c
 +++ b/kernel/manager/apk_sign.c
-@@ -368,5 +368,26 @@ bool is_manager_apk(char *path)
+@@ -355,5 +355,26 @@ bool is_manager_apk(char *path)
  		return false;
  	}
  #endif
@@ -1998,10 +2014,10 @@ index f37655cdc..e40aa9eea 100644
 +	return false;
  }
 diff --git a/kernel/manager/throne_tracker.c b/kernel/manager/throne_tracker.c
-index e005c70b1..fb9e06338 100644
+index 11c3fa63a..fad8a7b74 100644
 --- a/kernel/manager/throne_tracker.c
 +++ b/kernel/manager/throne_tracker.c
-@@ -6,6 +6,15 @@
+@@ -8,6 +8,15 @@
  #include <linux/string.h>
  #include <linux/types.h>
  #include <linux/version.h>
@@ -2017,22 +2033,23 @@ index e005c70b1..fb9e06338 100644
  
  #include "policy/allowlist.h"
  #include "manager/apk_sign.h"
-@@ -196,7 +205,7 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
+@@ -198,7 +207,7 @@ void search_manager(const char *path, int depth, struct list_head *uid_data)
  			struct file *file;
  
  			if (!stop) {
--				file = filp_open(pos->dirpath, O_RDONLY | O_NOFOLLOW, 0);
-+				file = filp_open(pos->dirpath, O_RDONLY | O_NOFOLLOW | O_DIRECTORY, 0);
+-				file = ksu_filp_open_nonotify(pos->dirpath, O_RDONLY | O_NOFOLLOW | O_NOATIME);
++				file = ksu_filp_open_nonotify(pos->dirpath, O_RDONLY | O_NOFOLLOW | O_NOATIME | O_DIRECTORY);
  				if (IS_ERR(file)) {
  					pr_err("Failed to open directory: %s, err: %ld\n",
  						pos->dirpath, PTR_ERR(file));
-@@ -258,12 +267,25 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
+@@ -260,13 +269,26 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
  	return exist;
  }
  
 -void track_throne(bool prune_only)
 +static void track_throne_function(bool prune_only)
  {
+ 	const struct cred *old_cred = override_creds(ksu_cred);
 -	struct file *fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
 +	struct file *fp = NULL;
 +	int t;
@@ -2053,10 +2070,10 @@ index e005c70b1..fb9e06338 100644
 -			PTR_ERR(fp));
 +		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n",
 +			__func__, err);
- 		return;
+ 		goto out_revert_cred;
  	}
  
-@@ -287,7 +309,7 @@ void track_throne(bool prune_only)
+@@ -290,7 +312,7 @@ void track_throne(bool prune_only)
  		}
  		buf[count] = '\0';
  
@@ -2065,8 +2082,8 @@ index e005c70b1..fb9e06338 100644
  		if (!data) {
  			filp_close(fp, 0);
  			goto out;
-@@ -355,14 +377,60 @@ out:
- 	}
+@@ -360,14 +382,60 @@ out_revert_cred:
+ 	revert_creds(old_cred);
  }
  
 -void __init ksu_throne_tracker_init()
@@ -2210,10 +2227,10 @@ index 3ca346c12..616ba87a7 100644
  
  #endif
 diff --git a/kernel/policy/allowlist.c b/kernel/policy/allowlist.c
-index 4372d2b2c..9e2997afb 100644
+index becf29d4b..03fd2e213 100644
 --- a/kernel/policy/allowlist.c
 +++ b/kernel/policy/allowlist.c
-@@ -298,6 +298,7 @@ bool ksu_uid_should_umount(uid_t uid)
+@@ -297,10 +297,12 @@ bool ksu_uid_should_umount(uid_t uid)
  {
      struct app_profile *profile;
      bool res;
@@ -2221,16 +2238,13 @@ index 4372d2b2c..9e2997afb 100644
      if (likely(ksu_is_manager_appid_valid()) && unlikely(ksu_get_manager_appid() == uid % PER_USER_RANGE)) {
          // we should not umount on manager!
          return false;
-@@ -305,6 +306,7 @@ bool ksu_uid_should_umount(uid_t uid)
-     if (unlikely(uid == WEBVIEW_ZYGOTE_UID)) {
-         return ksu_webview_zygote_umount_enabled;
      }
 +#endif
  #ifdef CONFIG_KSU_DISABLE_POLICY
      return !__ksu_is_allow_uid(uid);
  #else
 diff --git a/kernel/policy/app_profile.c b/kernel/policy/app_profile.c
-index bc895f8e1..b6ccbdb59 100644
+index 6336a2227..3ff9b624c 100644
 --- a/kernel/policy/app_profile.c
 +++ b/kernel/policy/app_profile.c
 @@ -12,6 +12,10 @@
@@ -2265,7 +2279,20 @@ index bc895f8e1..b6ccbdb59 100644
          pr_warn("Already root, don't escape!\n");
          goto out_abort_creds;
      }
-@@ -201,15 +209,18 @@ int escape_with_root_profile(void)
+@@ -192,7 +200,11 @@ int escape_with_root_profile(void)
+     }
+ #endif
+ 
+-    memcpy(&cred->cap_effective, &profile->capabilities.effective, sizeof(cred->cap_effective));
++    // setup capabilities
++    // we need CAP_DAC_READ_SEARCH becuase `/data/adb/ksud` is not accessible for non root process
++    // we add it here but don't add it to cap_inhertiable, it would be dropped automaticly after exec!
++    u64 cap_for_ksud = profile->capabilities.effective | CAP_DAC_READ_SEARCH;
++    memcpy(&cred->cap_effective, &cap_for_ksud, sizeof(cred->cap_effective));
+     memcpy(&cred->cap_permitted, &profile->capabilities.effective, sizeof(cred->cap_permitted));
+     memcpy(&cred->cap_bset, &profile->capabilities.effective, sizeof(cred->cap_bset));
+     if (profile->uid != 0) {
+@@ -205,15 +217,18 @@ int escape_with_root_profile(void)
  
      commit_creds(cred);
  
@@ -2285,7 +2312,7 @@ index bc895f8e1..b6ccbdb59 100644
  
      setup_mount_ns(profile->namespaces);
      ksu_put_root_profile(profile);
-@@ -222,16 +233,18 @@ out_abort_creds:
+@@ -226,16 +241,18 @@ out_abort_creds:
      return ret;
  }
  
@@ -2412,7 +2439,7 @@ index 09384deff..c7ab9dcef 100644
 +
  #endif
 diff --git a/kernel/runtime/ksud_integration.c b/kernel/runtime/ksud_integration.c
-index 5bf84cb66..335963259 100644
+index 5bf84cb66..c7f738f13 100644
 --- a/kernel/runtime/ksud_integration.c
 +++ b/kernel/runtime/ksud_integration.c
 @@ -29,6 +29,16 @@
@@ -2664,7 +2691,7 @@ index 5bf84cb66..335963259 100644
  static unsigned int volumedown_pressed_count = 0;
  
  static bool is_volumedown_enough(unsigned int count)
-@@ -478,6 +562,11 @@ static bool is_volumedown_enough(unsigned int count)
+@@ -478,15 +562,29 @@ static bool is_volumedown_enough(unsigned int count)
  
  int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value)
  {
@@ -2676,22 +2703,25 @@ index 5bf84cb66..335963259 100644
      if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
          int val = *value;
          pr_info("KEY_VOLUMEDOWN val: %d\n", val);
-@@ -485,7 +574,14 @@ int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *v
+         if (val) {
++#ifdef CONFIG_KSU_SUSFS
++            // - We cannot call static_branch_disable() here as we are within the
++            //   spinlock section, which is not sleepable.
++            // - So if volumedown is enough, just do nothing until it gets disabled by on_post_fs_data().
++            if (is_volumedown_enough(volumedown_pressed_count))
++                return 0;
++#endif
              // key pressed, count it
              volumedown_pressed_count += 1;
++#ifndef CONFIG_KSU_SUSFS
              if (is_volumedown_enough(volumedown_pressed_count)) {
-+#ifdef CONFIG_KSU_SUSFS
-+                if (static_key_enabled(&ksu_is_input_hook_enabled)) {
-+                    static_branch_disable(&ksu_is_input_hook_enabled);
-+                    pr_info("ksu_input_hook is disabled\n");
-+                }
-+#else
                  ksu_stop_input_hook_runtime();
-+#endif
              }
++#endif
          }
      }
-@@ -506,7 +602,14 @@ bool ksu_is_safe_mode()
+ 
+@@ -506,7 +604,14 @@ bool ksu_is_safe_mode()
      }
  
      // stop hook first!
@@ -2706,7 +2736,7 @@ index 5bf84cb66..335963259 100644
  
      pr_info("volumedown_pressed_count: %d\n", volumedown_pressed_count);
      if (is_volumedown_enough(volumedown_pressed_count)) {
-@@ -540,7 +643,11 @@ static void ksu_execve_hook_ksud_common(const char __user *filename_user, const
+@@ -540,7 +645,11 @@ static void ksu_execve_hook_ksud_common(const char __user *filename_user, const
          return;
      }
  
@@ -2718,7 +2748,7 @@ index 5bf84cb66..335963259 100644
  }
  
  void ksu_execve_hook_ksud(const struct pt_regs *regs)
-@@ -559,14 +666,13 @@ void ksu_execveat_hook_ksud(const struct pt_regs *regs)
+@@ -559,14 +668,13 @@ void ksu_execveat_hook_ksud(const struct pt_regs *regs)
      ksu_execve_hook_ksud_common(filename_user, argv_user);
  }
  
@@ -2735,7 +2765,7 @@ index 5bf84cb66..335963259 100644
      return orig_sys_read(regs);
  }
  
-@@ -645,10 +751,12 @@ void ksu_stop_input_hook_runtime(void)
+@@ -645,10 +753,12 @@ void ksu_stop_input_hook_runtime(void)
      bool ret = schedule_work(&stop_input_hook_work);
      pr_info("unregister input kprobe: %d!\n", ret);
  }
@@ -2748,7 +2778,7 @@ index 5bf84cb66..335963259 100644
      int ret;
  
      ksu_syscall_table_hook(__NR_read, ksu_sys_read, &orig_sys_read);
-@@ -658,14 +766,17 @@ void __init ksu_ksud_init()
+@@ -658,14 +768,17 @@ void __init ksu_ksud_init()
      pr_info("ksud: input_event_kp: %d\n", ret);
  
      INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
@@ -2767,10 +2797,10 @@ index 5bf84cb66..335963259 100644
      if (module_rc_buf) {
          free_module_rc();
 diff --git a/kernel/selinux/rules.c b/kernel/selinux/rules.c
-index b081294cf..cb1da7964 100644
+index 7f284626a..1e3b68e8e 100644
 --- a/kernel/selinux/rules.c
 +++ b/kernel/selinux/rules.c
-@@ -98,6 +98,12 @@ void apply_kernelsu_rules()
+@@ -104,6 +104,12 @@ void apply_kernelsu_rules()
      // allow all!
      ksu_allow(db, KERNEL_SU_DOMAIN, ALL, ALL, ALL);
  
@@ -2783,7 +2813,7 @@ index b081294cf..cb1da7964 100644
      // allow us do any ioctl
      if (db->policyvers >= POLICYDB_VERSION_XPERMS_IOCTL) {
          ksu_allowxperm(db, KERNEL_SU_DOMAIN, ALL, "blk_file", ALL);
-@@ -156,11 +162,27 @@ void apply_kernelsu_rules()
+@@ -162,11 +168,27 @@ void apply_kernelsu_rules()
      ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
      ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
  
@@ -2812,10 +2842,10 @@ index b081294cf..cb1da7964 100644
      mutex_unlock(&selinux_state.policy_mutex);
  }
 diff --git a/kernel/selinux/selinux.c b/kernel/selinux/selinux.c
-index 88c795686..dd492d441 100644
+index cbd818140..f6afebc95 100644
 --- a/kernel/selinux/selinux.c
 +++ b/kernel/selinux/selinux.c
-@@ -23,6 +23,38 @@ static u32 cached_zygote_sid __read_mostly = 0;
+@@ -94,6 +94,15 @@ static u32 cached_zygote_sid __read_mostly = 0;
  static u32 cached_init_sid __read_mostly = 0;
  u32 ksu_file_sid __read_mostly = 0;
  
@@ -2827,114 +2857,11 @@ index 88c795686..dd492d441 100644
 +u32 susfs_priv_app_sid __read_mostly = 0;
 +#endif
 +
-+/*
-+ * GKI2 Polyfill: struct lsm_context was introduced in newer kernels (6.6+).
-+ * We define it locally for older kernels to maintain a unified source base.
-+ */
-+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 14, 0)
-+struct lsm_context {
-+    char *context;
-+    u32 len;
-+};
-+
-+static inline int __security_secid_to_secctx(u32 secid, struct lsm_context *cp)
-+{
-+    return security_secid_to_secctx(secid, &cp->context, &cp->len);
-+}
-+
-+static inline void __security_release_secctx(struct lsm_context *cp)
-+{
-+    security_release_secctx(cp->context, cp->len);
-+}
-+#else
-+#define __security_secid_to_secctx security_secid_to_secctx
-+#define __security_release_secctx security_release_secctx
-+#endif
 +
  static int transive_to_domain(const char *domain, struct cred *cred, bool clear_exec_sid)
  {
      u32 sid;
-@@ -39,8 +71,7 @@ static int transive_to_domain(const char *domain, struct cred *cred, bool clear_
-     }
-     error = security_secctx_to_secid(domain, strlen(domain), &sid);
-     if (error) {
--        pr_info("security_secctx_to_secid %s -> sid: %d, error: %d\n", domain,
--                sid, error);
-+        pr_info("security_secctx_to_secid %s -> sid: %d, error: %d\n", domain, sid, error);
-     }
-     if (!error) {
-         tsec->sid = sid;
-@@ -54,6 +85,69 @@ static int transive_to_domain(const char *domain, struct cred *cred, bool clear_
-     return error;
- }
- 
-+/*
-+ * Fast path: compare task's SID directly against cached value.
-+ * Falls back to string comparison if cache is not initialized.
-+ */
-+static bool is_sid_match(const struct cred *cred, u32 cached_sid, const char *fallback_context)
-+{
-+    if (!cred) {
-+        return false;
-+    }
-+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
-+    const struct task_security_struct *tsec = selinux_cred(cred);
-+#else
-+    const struct cred_security_struct *tsec = selinux_cred(cred);
-+#endif
-+    if (!tsec) {
-+        return false;
-+    }
-+
-+    // Fast path: use cached SID if available
-+    if (likely(cached_sid != 0)) {
-+        return tsec->sid == cached_sid;
-+    }
-+
-+    // Slow path fallback: string comparison (only before cache is initialized)
-+    struct lsm_context ctx;
-+    bool result;
-+    if (__security_secid_to_secctx(tsec->sid, &ctx)) {
-+        return false;
-+    }
-+    result = strncmp(fallback_context, ctx.context, ctx.len) == 0;
-+    __security_release_secctx(&ctx);
-+    return result;
-+}
-+
-+bool is_task_ksu_domain(const struct cred *cred)
-+{
-+#ifdef CONFIG_KSU_SUSFS
-+    if (is_sid_match(cred, susfs_ksu_sid, KERNEL_SU_CONTEXT)) return true;
-+#endif
-+    return is_sid_match(cred, cached_su_sid, KERNEL_SU_CONTEXT);
-+}
-+
-+bool is_ksu_domain(void)
-+{
-+    return is_task_ksu_domain(current_cred());
-+}
-+
-+bool is_zygote(const struct cred *cred)
-+{
-+#ifdef CONFIG_KSU_SUSFS
-+    if (is_sid_match(cred, susfs_zygote_sid, ZYGOTE_CONTEXT)) return true;
-+#endif
-+    return is_sid_match(cred, cached_zygote_sid, ZYGOTE_CONTEXT);
-+}
-+
-+bool is_init(const struct cred *cred)
-+{
-+#ifdef CONFIG_KSU_SUSFS
-+    if (is_sid_match(cred, susfs_init_sid, INIT_CONTEXT)) return true;
-+#endif
-+    return is_sid_match(cred, cached_init_sid, INIT_CONTEXT);
-+}
-+
- void setup_selinux(const char *domain, struct cred *cred)
- {
-     if (transive_to_domain(domain, cred, false)) {
-@@ -64,11 +158,27 @@ void setup_selinux(const char *domain, struct cred *cred)
+@@ -135,8 +144,8 @@ void setup_selinux(const char *domain, struct cred *cred)
  
  void setup_ksu_cred(void)
  {
@@ -2945,101 +2872,39 @@ index 88c795686..dd492d441 100644
      }
  }
  
-+void escape_to_root_for_adb_root(void)
-+{
-+    struct cred *cred = prepare_creds();
-+    if (!cred) {
-+        pr_err("Failed to prepare adbd's creds!\n");
-+        return;
-+    }
-+
-+    if (transive_to_domain(KERNEL_SU_CONTEXT, cred, true)) {
-+        pr_err("transive domain failed.\n");
-+        abort_creds(cred);
-+        return;
-+    }
-+    commit_creds(cred);
-+}
-+
- void setenforce(bool enforce)
+@@ -264,6 +273,9 @@ static bool is_sid_match(const struct cred *cred, u32 cached_sid,
+ 
+ bool is_task_ksu_domain(const struct cred *cred)
  {
- #ifdef CONFIG_SECURITY_SELINUX_DEVELOP
-@@ -91,25 +201,6 @@ bool getenforce(void)
- #endif
++#ifdef CONFIG_KSU_SUSFS
++    if (is_sid_match(cred, susfs_ksu_sid, KERNEL_SU_CONTEXT)) return true;
++#endif
+     return is_sid_match(cred, cached_su_sid, KERNEL_SU_CONTEXT);
  }
  
--#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 14, 0)
--struct lsm_context {
--    char *context;
--    u32 len;
--};
--
--static int __security_secid_to_secctx(u32 secid, struct lsm_context *cp)
--{
--    return security_secid_to_secctx(secid, &cp->context, &cp->len);
--}
--static void __security_release_secctx(struct lsm_context *cp)
--{
--    security_release_secctx(cp->context, cp->len);
--}
--#else
--#define __security_secid_to_secctx security_secid_to_secctx
--#define __security_release_secctx security_release_secctx
--#endif
--
- /*
-  * Initialize cached SID values for frequently checked SELinux contexts.
-  * Called once after SELinux policy is loaded (post-fs-data).
-@@ -119,8 +210,7 @@ void cache_sid(void)
+@@ -274,11 +286,17 @@ bool is_ksu_domain(void)
+ 
+ bool is_zygote(const struct cred *cred)
  {
-     int err;
- 
--    err = security_secctx_to_secid(KERNEL_SU_CONTEXT, strlen(KERNEL_SU_CONTEXT),
--                                   &cached_su_sid);
-+    err = security_secctx_to_secid(KERNEL_SU_CONTEXT, strlen(KERNEL_SU_CONTEXT), &cached_su_sid);
-     if (err) {
-         pr_warn("Failed to cache kernel su domain SID: %d\n", err);
-         cached_su_sid = 0;
-@@ -128,8 +218,7 @@ void cache_sid(void)
-         pr_info("Cached su SID: %u\n", cached_su_sid);
-     }
- 
--    err = security_secctx_to_secid(ZYGOTE_CONTEXT, strlen(ZYGOTE_CONTEXT),
--                                   &cached_zygote_sid);
-+    err = security_secctx_to_secid(ZYGOTE_CONTEXT, strlen(ZYGOTE_CONTEXT), &cached_zygote_sid);
-     if (err) {
-         pr_warn("Failed to cache zygote SID: %d\n", err);
-         cached_zygote_sid = 0;
-@@ -137,8 +226,7 @@ void cache_sid(void)
-         pr_info("Cached zygote SID: %u\n", cached_zygote_sid);
-     }
- 
--    err = security_secctx_to_secid(INIT_CONTEXT, strlen(INIT_CONTEXT),
--                                   &cached_init_sid);
-+    err = security_secctx_to_secid(INIT_CONTEXT, strlen(INIT_CONTEXT), &cached_init_sid);
-     if (err) {
-         pr_warn("Failed to cache init SID: %d\n", err);
-         cached_init_sid = 0;
-@@ -146,8 +234,7 @@ void cache_sid(void)
-         pr_info("Cached init SID: %u\n", cached_init_sid);
-     }
- 
--    err = security_secctx_to_secid(KSU_FILE_CONTEXT, strlen(KSU_FILE_CONTEXT),
--                                   &ksu_file_sid);
-+    err = security_secctx_to_secid(KSU_FILE_CONTEXT, strlen(KSU_FILE_CONTEXT), &ksu_file_sid);
-     if (err) {
-         pr_warn("Failed to cache ksu_file SID: %d\n", err);
-         ksu_file_sid = 0;
-@@ -156,73 +243,85 @@ void cache_sid(void)
-     }
++#ifdef CONFIG_KSU_SUSFS
++    if (is_sid_match(cred, susfs_zygote_sid, ZYGOTE_CONTEXT)) return true;
++#endif
+     return is_sid_match(cred, cached_zygote_sid, ZYGOTE_CONTEXT);
  }
  
--/*
-- * Fast path: compare task's SID directly against cached value.
-- * Falls back to string comparison if cache is not initialized.
-- */
--static bool is_sid_match(const struct cred *cred, u32 cached_sid,
--                         const char *fallback_context)
+ bool is_init(const struct cred *cred)
+ {
++#ifdef CONFIG_KSU_SUSFS
++    if (is_sid_match(cred, susfs_init_sid, INIT_CONTEXT)) return true;
++#endif
+     return is_sid_match(cred, cached_init_sid, INIT_CONTEXT);
+ }
+ 
+@@ -297,3 +315,86 @@ void escape_to_root_for_adb_root(void)
+     }
+     commit_creds(cred);
+ }
++
 +#ifdef CONFIG_KSU_SUSFS
 +#define KERNEL_INIT_DOMAIN "u:r:init:s0"
 +#define KERNEL_ZYGOTE_DOMAIN "u:r:zygote:s0"
@@ -3047,9 +2912,7 @@ index 88c795686..dd492d441 100644
 +#define KERNEL_PRIV_APP_DOMAIN "u:r:priv_app:s0:c512,c768"
 +
 +static inline void susfs_set_sid(const char *secctx_name, u32 *out_sid)
- {
--    if (!cred) {
--        return false;
++{
 +    int err;
 +    
 +    if (!secctx_name || !out_sid) {
@@ -3061,26 +2924,23 @@ index 88c795686..dd492d441 100644
 +    if (err) {
 +        pr_err("failed setting sid for '%s', err: %d\n", secctx_name, err);
 +        return;
-     }
++    }
 +    pr_info("sid '%u' is set for secctx_name '%s'\n", *out_sid, secctx_name);
 +}
 +
 +bool susfs_is_sid_equal(const struct cred *cred, u32 sid2) {
- #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
-     const struct task_security_struct *tsec = selinux_cred(cred);
- #else
-     const struct cred_security_struct *tsec = selinux_cred(cred);
- #endif
++#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 18, 0)
++    const struct task_security_struct *tsec = selinux_cred(cred);
++#else
++    const struct cred_security_struct *tsec = selinux_cred(cred);
++#endif
 +
-     if (!tsec) {
-         return false;
-     }
++    if (!tsec) {
++        return false;
++    }
 +    return tsec->sid == sid2;
 +}
- 
--    // Fast path: use cached SID if available
--    if (likely(cached_sid != 0)) {
--        return tsec->sid == cached_sid;
++
 +u32 susfs_get_sid_from_name(const char *secctx_name)
 +{
 +    u32 out_sid = 0;
@@ -3089,69 +2949,35 @@ index 88c795686..dd492d441 100644
 +    if (!secctx_name) {
 +        pr_err("secctx_name is NULL\n");
 +        return 0;
-     }
--
--    // Slow path fallback: string comparison (only before cache is initialized)
--    struct lsm_context ctx;
--    bool result;
--    if (__security_secid_to_secctx(tsec->sid, &ctx)) {
--        return false;
-+    err = security_secctx_to_secid(secctx_name, strlen(secctx_name), &out_sid);
++    }
++    err = ksu_security_secctx_to_secid(secctx_name, strlen(secctx_name), &out_sid);
 +    if (err) {
 +        pr_err("failed getting sid from secctx_name: %s, err: %d\n", secctx_name, err);
 +        return 0;
-     }
--    result = strncmp(fallback_context, ctx.context, ctx.len) == 0;
--    __security_release_secctx(&ctx);
--    return result;
++    }
 +    return out_sid;
- }
- 
--bool is_task_ksu_domain(const struct cred *cred)
--{
--    return is_sid_match(cred, cached_su_sid, KERNEL_SU_CONTEXT);
++}
++
 +u32 susfs_get_current_sid(void) {
 +    return current_sid();
- }
- 
--bool is_ksu_domain(void)
--{
--    return is_task_ksu_domain(current_cred());
++}
++
 +bool susfs_is_current_zygote_domain(void) {
 +    return unlikely(current_sid() == susfs_zygote_sid);
- }
- 
--bool is_zygote(const struct cred *cred)
--{
--    return is_sid_match(cred, cached_zygote_sid, ZYGOTE_CONTEXT);
++}
++
 +bool susfs_is_current_zygote_next_domain(void) {
 +    return unlikely(current_sid() == susfs_zygote_next_sid);
- }
- 
--bool is_init(const struct cred *cred)
--{
--    return is_sid_match(cred, cached_init_sid, INIT_CONTEXT);
++}
++
 +bool susfs_is_current_ksu_domain(void) {
 +    return unlikely(current_sid() == susfs_ksu_sid);
- }
- 
--void escape_to_root_for_adb_root(void)
--{
--    struct cred *cred = prepare_creds();
--    if (!cred) {
--        pr_err("Failed to prepare adbd's creds!\n");
--        return;
--    }
++}
++
 +bool susfs_is_current_init_domain(void) {
 +    return unlikely(current_sid() == susfs_init_sid);
 +}
- 
--    if (transive_to_domain(KERNEL_SU_CONTEXT, cred, true)) {
--        pr_err("transive domain failed.\n");
--        abort_creds(cred);
--        return;
--    }
--    commit_creds(cred);
++
 +void susfs_set_batch_sid(void)
 +{
 +    susfs_set_sid(KERNEL_ZYGOTE_DOMAIN, &susfs_zygote_sid);
@@ -3159,7 +2985,7 @@ index 88c795686..dd492d441 100644
 +    susfs_set_sid(KERNEL_SU_CONTEXT, &susfs_ksu_sid);
 +    susfs_set_sid(KERNEL_INIT_DOMAIN, &susfs_init_sid);
 +    susfs_set_sid(KERNEL_PRIV_APP_DOMAIN, &susfs_priv_app_sid);
- }
++}
 +#endif
 diff --git a/kernel/selinux/selinux.h b/kernel/selinux/selinux.h
 index a17ed226b..20cee7c8d 100644
@@ -3319,7 +3145,7 @@ index 866fb6ad9..5f4c50e11 100644
  int ksu_sulog_emit_grant_root(int retval, __u32 uid, __u32 euid, gfp_t gfp);
  
 diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
-index 902631d99..66a86331f 100644
+index 365803f4c..6cd94fec7 100644
 --- a/kernel/supercall/dispatch.c
 +++ b/kernel/supercall/dispatch.c
 @@ -5,6 +5,13 @@
@@ -3336,7 +3162,7 @@ index 902631d99..66a86331f 100644
  #include "uapi/supercall.h"
  #include "supercall/internal.h"
  #include "arch.h" // IWYU pragma: keep
-@@ -129,12 +136,25 @@ static int do_report_event(void __user *arg)
+@@ -135,12 +142,25 @@ static int do_report_event(void __user *arg)
                  pr_info("boot_complete triggered\n");
                  on_boot_completed();
              }
@@ -3362,7 +3188,7 @@ index 902631d99..66a86331f 100644
          break;
      }
      default:
-@@ -373,7 +393,9 @@ static int do_set_app_profile(void __user *arg)
+@@ -379,7 +399,9 @@ static int do_set_app_profile(void __user *arg)
      ret = ksu_set_app_profile(&cmd.profile);
      if (!ret) {
          ksu_persistent_allow_list();
@@ -3372,7 +3198,7 @@ index 902631d99..66a86331f 100644
      }
      return ret;
  }
-@@ -452,15 +474,27 @@ static int do_manage_mark(void __user *arg)
+@@ -458,15 +480,27 @@ static int do_manage_mark(void __user *arg)
      switch (cmd.operation) {
      case KSU_MARK_GET: {
          // Get task mark status
@@ -3400,7 +3226,7 @@ index 902631d99..66a86331f 100644
          if (cmd.pid == 0) {
              ksu_mark_all_process();
          } else {
-@@ -470,9 +504,14 @@ static int do_manage_mark(void __user *arg)
+@@ -476,9 +510,14 @@ static int do_manage_mark(void __user *arg)
                  return ret;
              }
          }
@@ -3415,7 +3241,7 @@ index 902631d99..66a86331f 100644
          if (cmd.pid == 0) {
              ksu_unmark_all_process();
          } else {
-@@ -482,11 +521,14 @@ static int do_manage_mark(void __user *arg)
+@@ -488,11 +527,14 @@ static int do_manage_mark(void __user *arg)
                  return ret;
              }
          }
@@ -3430,7 +3256,7 @@ index 902631d99..66a86331f 100644
          break;
      }
      default: {
-@@ -694,11 +736,17 @@ static int do_get_hook_mode(void __user *arg)
+@@ -700,11 +742,17 @@ static int do_get_hook_mode(void __user *arg)
  {
      struct ksu_get_hook_mode_cmd cmd = {0};
  
@@ -3448,7 +3274,7 @@ index 902631d99..66a86331f 100644
  
      if (copy_to_user(arg, &cmd, sizeof(cmd))) {
          pr_err("get_hook_mode: copy_to_user failed\n");
-@@ -992,3 +1040,108 @@ void ksu_supercall_cleanup_state(void)
+@@ -1001,3 +1049,108 @@ void ksu_supercall_cleanup_state(void)
      }
      up_write(&mount_list_lock);
  }
@@ -3558,11 +3384,11 @@ index 902631d99..66a86331f 100644
 +}
 +#endif
 diff --git a/kernel/supercall/internal.h b/kernel/supercall/internal.h
-index 89a973596..460367382 100644
+index 683fe4c9a..c781608e8 100644
 --- a/kernel/supercall/internal.h
 +++ b/kernel/supercall/internal.h
-@@ -13,6 +13,8 @@ bool allowed_for_su(void);
- long ksu_supercall_handle_ioctl(unsigned int cmd, void __user *argp);
+@@ -14,6 +14,8 @@ bool allowed_for_su(void);
+ long ksu_supercall_handle_ioctl(const struct file *filp, unsigned int cmd, void __user *argp);
  void ksu_supercall_dump_commands(void);
  void ksu_supercall_cleanup_state(void);
 +int ksu_handle_toolkit_reboot(int magic2, unsigned int cmd, void __user *arg);
@@ -3571,7 +3397,7 @@ index 89a973596..460367382 100644
  extern uint32_t ksuver_override;
  
 diff --git a/kernel/supercall/supercall.c b/kernel/supercall/supercall.c
-index 1a397320b..edc6566ed 100644
+index 23bf12e14..e4387caa0 100644
 --- a/kernel/supercall/supercall.c
 +++ b/kernel/supercall/supercall.c
 @@ -21,6 +21,11 @@
@@ -3585,8 +3411,33 @@ index 1a397320b..edc6566ed 100644
 +#endif
  uint32_t ksuver_override = 0;
  
- struct ksu_install_fd_tw {
-@@ -83,145 +88,182 @@ static void ksu_install_fd_tw_func(struct callback_head *cb)
+ #define KSU_DRIVER_PERMISSION_SU_SESSION (1UL << 0)
+@@ -69,21 +74,21 @@ static int ksu_install_fd_with_permissions(unsigned int fd_flags, unsigned long
+ 
+     fd = get_unused_fd_flags(fd_flags);
+     if (fd < 0) {
+-        pr_err("ksu_install_fd: failed to get unused fd\n");
++        pr_err("ksu_install_fd: failed to get unused fd for %s\n", name);
+         kfree(context);
+         return fd;
+     }
+ 
+     filp = anon_inode_getfile(name, &anon_ksu_fops, context, O_RDWR);
+     if (IS_ERR(filp)) {
+-        pr_err("ksu_install_fd: failed to create anon inode file\n");
++        pr_err("ksu_install_fd: failed to create anon inode file for %s\n", name);
+         put_unused_fd(fd);
+         kfree(context);
+         return PTR_ERR(filp);
+     }
+ 
+     fd_install(fd, filp);
+-    pr_info("ksu fd installed: %d for pid %d\n", fd, current->pid);
++    pr_info("%s fd installed: %d for pid %d\n", name, fd, current->pid);
+     return fd;
+ }
+ 
+@@ -119,145 +124,182 @@ static void ksu_install_fd_tw_func(struct callback_head *cb)
      kfree(tw);
  }
  
@@ -3839,7 +3690,7 @@ index 1a397320b..edc6566ed 100644
      return 0;
  }
  
-@@ -229,23 +271,30 @@ static struct kprobe reboot_kp = {
+@@ -265,23 +307,30 @@ static struct kprobe reboot_kp = {
      .symbol_name = REBOOT_SYMBOL,
      .pre_handler = reboot_handler_pre,
  };
@@ -3871,12 +3722,12 @@ index 1a397320b..edc6566ed 100644
      ksu_supercall_cleanup_state();
  }
 diff --git a/kernel/supercall/supercall.h b/kernel/supercall/supercall.h
-index fbedd11f8..50a35a0fc 100644
+index 4728b17a1..7ddcc34f6 100644
 --- a/kernel/supercall/supercall.h
 +++ b/kernel/supercall/supercall.h
-@@ -19,6 +19,10 @@ struct ksu_ioctl_cmd_map {
- // Install KSU fd to current process
- int ksu_install_fd(void);
+@@ -24,6 +24,10 @@ int ksu_install_fd(void);
+ int ksu_install_su_fd(void);
+ bool ksu_is_su_session_fd(const struct file *filp);
  
 +#ifdef CONFIG_KSU_SUSFS
 +int ksu_supercall_reboot_handler(void __user **arg);
@@ -3886,7 +3737,7 @@ index fbedd11f8..50a35a0fc 100644
  void ksu_supercalls_exit(void);
  #endif // __KSU_H_SUPERCALL
 diff --git a/manager/app/build.gradle.kts b/manager/app/build.gradle.kts
-index bba48947c..cacc94a8f 100644
+index 8ab2d715d..6a345fb80 100644
 --- a/manager/app/build.gradle.kts
 +++ b/manager/app/build.gradle.kts
 @@ -25,6 +25,11 @@ apksign {
@@ -3901,7 +3752,7 @@ index bba48947c..cacc94a8f 100644
      buildTypes {
          release {
              isMinifyEnabled = true
-@@ -153,4 +158,5 @@ dependencies {
+@@ -156,4 +161,5 @@ dependencies {
      implementation(libs.lsposed.cxx)
  
      implementation(libs.mmrl.ui)
@@ -3909,7 +3760,7 @@ index bba48947c..cacc94a8f 100644
  }
 \ No newline at end of file
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt
-index bc130b232..004ad716a 100644
+index bd126f44e..49cb898ae 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/MainActivity.kt
 @@ -8,7 +8,7 @@ import android.os.Bundle
@@ -3921,7 +3772,7 @@ index bc130b232..004ad716a 100644
  import androidx.activity.compose.BackHandler
  import androidx.activity.compose.setContent
  import androidx.activity.enableEdgeToEdge
-@@ -39,6 +39,8 @@ import androidx.compose.ui.res.stringResource
+@@ -41,6 +41,8 @@ import androidx.compose.ui.text.font.FontWeight
  import androidx.compose.ui.unit.dp
  import androidx.activity.viewModels
  import androidx.navigation.NavBackStackEntry
@@ -3930,7 +3781,7 @@ index bc130b232..004ad716a 100644
  import androidx.navigation.NavHostController
  import androidx.navigation.compose.currentBackStackEntryAsState
  import androidx.navigation.compose.rememberNavController
-@@ -73,7 +75,9 @@ import com.rifsxd.ksunext.ui.viewmodel.SuperUserViewModel
+@@ -76,7 +78,9 @@ import com.rifsxd.ksunext.ui.viewmodel.SuperUserViewModel
  data class ScrollState(
      val isScrollingDown: MutableState<Boolean>,
      val scrollOffset: MutableState<Float>,
@@ -3941,7 +3792,7 @@ index bc130b232..004ad716a 100644
  )
  
  val LocalScrollState = compositionLocalOf<ScrollState?> { null }
-@@ -189,13 +193,18 @@ fun Modifier.trackScroll(
+@@ -192,13 +196,18 @@ fun Modifier.trackScroll(
      return this.nestedScroll(scrollConnection)
  }
  
@@ -3961,7 +3812,7 @@ index bc130b232..004ad716a 100644
      private val handler = Handler(Looper.getMainLooper())
  
      val moduleViewModel: ModuleViewModel by viewModels()
-@@ -226,6 +235,8 @@ class MainActivity : ComponentActivity() {
+@@ -229,6 +238,8 @@ class MainActivity : ComponentActivity() {
          try {
              val prefsInit = getSharedPreferences("settings", MODE_PRIVATE)
              amoledModeState.value = prefsInit.getBoolean("enable_amoled", false)
@@ -3970,7 +3821,7 @@ index bc130b232..004ad716a 100644
          } catch (_: Exception) {}
  
          val isManager = Natives.isManager
-@@ -236,10 +247,19 @@ class MainActivity : ComponentActivity() {
+@@ -239,10 +250,19 @@ class MainActivity : ComponentActivity() {
              intent = null
          }
  
@@ -3989,51 +3840,64 @@ index bc130b232..004ad716a 100644
 -        setContent {
 +        setContent { Box(modifier = Modifier.fillMaxSize()) {
              KernelSUTheme(amoledMode = amoledModeState.value) {
-                 val navController = rememberNavController()
-                 val snackBarHostState = remember { SnackbarHostState() }
-@@ -334,7 +354,7 @@ class MainActivity : ComponentActivity() {
-                 val showBottomBar = when (currentDestination?.route) {
-                     FlashScreenDestination.route -> false // Hide for FlashScreenDestination
-                     ExecuteModuleActionScreenDestination.route -> false // Hide for ExecuteModuleActionScreen
--                    else -> !isScrollingDown.value
-+                    else -> !isScrollingDown.value && navBarEnabled.value
+                 var showSplash by remember { mutableStateOf(true) }
+                 var splashRotationTarget by remember { mutableStateOf(0f) }
+@@ -258,8 +278,10 @@ class MainActivity : ComponentActivity() {
+                     label = "splashRotation"
+                 )
+ 
+-                LaunchedEffect(Unit) {
+-                    splashRotationTarget += 360f * 6
++                LaunchedEffect(appLockState.value) {
++                    if (!appLockState.value && showSplash) {
++                        splashRotationTarget += 360f * 6
++                    }
                  }
  
-                 Scaffold(
-@@ -346,7 +366,9 @@ class MainActivity : ComponentActivity() {
-                             LocalScrollState provides ScrollState(
-                                 isScrollingDown = isScrollingDown,
-                                 scrollOffset = scrollOffset,
--                                previousScrollOffset = previousScrollOffset
-+                                previousScrollOffset = previousScrollOffset,
-+                                isNavBarEnabled = navBarEnabled,
-+                                isHapticsEnabled = hapticsEnabled
-                             )
-                         ) {
-                             val visibleDestinations = remember(fullFeatured) {
-@@ -366,13 +388,20 @@ class MainActivity : ComponentActivity() {
-                                 }
-                             }
+                 AnimatedContent(
+@@ -386,7 +408,7 @@ class MainActivity : ComponentActivity() {
+                         val showBottomBar = when (currentDestination?.route) {
+                             FlashScreenDestination.route -> false // Hide for FlashScreenDestination
+                             ExecuteModuleActionScreenDestination.route -> false // Hide for ExecuteModuleActionScreen
+-                            else -> !isScrollingDown.value
++                            else -> !isScrollingDown.value && navBarEnabled.value
+                         }
  
-+                            val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+                         Scaffold(
+@@ -398,7 +420,9 @@ class MainActivity : ComponentActivity() {
+                                     LocalScrollState provides ScrollState(
+                                         isScrollingDown = isScrollingDown,
+                                         scrollOffset = scrollOffset,
+-                                        previousScrollOffset = previousScrollOffset
++                                        previousScrollOffset = previousScrollOffset,
++                                        isNavBarEnabled = navBarEnabled,
++                                        isHapticsEnabled = hapticsEnabled
+                                     )
+                                 ) {
+                                     val visibleDestinations = remember(fullFeatured) {
+@@ -418,13 +442,20 @@ class MainActivity : ComponentActivity() {
+                                         }
+                                     }
+ 
++                                    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
 +
-                             val hostModifier = Modifier
-                                 .padding(innerPadding)
-                                 .fillMaxSize()
-                                 .horizontalSwipeNavigator(
-                                     currentRoute = currentRoute,
-                                     destinations = visibleDestinations,
--                                    onNavigate = { navigateToIndex(it) }
-+                                    onNavigate = {
-+                                        if (hapticsEnabled.value) {
-+                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-+                                        }
-+                                        navigateToIndex(it)
-+                                    }
-                                 )
+                                     val hostModifier = Modifier
+                                         .padding(innerPadding)
+                                         .fillMaxSize()
+                                         .horizontalSwipeNavigator(
+                                             currentRoute = currentRoute,
+                                             destinations = visibleDestinations,
+-                                            onNavigate = { navigateToIndex(it) }
++                                            onNavigate = {
++                                                if (hapticsEnabled.value) {
++                                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
++                                                }
++                                                navigateToIndex(it)
++                                            }
+                                         )
  
-                             DestinationsNavHost(
-@@ -481,6 +510,64 @@ class MainActivity : ComponentActivity() {
+                                     DestinationsNavHost(
+@@ -535,6 +566,64 @@ class MainActivity : ComponentActivity() {
                      }
                  }
              }
@@ -4098,7 +3962,7 @@ index bc130b232..004ad716a 100644
          }
      }
  
-@@ -492,13 +579,53 @@ class MainActivity : ComponentActivity() {
+@@ -546,13 +635,53 @@ class MainActivity : ComponentActivity() {
          amoledModeState.value = enabled
      }
  
@@ -4152,7 +4016,7 @@ index bc130b232..004ad716a 100644
          val shortcutType = intent.getStringExtra("shortcut_type")
          if (shortcutType == "module_action") {
              moduleActionId = intent.getStringExtra("module_id")
-@@ -734,4 +861,4 @@ private fun BottomBar(
+@@ -788,4 +917,4 @@ private fun BottomBar(
              }
          }
      }
@@ -4160,10 +4024,10 @@ index bc130b232..004ad716a 100644
 \ No newline at end of file
 +}
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/AppProfile.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/AppProfile.kt
-index 5d6bdb2d1..debbff70c 100644
+index fb1feda16..7d6cf7d92 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/AppProfile.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/AppProfile.kt
-@@ -88,7 +88,7 @@ fun AppProfileScreen(
+@@ -89,7 +89,7 @@ fun AppProfileScreen(
      }
  
      val scrollState = LocalScrollState.current
@@ -4173,7 +4037,7 @@ index 5d6bdb2d1..debbff70c 100644
  
      Scaffold(
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/BackupRestore.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/BackupRestore.kt
-index de718e0ee..96071d872 100644
+index 9943cdbf4..3d74f7ace 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/BackupRestore.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/BackupRestore.kt
 @@ -165,7 +165,7 @@ fun BackupRestoreScreen(navigator: DestinationsNavigator) {
@@ -4186,10 +4050,10 @@ index de718e0ee..96071d872 100644
  
      Scaffold(
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Customization.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Customization.kt
-index 2870ab91d..9b72c3084 100644
+index 823614ac1..890b6c0f3 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Customization.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Customization.kt
-@@ -12,6 +12,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
+@@ -15,6 +15,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
  import androidx.compose.material.icons.filled.Contrast
  import androidx.compose.material.icons.filled.Translate
  import androidx.compose.material.icons.filled.ViewCarousel
@@ -4198,7 +4062,7 @@ index 2870ab91d..9b72c3084 100644
  import androidx.compose.material3.*
  import androidx.compose.runtime.*
  import androidx.compose.runtime.saveable.rememberSaveable
-@@ -70,7 +72,7 @@ fun CustomizationScreen(navigator: DestinationsNavigator) {
+@@ -71,7 +73,7 @@ fun CustomizationScreen(navigator: DestinationsNavigator) {
      val ksuVersion = if (isManager) Natives.version else null
  
      val scrollState = LocalScrollState.current
@@ -4206,8 +4070,8 @@ index 2870ab91d..9b72c3084 100644
 +    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
      val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
  
-     Scaffold(
-@@ -300,6 +302,37 @@ fun CustomizationScreen(navigator: DestinationsNavigator) {
+     val context = LocalContext.current
+@@ -174,6 +176,37 @@ fun CustomizationScreen(navigator: DestinationsNavigator) {
                      enableAmoled = checked
                  }
              }
@@ -4244,7 +4108,7 @@ index 2870ab91d..9b72c3084 100644
 +            }
          }
      }
- }
+ 
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Developer.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Developer.kt
 index acd0bce78..bcf023ac8 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Developer.kt
@@ -4259,10 +4123,10 @@ index acd0bce78..bcf023ac8 100644
  
      Scaffold(
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Home.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Home.kt
-index 49159dde1..07d5d885a 100644
+index 8e3fdeefc..a3bc66b57 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Home.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Home.kt
-@@ -112,7 +112,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
+@@ -113,7 +113,7 @@ fun HomeScreen(navigator: DestinationsNavigator) {
      val bottomBarScrollState = LocalScrollState.current
  
      val scrollState = LocalScrollState.current
@@ -4271,7 +4135,7 @@ index 49159dde1..07d5d885a 100644
      val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
      
      // Create scroll connection for bottom bar
-@@ -133,6 +133,16 @@ fun HomeScreen(navigator: DestinationsNavigator) {
+@@ -134,6 +134,16 @@ fun HomeScreen(navigator: DestinationsNavigator) {
                  onInstallClick = {
                      navigator.navigate(InstallScreenDestination)
                  },
@@ -4288,7 +4152,7 @@ index 49159dde1..07d5d885a 100644
                  scrollBehavior = scrollBehavior
              )
          },
-@@ -638,6 +648,8 @@ private fun TopBar(
+@@ -641,6 +651,8 @@ private fun TopBar(
      kernelVersion: KernelVersion,
      ksuVersion: Int?,
      onInstallClick: () -> Unit,
@@ -4297,24 +4161,15 @@ index 49159dde1..07d5d885a 100644
      scrollBehavior: TopAppBarScrollBehavior? = null
  ) {
      var isSpinning by remember { mutableStateOf(false) }
-@@ -660,10 +672,13 @@ private fun TopBar(
+@@ -663,7 +675,6 @@ private fun TopBar(
      ) { }
  
      val context = LocalContext.current
-+    val windowInfo = androidx.compose.ui.platform.LocalWindowInfo.current
- 
--    LaunchedEffect(Unit) {
--        isSpinning = true
--        rotationTarget += 360f * 6
-+    LaunchedEffect(windowInfo.isWindowFocused) {
-+        if (windowInfo.isWindowFocused) {
-+            isSpinning = true
-+            rotationTarget += 360f * 6
-+        }
-     }
- 
-         TopAppBar(
-@@ -697,6 +712,15 @@ private fun TopBar(
+-
+     TopAppBar(
+         title = {
+             Row(
+@@ -695,6 +706,15 @@ private fun TopBar(
              }
          },
          actions = {
@@ -4360,10 +4215,10 @@ index b49c630a9..321b519af 100644
                              moduleState = MetaModuleState.Loading
                              loadModules()
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt
-index d09e88d11..dc61c173f 100644
+index 7e902f405..1da1f5814 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Module.kt
-@@ -157,7 +157,7 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
+@@ -163,7 +163,7 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
      val listState = rememberLazyListState()
  
      val scrollState = LocalScrollState.current
@@ -4372,7 +4227,7 @@ index d09e88d11..dc61c173f 100644
      val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
  
      Scaffold(
-@@ -484,10 +484,12 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
+@@ -490,10 +490,12 @@ fun ModuleScreen(navigator: DestinationsNavigator) {
                      onClickModule = { id, name, hasWebUi ->
                          if (hasWebUi) {
                              webUILauncher.launch(
@@ -4389,7 +4244,7 @@ index d09e88d11..dc61c173f 100644
                              )
                          }
                      },
-@@ -671,15 +673,20 @@ private fun ModuleList(
+@@ -677,15 +679,20 @@ private fun ModuleList(
              failedRestore.format(module.name)
          }
      }
@@ -4436,7 +4291,7 @@ index e3a5b940b..93e7e2671 100644
                              moduleState = ModuleRepoState.Loading
                              loadModules()
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Settings.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Settings.kt
-index f65efaf4e..28315f9f1 100644
+index 769d1d4ea..432bb92ca 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Settings.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/Settings.kt
 @@ -4,10 +4,16 @@ import android.content.Context
@@ -4462,10 +4317,10 @@ index f65efaf4e..28315f9f1 100644
      val scrollState = LocalScrollState.current
 -    val isNavBarHidden = scrollState?.isScrollingDown?.value ?: false
 +    val isNavBarHidden = (scrollState?.isScrollingDown?.value ?: false) || (scrollState?.isNavBarEnabled?.value == false)
-     val navBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
+     val navBarPadding =
+         WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + if (isNavBarHidden) 0.dp else 112.dp
  
-     val bottomBarScrollState = LocalScrollState.current
-@@ -541,6 +547,89 @@ private fun AppSettingsCard(
+@@ -529,6 +535,89 @@ private fun AppSettingsCard(
                  checkUpdate = it
              }
  
@@ -4588,7 +4443,7 @@ index 69db1f239..b8ee7f3ca 100644
          onCleanFile = viewModel::cleanFile,
          onSearchTextChange = viewModel::setSearchText,
 diff --git a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuperUser.kt b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuperUser.kt
-index dc20f29cf..4350981b6 100644
+index be098626d..51b59abb6 100644
 --- a/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuperUser.kt
 +++ b/manager/app/src/main/java/com/rifsxd/ksunext/ui/screen/SuperUser.kt
 @@ -137,15 +137,21 @@ fun SuperUserScreen(navigator: DestinationsNavigator) {
@@ -4928,10 +4783,10 @@ index 84466c729..373d3ce33 100644
          webView?.apply {
              stopLoading()
 diff --git a/manager/app/src/main/res/values/strings.xml b/manager/app/src/main/res/values/strings.xml
-index 2a1cbd68d..d67c20746 100644
+index b8c7b28b8..6b2605def 100644
 --- a/manager/app/src/main/res/values/strings.xml
 +++ b/manager/app/src/main/res/values/strings.xml
-@@ -147,6 +147,10 @@
+@@ -145,6 +145,10 @@
      <string name="restart_app">Restart</string>
      <string name="settings_amoled_mode">AMOLED mode</string>
      <string name="settings_amoled_mode_summary">Enable a pure black theme useful for AMOLED screens to reduce eye strain and save battery.</string>
@@ -4942,10 +4797,10 @@ index 2a1cbd68d..d67c20746 100644
      <string name="restart_required">Restart required</string>
      <string name="restart_app_message">The app needs to restart for this change to take effect.</string>
      <string name="failed_to_update_sepolicy">Failed to update SELinux rules for %s</string>
-@@ -309,4 +313,12 @@
-     <string name="sulog_uid">UID %1$s</string>
-     <string name="sulog_status_success">Success</string>
-     <string name="sulog_status_exit">Exit %1$d</string>
+@@ -311,4 +315,12 @@
+     <string name="require_manager_version">The current KernelSU-Next manager version %1$d is too low for KernelSU-Next to work properly. Please upgrade manager to version %2$d or higher!</string>
+     <string name="require_kernel_version">The current KernelSU-Next version %1$d is too low for the manager to work properly. Please upgrade to version %2$d or higher!</string>
+     <string name="require_kernel_version_gki">Kernel update required</string>
 +    <string name="settings_app_lock">App lock</string>
 +    <string name="settings_app_lock_summary">Require authentication when opening the app.</string>
 +    <string name="settings_app_lock_timeout">Grace period</string>
@@ -5092,10 +4947,28 @@ index c21f33a38..688e22d43 100644
              .stdout,
      )
 diff --git a/userspace/ksud/src/init_event.rs b/userspace/ksud/src/init_event.rs
-index d133c1160..4e37648f9 100644
+index d133c1160..5509a4bd0 100644
 --- a/userspace/ksud/src/init_event.rs
 +++ b/userspace/ksud/src/init_event.rs
-@@ -282,6 +282,16 @@ pub fn soft_reboot() -> Result<()> {
+@@ -268,6 +268,17 @@ pub fn soft_reboot() -> Result<()> {
+     if !status.success() {
+         warn!("stop exited with status: {status}");
+     }
++
++    // Wait for Zygote teardown to prevent injection race conditions
++    let rp = resetprop();
++    let timeout = Some(std::time::Duration::from_secs(2));
++    if sys_prop::get("init.svc.zygote").is_some() {
++        let _ = rp.wait("init.svc.zygote", Some("stopped"), timeout);
++    }
++    if sys_prop::get("init.svc.zygote_secondary").is_some() {
++        let _ = rp.wait("init.svc.zygote_secondary", Some("stopped"), timeout);
++    }
++
+     info!("post-fs-data");
+     on_post_data_fs()?;
+     info!("start");
+@@ -282,6 +293,16 @@ pub fn soft_reboot() -> Result<()> {
      }
      on_boot_completed();
  
