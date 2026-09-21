@@ -22,7 +22,7 @@
 #define KSTAT_SPOOF_ATIME_TV_NSEC (1 << 5)
 #define KSTAT_SPOOF_MTIME_TV_SEC (1 << 6)
 #define KSTAT_SPOOF_MTIME_TV_NSEC (1 << 7)
-#define KSTAT_SPOOF_CTIME_TV_SEC (1 < 8)
+#define KSTAT_SPOOF_CTIME_TV_SEC (1 << 8)
 #define KSTAT_SPOOF_CTIME_TV_NSEC (1 << 9)
 #define KSTAT_SPOOF_BLOCKS (1 << 10)
 #define KSTAT_SPOOF_BLKSIZE (1 << 11)
@@ -79,25 +79,25 @@ void sus_kstat_print_help(void){
 	log("                    '1712592355' 'default' '1712592355' 'default' '1712592355' 'default'\\\n");
 	log("                    'default' 'default'\n");
 	log("      * Important Notes *\n");
-	log("      - Only effective for umounted process with uid >= 10000\n");
+	log("      - Effective for all processes with uid >= 10000\n");
 	log("\n");
 	log("    add_sus_kstat </path/of/file_or_directory>\n");
 	log("      |--> Add the desired path BEFORE it gets bind mounted or overlayed, this is used for storing original stat info in kernel memory\n");
 	log("      |--> This command must be completed with <update_sus_kstat> later after the added path is bind mounted or overlayed\n");
 	log("      * Important Notes *\n");
-	log("      - Only effective for umounted process with uid >= 10000\n");
+	log("      - Effective for all processes with uid >= 10000\n");
 	log("\n");
 	log("    update_sus_kstat </path/of/file_or_directory>\n");
 	log("      |--> Add the desired path you have added before via <add_sus_kstat> to complete the kstat spoofing procedure\n");
 	log("      |--> This updates the target ino, but size and blocks are remained the same as current stat\n");
 	log("      * Important Notes *\n");
-	log("      - Only effective for umounted process with uid >= 10000\n");
+	log("      - Effective for all processes with uid >= 10000\n");
 	log("\n");
 	log("    update_sus_kstat_full_clone </path/of/file_or_directory>\n");
 	log("      |--> Add the desired path you have added before via <add_sus_kstat> to complete the kstat spoofing procedure\n");
 	log("      |--> This updates the target ino only, other stat members are remained the same as the original stat\n");
 	log("      * Important Notes *\n");
-	log("      - Only effective for umounted process with uid >= 10000\n");
+	log("      - Effective for all processes with uid >= 10000\n");
 	log("\n");
 }
 

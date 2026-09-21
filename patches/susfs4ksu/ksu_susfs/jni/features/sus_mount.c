@@ -22,8 +22,8 @@ void sus_mount_print_help(void){
 	log("      |--> 0 -> DO NOT hide sus mounts for non-su processes\n");
 	log("      |--> 1 -> hide all sus mounts for non-su processes\n");
 	log("      * Important Notes *\n");
-	log("      - It is set to 0 in kernel by default\n");
-	log("      - For ReZygisk without TreatWheel module, it is recommended to set to 1 in post-fs-data.sh to prevent zygote from caching the sus mounts in memory, and revert to 0 in boot-completed.sh stage, or keep it enabled if you want to keep them hidden from /proc/self/[mounts|mountinfo|mountstat] for non-su processes\n");
+	log("      - It is set to 0 in kernel by default, but it is a MUST now to have it enabled all the time\n");
+	log("        because of the zygote_next exploit. It is also required if kernel_umount is disabled in KSU manager\n");
 	log("\n");
 }
 
