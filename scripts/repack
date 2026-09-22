@@ -14,6 +14,7 @@ CERTDIR=$BINDIR/certs
 
 # -------- Argument parsing --------
 KSU_VARIANT=""
+INCLUDE_VBMETA=false
 
 # -------- Colors & logging --------
 RED="\e[1;31m"
@@ -51,6 +52,7 @@ usage() {
     info "Usage: $0 [--ksu | --ksun]"
     info -n "  --ksu     Build/repack using KernelSU"
     info "  --ksun    Build/repack using KernelSU-Next"
+    info "  --vbm     Include vbmeta.img.lz4 in the output tar (if present)"
     info "  (none)    Build/repack the stock kernel (no root, no KSU checks)"
     exit 1
 }
@@ -63,6 +65,10 @@ while [[ $# -gt 0 ]]; do
         ;;
         --ksun|--ksu-next)
             KSU_VARIANT="ksun"
+            shift
+        ;;
+        --vbm|--include-vbmeta)
+            INCLUDE_VBMETA=true
             shift
         ;;
         -h|--help)
@@ -313,7 +319,7 @@ package_tar() {
     cp -f "${PARENTDIR}/repackfiles/boot-repacked-signed.img" "${TMPDIR}/boot.img"
     
     # Also include vbmeta.img.lz4 if it exists in parent dir
-    if [ -f "${PARENTDIR}/repackfiles/vbmeta.img.lz4" ]; then
+    if [[ -f "${PARENTDIR}/repackfiles/vbmeta.img.lz4" && "$INCLUDE_VBMETA" == true ]]; then
         cp -f "${PARENTDIR}/repackfiles/vbmeta.img.lz4" "${TMPDIR}/vbmeta.img.lz4"
         SRCFILES="boot.img vbmeta.img.lz4"
     else
