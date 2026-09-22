@@ -1,12 +1,12 @@
-From 1055baa4468f818af68588ef36bd7706dd8d8be0 Mon Sep 17 00:00:00 2001
+From e48c9e7969442251d3360c98da6efa6158253b3a Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Tue, 22 Sep 2026 01:17:30 +0200
+Date: Tue, 22 Sep 2026 04:46:34 +0200
 Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
 
 ---
- kernel/Kbuild                                 |  81 ++--
+ kernel/Kbuild                                 |  75 ++--
  kernel/Kconfig                                | 106 +++++-
- kernel/core/init.c                            |  47 +++
+ kernel/core/init.c                            |  51 +++
  kernel/extras.c                               |  22 +-
  kernel/feature/adb_root.c                     | 163 +++++++-
  kernel/feature/adb_root.h                     |   4 +
@@ -59,23 +59,17 @@ Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
  manager/build.gradle.kts                      |  69 +++-
  userspace/ksud/build.rs                       |  24 +-
  userspace/ksud/src/init_event.rs              |  21 ++
- 55 files changed, 2604 insertions(+), 359 deletions(-)
+ 55 files changed, 2602 insertions(+), 359 deletions(-)
  create mode 100644 manager/app/src/main/java/com/rifsxd/ksunext/ui/util/AppLockManager.kt
  create mode 100644 manager/app/src/main/java/com/rifsxd/ksunext/ui/util/BiometricAuth.kt
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index b9a89800f..535f7d136 100644
+index b9a89800f..229aed231 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
-@@ -1,21 +1,42 @@
--kernelsu-objs := core/init.o
-+ifneq ($(strip $(CONFIG_KPROBES)),y)
-+ifneq ($(strip $(CONFIG_KSU_SUSFS)),y)
-+$(error "KernelSU requires either CONFIG_KPROBES=y or CONFIG_KSU_SUSFS=y")
-+endif
-+endif
- 
-+kernelsu-objs := core/init.o
+@@ -1,21 +1,36 @@
+ kernelsu-objs := core/init.o
+-
  kernelsu-objs += feature/kernel_umount.o
  kernelsu-objs += feature/sulog.o
  kernelsu-objs += feature/sucompat.o
@@ -111,14 +105,14 @@ index b9a89800f..535f7d136 100644
 +ifdef KSU_ARCH
 +kernelsu-objs += hook/$(KSU_ARCH)/syscall_hook.o
 +endif
- endif
 +endif
+ endif
 +
 +kernelsu-objs += hook/setuid_hook.o
  kernelsu-objs += extras.o
  
  kernelsu-objs += infra/file_wrapper.o
-@@ -24,7 +45,7 @@ kernelsu-objs += infra/seccomp_cache.o
+@@ -24,7 +39,7 @@ kernelsu-objs += infra/seccomp_cache.o
  kernelsu-objs += infra/su_mount_ns.o
  kernelsu-objs += infra/symbol_resolver.o
  
@@ -127,7 +121,7 @@ index b9a89800f..535f7d136 100644
  kernelsu-objs += manager/apk_sign.o
  kernelsu-objs += manager/pkg_observer.o
  kernelsu-objs += manager/throne_tracker.o
-@@ -53,13 +74,13 @@ kernelsu-objs += feature/adb_root.o
+@@ -53,13 +68,13 @@ kernelsu-objs += feature/adb_root.o
  kernelsu-objs += feature/selinux_hide.o
  
  ifdef KBUILD_EXTMOD
@@ -144,7 +138,7 @@ index b9a89800f..535f7d136 100644
  ccflags-y += -DCONFIG_KSU_DEBUG=1
  endif
  ifeq ($(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER),y)
-@@ -98,8 +119,12 @@ KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplev
+@@ -98,8 +113,12 @@ KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplev
  ifneq ($(GIT_ROOT),$(KERNEL_GIT_ROOT))
  # Only set version if it's a different repo from kernel
  $(shell cd $(GIT_ROOT) && [ -f .git/shallow ] && $(LPATH) git fetch --unshallow 2>/dev/null || true)
@@ -159,7 +153,7 @@ index b9a89800f..535f7d136 100644
  KSU_GIT_VERSION_VALID := 1
  $(info -- KernelSU-Next Git repo detected at: $(GIT_ROOT))
  endif
-@@ -133,12 +158,9 @@ endif
+@@ -133,12 +152,9 @@ endif
  KSU_NEW_DCACHE_FLUSH := $(shell grep -q __flush_dcache_area $(srctree)/arch/arm64/include/asm/cacheflush.h ; echo $$?)
  $(info -- KernelSU-Next new DCACHE flush: $(KSU_NEW_DCACHE_FLUSH))
  
@@ -175,7 +169,7 @@ index b9a89800f..535f7d136 100644
  endif
  
  ifdef KSU_MANAGER_PACKAGE
-@@ -146,15 +168,24 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
+@@ -146,15 +162,24 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
  $(info -- KernelSU-Next Manager package name: $(KSU_MANAGER_PACKAGE))
  endif
  
@@ -338,10 +332,21 @@ index 88e228117..ceb94e175 100644
 +
  endmenu
 diff --git a/kernel/core/init.c b/kernel/core/init.c
-index f60c2fd09..d99da109d 100644
+index f60c2fd09..8b6e1cd76 100644
 --- a/kernel/core/init.c
 +++ b/kernel/core/init.c
-@@ -26,6 +26,13 @@
+@@ -6,6 +6,10 @@
+ #include <linux/sched.h>
+ #include <linux/workqueue.h>
+ 
++#if !defined(CONFIG_KPROBES) && !defined(CONFIG_KSU_SUSFS)
++#error "KernelSU requires either CONFIG_KPROBES or CONFIG_KSU_SUSFS to be enabled!"
++#endif
++
+ #include "policy/allowlist.h"
+ #include "policy/app_profile.h"
+ #include "policy/feature.h"
+@@ -26,6 +30,13 @@
  #include "feature/sulog.h"
  #include "infra/symbol_resolver.h"
  
@@ -355,7 +360,7 @@ index f60c2fd09..d99da109d 100644
  #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
  #include <asm/cpufeature.h>
  #include <linux/version.h>
-@@ -91,6 +98,10 @@ module_param_named(bundled, ksu_bundled, bool, 0);
+@@ -91,6 +102,10 @@ module_param_named(bundled, ksu_bundled, bool, 0);
  
  int __init kernelsu_init(void)
  {
@@ -366,7 +371,7 @@ index f60c2fd09..d99da109d 100644
  #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
      // If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set
      if (!boot_cpu_has(X86_FEATURE_INDIRECT_SAFE)) {
-@@ -133,17 +144,32 @@ int __init kernelsu_init(void)
+@@ -133,17 +148,32 @@ int __init kernelsu_init(void)
  	}
  
  	ksu_init_symbol_resolver();
@@ -399,7 +404,7 @@ index f60c2fd09..d99da109d 100644
  	if (ksu_late_loaded) {
  		pr_info("late load mode, skipping kprobe hooks\n");
  
-@@ -159,7 +185,9 @@ int __init kernelsu_init(void)
+@@ -159,7 +189,9 @@ int __init kernelsu_init(void)
  		ksu_allowlist_init();
  		ksu_load_allow_list();
  
@@ -409,7 +414,7 @@ index f60c2fd09..d99da109d 100644
  
  		ksu_throne_tracker_init();
  		ksu_observer_init();
-@@ -168,13 +196,20 @@ int __init kernelsu_init(void)
+@@ -168,13 +200,20 @@ int __init kernelsu_init(void)
  		ksu_boot_completed = true;
  		track_throne(false);
  
@@ -430,7 +435,7 @@ index f60c2fd09..d99da109d 100644
  
  		ksu_allowlist_init();
  
-@@ -196,7 +231,9 @@ int __init kernelsu_init(void)
+@@ -196,7 +235,9 @@ int __init kernelsu_init(void)
  void __exit kernelsu_exit(void)
  {
  	// Phase 1: Stop all hooks first to prevent new callbacks
@@ -440,7 +445,7 @@ index f60c2fd09..d99da109d 100644
  
  	ksu_supercalls_exit();
  
-@@ -213,9 +250,19 @@ void __exit kernelsu_exit(void)
+@@ -213,9 +254,19 @@ void __exit kernelsu_exit(void)
  
  	ksu_allowlist_exit();
  

@@ -62,8 +62,10 @@ if [[ ! -d "$(pwd)/logs" ]]; then
     mkdir -p "$(pwd)/logs"
 fi
 
-# Strip ANSI color codes from the log file output, but keep them in the terminal
-exec > >(tee >(sed "s/$(printf '\033')\\[[0-9;]*m//g" >> "$LOGFILE")) 2>&1
+# Strip ANSI color codes from the log file output, but keep them in the terminal.
+# The logger ignores INT/TERM/HUP so a Ctrl+C doesn't kill it before the exit
+# cleanup has run (it still exits on its own once this script closes stdout).
+exec > >(trap '' INT TERM HUP; exec tee >(sed "s/$(printf '\033')\\[[0-9;]*m//g" >> "$LOGFILE")) 2>&1
 
 _calc_runtime() {
     local start=${1:-0} end=${2:-0}
@@ -313,13 +315,84 @@ CONFIG_START=0; CONFIG_END=0
 PATCH_START=0; PATCH_END=0
 BUILD_START=0; BUILD_END=0
 
+# -------- Toolchain: generic `ld` -> ld.lld (removed again on exit) --------
+# Set when this run owns the ld symlink; removed again by cleanup() on exit
+GENERIC_LD_LINK=""
+GENERIC_LD_PREV=""   # previous target, if we replaced someone else's ld symlink
+
+ensure_generic_ld() {
+    local build_root clang_bin bin_dir lld_path
+    build_root="$(realpath "$KERNEL_DIR/../kernel")"
+    
+    # Use the exact clang the kernel build uses (same value _setup_env.sh reads)
+    clang_bin="$(grep -m1 '^CLANG_PREBUILT_BIN=' "$KERNEL_DIR/build.config.common" 2>/dev/null | cut -d= -f2- || true)"
+    bin_dir="$build_root/$clang_bin"
+    
+    if [[ -z "$clang_bin" || ! -e "$bin_dir/ld.lld" ]]; then
+        # Fallback: search prebuilts-master, following symlinks
+        lld_path="$(find -L "$build_root/prebuilts-master" -name 'ld.lld' -print -quit 2>/dev/null || true)"
+        if [[ -z "$lld_path" ]]; then
+            warn -n "No ld.lld found under $build_root/prebuilts-master; skipping generic ld symlink."
+            return 0
+        fi
+        bin_dir="$(dirname "$lld_path")"
+    fi
+    
+    if [[ -e "$bin_dir/ld" && ! -L "$bin_dir/ld" ]]; then
+        info -n "A real 'ld' already exists in $bin_dir; leaving it alone."
+        elif [[ "$(readlink "$bin_dir/ld" 2>/dev/null)" == "ld.lld" ]]; then
+        info -n "ld -> ld.lld already present in $bin_dir"
+        # Most likely left behind by a run that was killed with -9; adopt it so
+        # it gets removed this time (unless it's committed to the repo)
+        if ! git -C "$bin_dir" ls-files --error-unmatch ld >/dev/null 2>&1; then
+            GENERIC_LD_LINK="$bin_dir/ld"
+        fi
+    else
+        GENERIC_LD_PREV="$(readlink "$bin_dir/ld" 2>/dev/null || true)"
+        ln -sfn ld.lld "$bin_dir/ld"
+        GENERIC_LD_LINK="$bin_dir/ld"
+        info -n "Symlinked ld -> ld.lld in $bin_dir"
+    fi
+}
+
+remove_generic_ld() {
+    local link="${GENERIC_LD_LINK:-}"
+    [[ -n "$link" ]] || return 0
+    GENERIC_LD_LINK=""
+    
+    # Only touch it if it's still our symlink
+    if [[ -L "$link" && "$(readlink "$link" 2>/dev/null)" == "ld.lld" ]]; then
+        rm -f "$link" || true
+        if [[ -n "${GENERIC_LD_PREV:-}" ]]; then
+            ln -s "$GENERIC_LD_PREV" "$link" || true
+            info -n "Restored ld -> $GENERIC_LD_PREV in $(dirname "$link")" || true
+        else
+            info -n "Removed ld -> ld.lld symlink from $(dirname "$link")" || true
+        fi
+    fi
+}
+
 cleanup() {
+    # Unlink first: it must happen even if printing below fails
+    remove_generic_ld
     echo " "
     _print_runtime "Config runtime" "$CONFIG_START" "$CONFIG_END"
     _print_runtime "Patch runtime" "$PATCH_START" "$PATCH_END"
     _print_runtime "Build runtime" "$BUILD_START" "$BUILD_END"
 }
 trap cleanup EXIT
+
+# Ctrl+C / kill / closed terminal: exit through the EXIT trap so cleanup runs
+on_cancel() {
+    trap - INT TERM HUP
+    trap - ERR
+    echo " "
+    warn "Build canceled (SIG$1)."
+    exit "$2"
+}
+trap 'on_cancel INT 130' INT
+trap 'on_cancel TERM 143' TERM
+trap 'on_cancel HUP 129' HUP
 
 # 1. Clean Step
 if [[ $NO_CLEAN -eq 0 ]]; then
@@ -339,6 +412,8 @@ if [[ $NO_CLEAN -eq 0 ]]; then
         exit 0
     fi
 fi
+
+ensure_generic_ld
 
 info -n "Applying Python3 support patch..."
 patch -p1 --forward < ./patches/enable-python3-support.patch || true
@@ -605,10 +680,10 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                 
                 REJ_FILES=$(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;)
                 
-                if [[ "$KSU_VARIANT" != "ksun" ]]; then
-                    FIX_PATCH_BASE="$KERNEL_PATCHES/next/susfs_fix_patches/"
+                if [[ "$KSU_VARIANT" != "ksu" ]]; then
+                    FIX_PATCH_BASE="$KERNEL_PATCHES/next/susfs_fix_patches/$SUSFS_VER"
                 else
-                    FIX_PATCH_BASE="$KERNEL_PATCHES/ksu/susfs_fix_patches/"
+                    FIX_PATCH_BASE="$KERNEL_PATCHES/ksu/susfs_fix_patches/$SUSFS_VER"
                 fi
                 
                 if [[ -z "$REJ_FILES" ]]; then
