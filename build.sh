@@ -3,17 +3,18 @@
 set -euo pipefail
 
 # -------- KernelSU variant selection (must run before logging/config setup) --------
-# Default to no KernelSU variant if neither --ksu nor --ksun is passed.
+# Default to no KernelSU variant if none of --ksu / --ksun / --resukisu is passed.
 KSU_VARIANT="none"
 KSU_FLAG_COUNT=0
 for _arg in "$@"; do
     case "$_arg" in
-        --ksu)  KSU_VARIANT="ksu";  KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
-        --ksun) KSU_VARIANT="ksun"; KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
+        --ksu)      KSU_VARIANT="ksu";      KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
+        --ksun)     KSU_VARIANT="ksun";     KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
+        --resukisu) KSU_VARIANT="resukisu"; KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
     esac
 done
 if [[ $KSU_FLAG_COUNT -gt 1 ]]; then
-    echo "Error: --ksu and --ksun are mutually exclusive; pass only one." >&2
+    echo "Error: --ksu, --ksun and --resukisu are mutually exclusive; pass only one." >&2
     exit 2
 fi
 
@@ -25,6 +26,7 @@ if [[ "$KSU_VARIANT" == "ksun" ]]; then
     KSU_LABEL="KernelSU Next"
     KSU_DISCORD_LABEL="KernelSUNext"
     SUSFS_KSU_INTERNAL_PATCH_DESC="pershoot-fork SUSFS patch (10_pershoot_enable_susfs_for_ksun.patch)"
+    SUSFS_BUILTIN=0
     elif [[ "$KSU_VARIANT" == "ksu" ]]; then
     KERNELSU_SETUP_URL="https://raw.githubusercontent.com/poqdavid/KernelSU/main/kernel/setup.sh"
     KERNELSU_SETUP_BRANCH="main"
@@ -33,11 +35,24 @@ if [[ "$KSU_VARIANT" == "ksun" ]]; then
     KSU_LABEL="KernelSU"
     KSU_DISCORD_LABEL="KernelSU"
     SUSFS_KSU_INTERNAL_PATCH_DESC="upstream SUSFS patch (10_enable_susfs_for_ksu.patch)"
+    SUSFS_BUILTIN=0
+    elif [[ "$KSU_VARIANT" == "resukisu" ]]; then
+    KERNELSU_SETUP_URL="https://raw.githubusercontent.com/poqdavid/ReSukiSU/main/kernel/setup.sh"
+    KERNELSU_SETUP_BRANCH="main"
+    # ReSukiSU's own setup.sh always clones into ./KernelSU (same name --ksu uses).
+    # That's fine: the variants are mutually exclusive and the clean step wipes
+    # ./KernelSU either way, but avoid --no-clean when switching --ksu <-> --resukisu.
+    KSU_DIR="KernelSU"
+    KSU_LABEL="ReSukiSU"
+    KSU_DISCORD_LABEL="ReSukiSU"
+    SUSFS_KSU_INTERNAL_PATCH_DESC="built-in (ReSukiSU ships its own SUSFS hooks; no glue patch needed)"
+    SUSFS_BUILTIN=1
 else
     KSU_DIR=""
     KSU_LABEL="None"
     KSU_DISCORD_LABEL="Variant"
     NO_SUSFS=1
+    SUSFS_BUILTIN=0
 fi
 
 # -------- Discord Webhook Configuration --------
@@ -230,8 +245,9 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --kernel-dir) KERNEL_DIR="$2"; shift 2;;
         --out-dir) OUT_DIR="$2"; shift 2;;
-        --ksu) shift;;   # already handled by the pre-scan; consume it here so parsing doesn't error
-        --ksun) shift;;  # already handled by the pre-scan; consume it here so parsing doesn't error
+        --ksu) shift;;       # already handled by the pre-scan; consume it here so parsing doesn't error
+        --ksun) shift;;      # already handled by the pre-scan; consume it here so parsing doesn't error
+        --resukisu) shift;;  # already handled by the pre-scan; consume it here so parsing doesn't error
         --no-clean) NO_CLEAN=1; shift;;
         --no-patch) NO_PATCH=1; shift;;
         --no-susfs) NO_SUSFS=1; shift;;
@@ -248,6 +264,7 @@ Options:
   --out-dir DIR        Output directory for build artifacts (default: ${DEFAULT_OUT})
   --ksu                Build against upstream KernelSU (main branch)
   --ksun               Build against KernelSU-Next (dev branch)
+  --resukisu           Build against ReSukiSU (main branch, built-in SUSFS hooks)
   --no-clean           Skip running clean_build.sh
   --no-patch           Skip patching steps / KernelSU setup
   --no-susfs           Skip SUSFS related config & patches
@@ -589,6 +606,14 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
             --set-val OVERLAY_FS y \
             --set-val TMPFS_XATTR y \
             --set-val TMPFS_POSIX_ACL y
+            
+            if [[ "$KSU_VARIANT" == "resukisu" ]]; then
+                $CONFIG_TOOL --file $DEFCONFIG \
+                --undefine KSU_TRACEPOINT_HOOK \
+                --undefine KSU_MANUAL_HOOK \
+                --set-val KSU_MULTI_MANAGER_SUPPORT y \
+                --set-str KSU_FULL_NAME_FORMAT "%TAG_NAME%-%COMMIT_SHA%-NyxKernel@%REPO_NAME%"
+            fi
         else
             info -n "Skipping KernelSU & SUSFS configs (vanilla kernel selected)..."
         fi
@@ -626,7 +651,10 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
         if [[ -d "./$KSU_DIR" ]]; then
             # Version Detection
             pushd "./$KSU_DIR/kernel" > /dev/null
-            BASE_VERSION=$(grep -m1 -oP 'expr\s*\K[0-9]+' Kbuild)
+            # Sum every standalone integer on the "expr ..." version line rather than
+            # just the first one -- some forks (e.g. ReSukiSU) add extra offsets like
+            # "expr 30000 + $(KSU_LOCAL_VERSION) + 700".
+            BASE_VERSION=$(grep -m1 'expr' Kbuild | grep -oP '(?<![.\w])[0-9]+(?!\w)' | awk '{s+=$1} END{print s+0}')
             info -n "Detected $KSU_LABEL Base Version: $BASE_VERSION"
             
             KSU_VERSION=$(expr $(git rev-list --count HEAD) "+" $BASE_VERSION)
@@ -671,35 +699,39 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                 
                 # Patch $KSU_LABEL internal
                 pushd "./$KSU_DIR" > /dev/null
-                info -n "Patching SUSFS into $KSU_LABEL ($SUSFS_KSU_INTERNAL_PATCH_DESC)..."
-                if [[ "$KSU_VARIANT" == "ksun" ]]; then
-                    patch -p1 --forward < $PATCHES/10_pershoot_enable_susfs_for_ksun.patch || true
+                if [[ $SUSFS_BUILTIN -eq 0 ]]; then
+                    info -n "Patching SUSFS into $KSU_LABEL ($SUSFS_KSU_INTERNAL_PATCH_DESC)..."
+                    if [[ "$KSU_VARIANT" == "ksun" ]]; then
+                        patch -p1 --forward < $PATCHES/10_pershoot_enable_susfs_for_ksun.patch || true
+                    else
+                        patch -p1 --forward < $SUSFS_PATCHES/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
+                    fi
+                    
+                    REJ_FILES=$(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;)
+                    
+                    if [[ "$KSU_VARIANT" != "ksu" ]]; then
+                        FIX_PATCH_BASE="$KERNEL_PATCHES/next/susfs_fix_patches/$SUSFS_VER"
+                    else
+                        FIX_PATCH_BASE="$KERNEL_PATCHES/ksu/susfs_fix_patches/$SUSFS_VER"
+                    fi
+                    
+                    if [[ -z "$REJ_FILES" ]]; then
+                        info -n "No .rej files found. Nothing to patch."
+                    else
+                        info -n "Patching .rej fixes in $KSU_LABEL..."
+                        for rej in $REJ_FILES; do
+                            FIX_PATCH="$FIX_PATCH_BASE/fix_$rej.patch"
+                            
+                            if [[ -f "$FIX_PATCH" ]]; then
+                                info -n "Patching $rej"
+                                patch -p1 --forward < "$FIX_PATCH" || true
+                            else
+                                warn -n "No fix patch found for $rej; skipping."
+                            fi
+                        done
+                    fi
                 else
-                    patch -p1 --forward < $SUSFS_PATCHES/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
-                fi
-                
-                REJ_FILES=$(find ./kernel -maxdepth 2 -name "*.rej" -exec basename {} .rej \;)
-                
-                if [[ "$KSU_VARIANT" != "ksu" ]]; then
-                    FIX_PATCH_BASE="$KERNEL_PATCHES/next/susfs_fix_patches/$SUSFS_VER"
-                else
-                    FIX_PATCH_BASE="$KERNEL_PATCHES/ksu/susfs_fix_patches/$SUSFS_VER"
-                fi
-                
-                if [[ -z "$REJ_FILES" ]]; then
-                    info -n "No .rej files found. Nothing to patch."
-                else
-                    info -n "Patching .rej fixes in $KSU_LABEL..."
-                    for rej in $REJ_FILES; do
-                        FIX_PATCH="$FIX_PATCH_BASE/fix_$rej.patch"
-                        
-                        if [[ -f "$FIX_PATCH" ]]; then
-                            info -n "Patching $rej"
-                            patch -p1 --forward < "$FIX_PATCH" || true
-                        else
-                            warn -n "No fix patch found for $rej; skipping."
-                        fi
-                    done
+                    info -n "$KSU_LABEL ships its own SUSFS hooks ($SUSFS_KSU_INTERNAL_PATCH_DESC); skipping internal glue patch."
                 fi
                 
                 # Multi-manager Support for SUSFS
@@ -719,7 +751,7 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
                         info -n "Skipping Multi-manager sepolicy patch for KernelSU versions outside 33068-33069"
                     fi
                 else
-                    info -n "Skipping Multi-manager patches; not applicable to standard KernelSU."
+                    info -n "Skipping Multi-manager patches; not applicable to $KSU_LABEL."
                 fi
                 popd > /dev/null
                 
