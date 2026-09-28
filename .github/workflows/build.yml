@@ -50,6 +50,13 @@ jobs:
               echo "RELEASE_TITLE=KernelSU" >> "$GITHUB_ENV"
               echo "LEGACY_LABEL=KernelSU" >> "$GITHUB_ENV"
               ;;
+            resukisu)
+              echo "BUILD_FLAG=--resukisu" >> "$GITHUB_ENV"
+              echo "REPACK_FLAG=--resukisu" >> "$GITHUB_ENV"
+              echo "ARTIFACT_NAME=resukisu-build-zips" >> "$GITHUB_ENV"
+              echo "RELEASE_TITLE=ReSukiSU" >> "$GITHUB_ENV"
+              echo "LEGACY_LABEL=ReSukiSU" >> "$GITHUB_ENV"
+              ;;
             ksun)
               echo "BUILD_FLAG=--ksun" >> "$GITHUB_ENV"
               echo "REPACK_FLAG=--ksun" >> "$GITHUB_ENV"

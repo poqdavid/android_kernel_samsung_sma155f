@@ -49,11 +49,12 @@ print_msg "$RED" "       by poqdavid "
 print_msg "$RED" ""
 
 usage() {
-    info "Usage: $0 [--ksu | --ksun]"
-    info -n "  --ksu     Build/repack using KernelSU"
-    info "  --ksun    Build/repack using KernelSU-Next"
-    info "  --vbm     Include vbmeta.img.lz4 in the output tar (if present)"
-    info "  (none)    Build/repack the stock kernel (no root, no KSU checks)"
+    info "Usage: $0 [--ksu | --ksun | --resukisu]"
+    info -n "  --ksu       Build/repack using KernelSU"
+    info "  --ksun      Build/repack using KernelSU-Next"
+    info "  --resukisu  Build/repack using ReSukiSU"
+    info "  --vbm       Include vbmeta.img.lz4 in the output tar (if present)"
+    info "  (none)      Build/repack the stock kernel (no root, no KSU checks)"
     exit 1
 }
 
@@ -65,6 +66,10 @@ while [[ $# -gt 0 ]]; do
         ;;
         --ksun|--ksu-next)
             KSU_VARIANT="ksun"
+            shift
+        ;;
+        --resukisu)
+            KSU_VARIANT="resukisu"
             shift
         ;;
         --vbm|--include-vbmeta)
@@ -97,6 +102,15 @@ case "$KSU_VARIANT" in
         OUTPUT_PREFIX="kernelsunext"
         KSUDIR=$PARENTDIR/kernel-5.10/$KSU_DIR_NAME
         info -n "Selected KernelSU variant: ${KSU_DIR_NAME}"
+    ;;
+    resukisu)
+        # ReSukiSU's own setup.sh always clones into ./KernelSU (same dir name
+        # plain --ksu uses); harmless since only one variant is ever checked
+        # out at a time.
+        KSU_DIR_NAME="KernelSU"
+        OUTPUT_PREFIX="resukisu"
+        KSUDIR=$PARENTDIR/kernel-5.10/$KSU_DIR_NAME
+        info -n "Selected KernelSU variant: ReSukiSU"
     ;;
     stock)
         OUTPUT_PREFIX="stock_optimized"
@@ -289,7 +303,10 @@ package_tar() {
             VERSION_TAG=$(date +%Y%m%d)
         fi
     else
-        BASE_VERSION=$(grep -m1 -oP 'expr\s*\K[0-9]+' ${KSUDIR}/kernel/Kbuild)
+        # Sum every standalone integer on the "expr ..." version line rather than
+        # just the first one -- some forks (e.g. ReSukiSU) add extra offsets like
+        # "expr 30000 + $(KSU_LOCAL_VERSION) + 700".
+        BASE_VERSION=$(grep -m1 'expr' ${KSUDIR}/kernel/Kbuild | grep -oP '(?<![.\w])[0-9]+(?!\w)' | awk '{s+=$1} END{print s+0}')
         VERSION_TAG=$(( $(git -C ${KSUDIR} rev-list --count HEAD) + BASE_VERSION ))
     fi
     
