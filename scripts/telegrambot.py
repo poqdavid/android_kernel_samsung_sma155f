@@ -10,7 +10,17 @@
 import asyncio
 import os
 import sys
+import time
 import requests
+
+# Telethon sometimes can't reach Telegram from GitHub-hosted runners
+# ("Server closed the connection: 0 bytes read on a total of 8 expected bytes").
+# Retry the whole login + upload a few times before giving up.
+TELETHON_ATTEMPTS = 3
+TELETHON_BACKOFF_SECONDS = 30   # waits 30s, then 60s between attempts
+
+# Bot API sendDocument can only upload files up to 50 MB (our .tar is ~64 MB).
+BOT_API_MAX_UPLOAD = 50 * 1024 * 1024
 
 # Environment Variables (set from the workflow or repository secrets)
 API_ID = os.environ.get("API_ID")
@@ -115,6 +125,28 @@ def get_caption():
     return msg
 
 
+def get_plain_text(limit):
+    """
+    Plain-text version of the caption for the Bot API (no parse mode, so
+    characters like < > * _ in the tag message can't break entity parsing).
+    Only the commit message is truncated to fit `limit` characters.
+    """
+    header = "\n".join(p for p in (TITLE or "", VERSION or "") if p)
+    footer = "\n".join(p for p in (
+        f"Release: {COMMIT_URL}" if COMMIT_URL else "",
+        f"Workflow run: {RUN_URL}" if RUN_URL else "",
+    ) if p)
+    body = strip_gpg_signature(COMMIT_MESSAGE or "")
+
+    allowed = limit - len(header) - len(footer) - 4  # 4 = two blank-line separators
+    if allowed <= 0:
+        body = ""
+    elif len(body) > allowed:
+        body = body[:max(0, allowed - 3)].rstrip() + "..."
+
+    return "\n\n".join(p for p in (header, body, footer) if p)[:limit]
+
+
 def check_environ():
     global CHAT_ID, MESSAGE_THREAD_ID, COMMIT_MESSAGE, RUN_URL, TITLE, VERSION
     if BOT_TOKEN is None:
@@ -175,7 +207,12 @@ async def send_via_telethon(files):
     async with await TelegramClient(
         session=session_dir,
         api_id=api_id_int,
-        api_hash=API_HASH
+        api_hash=API_HASH,
+        connection_retries=5,   # reconnect attempts per connection
+        retry_delay=5,          # seconds between reconnect attempts
+        timeout=20,             # seconds per network operation
+        request_retries=10,     # retries per API request (e.g. upload parts)
+        auto_reconnect=True,
     ).start(bot_token=BOT_TOKEN) as bot:
         caption = [""] * len(files)
         caption[-1] = get_caption()
@@ -201,8 +238,8 @@ def send_via_bot_api(files):
     print("[+] Using Telegram Bot API (BOT_TOKEN only method)")
     
     api_url = f"https://api.telegram.org/bot{BOT_TOKEN}"
-    caption = get_caption()
-    
+    caption = get_plain_text(1024)  # Bot API caption limit
+
     for file_path in files:
         if not os.path.exists(file_path):
             print(f"[-] File not found: {file_path}")
@@ -218,11 +255,10 @@ def send_via_bot_api(files):
             data = {
                 'chat_id': CHAT_ID,
                 'caption': caption,
-                'parse_mode': 'HTML'  # Use Markdown instead of MarkdownV2
             }
-            
+
             if MESSAGE_THREAD_ID is not None:
-                data['reply_to_message_id'] = MESSAGE_THREAD_ID
+                data['message_thread_id'] = MESSAGE_THREAD_ID
             
             response = requests.post(
                 f"{api_url}/sendDocument",
@@ -238,6 +274,55 @@ def send_via_bot_api(files):
                 exit(1)
     
     print("[+] Done!")
+
+
+def send_link_via_bot_api():
+    """Last resort: post the release text + link (no file) via the Bot API."""
+    print("[+] Posting release link via Telegram Bot API (no file attached)")
+
+    data = {
+        'chat_id': CHAT_ID,
+        'text': get_plain_text(4096),  # Bot API message limit
+        'disable_web_page_preview': True,
+    }
+    if MESSAGE_THREAD_ID is not None:
+        data['message_thread_id'] = MESSAGE_THREAD_ID
+
+    response = requests.post(
+        f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+        data=data,
+        timeout=60
+    )
+    if response.status_code != 200:
+        print(f"[-] Failed to post release link: {response.text}")
+        exit(1)
+    print("[+] Release link posted.")
+
+
+def send_with_retries(files):
+    """Try Telethon a few times; if Telegram keeps dropping the connection,
+    fall back to the Bot API (file upload if small enough, else link only)."""
+    for attempt in range(1, TELETHON_ATTEMPTS + 1):
+        try:
+            asyncio.run(send_via_telethon(files))
+            return
+        except Exception as e:
+            print(f"[-] Telethon attempt {attempt}/{TELETHON_ATTEMPTS} failed: {e!r}")
+            if attempt < TELETHON_ATTEMPTS:
+                wait = TELETHON_BACKOFF_SECONDS * attempt
+                print(f"[+] Retrying in {wait}s...")
+                time.sleep(wait)
+
+    print("[-] Telethon failed on every attempt; falling back to the Bot API.")
+    existing = [f for f in files if os.path.exists(f)]
+    if existing and all(os.path.getsize(f) <= BOT_API_MAX_UPLOAD for f in existing):
+        send_via_bot_api(existing)
+    else:
+        send_link_via_bot_api()
+        # Visible on the workflow run summary without failing the job:
+        # the release is published and the channel got the link.
+        print("::warning title=Telegram::File could not be uploaded via Telethon; "
+              "posted the release link instead.")
 
 
 def main():
@@ -259,7 +344,7 @@ def main():
         except ImportError:
             print("[-] telethon not installed. Install with: pip install telethon")
             exit(1)
-        asyncio.run(send_via_telethon(files))
+        send_with_retries(files)
     else:
         print("[+] Bot API method detected (using BOT_TOKEN only)")
         try:
@@ -271,6 +356,9 @@ def main():
 
 
 if __name__ == "__main__":
+    # Line-buffer stdout so our messages and Telethon's log lines show up in
+    # the right order in the GitHub Actions log.
+    sys.stdout.reconfigure(line_buffering=True)
     try:
         main()
     except Exception as e:
