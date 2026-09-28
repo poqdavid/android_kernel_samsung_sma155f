@@ -1,8 +1,8 @@
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index 85932d39..f15b42e2 100644
+index eecfcece..f15b42e2 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
-@@ -4,24 +4,12 @@ kernelsu-objs += feature/kernel_umount.o
+@@ -4,27 +4,12 @@ kernelsu-objs += feature/kernel_umount.o
  kernelsu-objs += feature/sulog.o
  kernelsu-objs += feature/sucompat.o
  
@@ -17,6 +17,9 @@ index 85932d39..f15b42e2 100644
 -else ifeq ($(CONFIG_X86_64),y)
 -kernelsu-objs += hook/x86_64/patch_memory.o
 -kernelsu-objs += hook/x86_64/syscall_hook.o
+-else ifeq ($(CONFIG_RISCV),y)
+-kernelsu-objs += hook/riscv64/patch_memory.o
+-kernelsu-objs += hook/riscv64/syscall_hook.o
 -endif
  
  kernelsu-objs += infra/file_wrapper.o
@@ -27,7 +30,7 @@ index 85932d39..f15b42e2 100644
  
  ifneq ($(CONFIG_KSU_DISABLE_MANAGER),y)
  kernelsu-objs += manager/apk_sign.o
-@@ -61,9 +49,6 @@ endif
+@@ -64,9 +49,6 @@ endif
  ifeq ($(CONFIG_KSU_DEBUG),y)
  ccflags-y += -DCONFIG_KSU_DEBUG=1
  endif
@@ -371,7 +374,7 @@ index d1b37901..0af7fa35 100644
  
      put_cred(ksu_cred);
 diff --git a/kernel/feature/adb_root.c b/kernel/feature/adb_root.c
-index bcf93bc4..3535ab20 100644
+index 5945bd16..3535ab20 100644
 --- a/kernel/feature/adb_root.c
 +++ b/kernel/feature/adb_root.c
 @@ -9,9 +9,12 @@
@@ -501,7 +504,7 @@ index bcf93bc4..3535ab20 100644
 -long ksu_adb_root_handle_execve(struct pt_regs *regs)
 -{
 -    if (static_branch_unlikely(&ksu_adb_root)) {
--        return do_ksu_adb_root_handle_execve((const char __user *)PT_REGS_PARM1(regs), regs,
+-        return do_ksu_adb_root_handle_execve((const char __user *)PT_REGS_SYSCALL_PARM1(regs), regs,
 -                                             (unsigned long *)&PT_REGS_PARM3(regs));
 -    }
 +    ret = escape_with_root_profile();
@@ -1122,7 +1125,7 @@ index fbb6c44f..1b34903f 100644
  {
      struct policydb *policydb;
 diff --git a/kernel/feature/sucompat.c b/kernel/feature/sucompat.c
-index 3418600c..e784aba5 100644
+index f5cd7bf2..e784aba5 100644
 --- a/kernel/feature/sucompat.c
 +++ b/kernel/feature/sucompat.c
 @@ -1,6 +1,3 @@
@@ -1374,7 +1377,7 @@ index 3418600c..e784aba5 100644
 -    const struct cred *old_cred;
 +    int ret;
  
--    if (execveat && ((int)PT_REGS_PARM1(regs) != AT_FDCWD || (int)PT_REGS_PARM5(regs) != 0))
+-    if (execveat && ((int)PT_REGS_SYSCALL_PARM1(regs) != AT_FDCWD || (int)PT_REGS_PARM5(regs) != 0))
 -        goto do_orig_execve;
 +    if (unlikely(!filename_ptr))
 +        return -EINVAL;
@@ -1442,7 +1445,7 @@ index 3418600c..e784aba5 100644
 -    pending_sucompat = ksu_sulog_capture_sucompat(*filename_user, argv_user, GFP_KERNEL);
 -    // execve(file, argv, environ)
 -    // execveat(fd, file, argv, environ, flags)
--    orig_regs[0] = regs->__PT_PARM1_REG;
+-    orig_regs[0] = PT_REGS_SYSCALL_PARM1(regs);
 -    orig_regs[1] = regs->__PT_PARM2_REG;
 -    orig_regs[2] = regs->__PT_PARM3_REG;
 -    orig_regs[3] = regs->__PT_SYSCALL_PARM4_REG;
@@ -1451,7 +1454,7 @@ index 3418600c..e784aba5 100644
 -    regs->__PT_SYSCALL_PARM4_REG = envp;
 -    regs->__PT_PARM3_REG = (unsigned long)argv_user;
 -    regs->__PT_PARM2_REG = empty_user_path();
--    regs->__PT_PARM1_REG = tmp_fd;
+-    PT_REGS_SYSCALL_PARM1(regs) = tmp_fd;
 +    ksu_sulog_emit_pending(pending_sucompat, ret, GFP_KERNEL);
  
 -    ret = escape_with_root_profile();
@@ -1467,7 +1470,7 @@ index 3418600c..e784aba5 100644
 -    ret = ksu_syscall_table[__NR_execveat](regs);
 -    if (ret < 0) {
 -        ksu_close_fd(tmp_fd);
--        regs->__PT_PARM1_REG = orig_regs[0];
+-        PT_REGS_SYSCALL_PARM1(regs) = orig_regs[0];
 -        regs->__PT_PARM2_REG = orig_regs[1];
 -        regs->__PT_PARM3_REG = orig_regs[2];
 -        regs->__PT_SYSCALL_PARM4_REG = orig_regs[3];
@@ -2035,7 +2038,7 @@ index 09384def..ba238519 100644
 +                             struct user_arg_ptr *envp, int *flags);
  #endif
 diff --git a/kernel/runtime/ksud_integration.c b/kernel/runtime/ksud_integration.c
-index 5bf84cb6..6f81803c 100644
+index 6ee9b39d..6f81803c 100644
 --- a/kernel/runtime/ksud_integration.c
 +++ b/kernel/runtime/ksud_integration.c
 @@ -11,7 +11,6 @@
@@ -2292,7 +2295,7 @@ index 5bf84cb6..6f81803c 100644
 -void ksu_execve_hook_ksud(const struct pt_regs *regs)
 +void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr)
  {
--    const char __user *filename_user = (const char __user *)PT_REGS_PARM1(regs);
+-    const char __user *filename_user = (const char __user *)PT_REGS_SYSCALL_PARM1(regs);
 -    const char __user *const __user *argv_user = (const char __user *const __user *)PT_REGS_PARM2(regs);
 -
 -    ksu_execve_hook_ksud_common(filename_user, argv_user);
@@ -2309,7 +2312,7 @@ index 5bf84cb6..6f81803c 100644
 -static long (*orig_sys_read)(const struct pt_regs *regs);
 -static long ksu_sys_read(const struct pt_regs *regs)
 -{
--    unsigned int fd = PT_REGS_PARM1(regs);
+-    unsigned int fd = PT_REGS_SYSCALL_PARM1(regs);
 -    char __user **buf_ptr = (char __user **)&PT_REGS_PARM2(regs);
 -    size_t *count_ptr = (size_t *)&PT_REGS_PARM3(regs);
 -
@@ -2320,7 +2323,7 @@ index 5bf84cb6..6f81803c 100644
 -static long (*orig_sys_fstat)(const struct pt_regs *regs);
 -static long ksu_sys_fstat(const struct pt_regs *regs)
 -{
--    unsigned int fd = PT_REGS_PARM1(regs);
+-    unsigned int fd = PT_REGS_SYSCALL_PARM1(regs);
 -    void __user *statbuf = (void __user *)PT_REGS_PARM2(regs);
 +    loff_t orig_size = *kstat_size_ptr;
 +    size_t extra = 0;
@@ -2422,10 +2425,10 @@ index 5bf84cb6..6f81803c 100644
          free_module_rc();
      }
 diff --git a/kernel/selinux/rules.c b/kernel/selinux/rules.c
-index 762a7c55..250676f3 100644
+index 768b9a26..2595940b 100644
 --- a/kernel/selinux/rules.c
 +++ b/kernel/selinux/rules.c
-@@ -160,6 +160,8 @@ void apply_kernelsu_rules()
+@@ -161,6 +161,8 @@ void apply_kernelsu_rules()
      ksu_destroy_sepolicy(old_pol);
  
      reset_avc_cache();
@@ -2987,7 +2990,7 @@ index de184e10..dbf87206 100644
  {
      struct ksu_nuke_ext4_sysfs_cmd cmd;
 diff --git a/kernel/supercall/supercall.c b/kernel/supercall/supercall.c
-index c35ce873..40a56fc4 100644
+index 6db26495..40a56fc4 100644
 --- a/kernel/supercall/supercall.c
 +++ b/kernel/supercall/supercall.c
 @@ -63,21 +63,21 @@ static int ksu_install_fd_with_permissions(unsigned int fd_flags, unsigned long
@@ -3023,7 +3026,7 @@ index c35ce873..40a56fc4 100644
 +int ksu_supercall_reboot_handler(void __user **arg)
  {
 -    struct pt_regs *real_regs = PT_REAL_REGS(regs);
--    int magic1 = (int)PT_REGS_PARM1(real_regs);
+-    int magic1 = (int)PT_REGS_SYSCALL_PARM1(real_regs);
 -    int magic2 = (int)PT_REGS_PARM2(real_regs);
 +    struct ksu_install_fd_tw *tw;
  
