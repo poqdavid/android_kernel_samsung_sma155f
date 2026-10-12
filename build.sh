@@ -647,7 +647,7 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
     # Only fetch and setup KernelSU/SUSFS if a variant was selected
     if [[ "$KSU_VARIANT" != "none" ]]; then
         info -n "Setting up $KSU_LABEL..."
-        curl -LSs $KERNELSU_SETUP_URL | bash -s $KERNELSU_SETUP_BRANCH
+        bash "$SCRIPT_DIR/scripts/setup.sh" --variant "$KSU_VARIANT" --ref "$KERNELSU_SETUP_BRANCH" --dir "$KSU_DIR"
         
         if [[ -d "./$KSU_DIR" ]]; then
             # Version Detection
