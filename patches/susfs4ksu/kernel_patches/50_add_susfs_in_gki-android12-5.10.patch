@@ -2544,7 +2544,7 @@ index 7804256b7..80d9b87ff 100644
  	audit_log_format(ab, " tclass=%s", tclass);
  
 diff --git a/security/selinux/hooks.c b/security/selinux/hooks.c
-index 1623e87c5..39c8f8078 100644
+index 1623e87c5..86469f4bb 100644
 --- a/security/selinux/hooks.c
 +++ b/security/selinux/hooks.c
 @@ -105,6 +105,10 @@
@@ -2558,64 +2558,36 @@ index 1623e87c5..39c8f8078 100644
  
  /* SECMARK reference count */
  static atomic_t selinux_secmark_refcount = ATOMIC_INIT(0);
-@@ -6588,6 +6592,43 @@ static int selinux_setprocattr(const char *name, void *value, size_t size)
- 	return error;
- }
- 
+@@ -6452,6 +6456,11 @@ static int selinux_setprocattr(const char *name, void *value, size_t size)
+ 	u32 mysid = current_sid(), sid = 0, ptsid;
+ 	int error;
+ 	char *str = value;
 +#ifdef CONFIG_KSU_SUSFS
-+static int my_setprocattr(const char *name, void *value, size_t size)
-+{
-+	u32 mysid = current_sid(), sid = 0;
-+	int error;
-+	char *str = value;
-+
-+	// apply to all app uids
-+	if (likely(current_uid().val < 10000 ||
-+				!ksu_selinux_hide_running ||
-+				strcmp(name, "current")))
-+		return selinux_setprocattr(name, value, size);
-+
-+	error = avc_has_perm(&selinux_state,
-+				     mysid, mysid, SECCLASS_PROCESS,
-+				     PROCESS__SETCURRENT, NULL);
-+
-+	if (error)
-+		return error;
-+
-+	/* Obtain a SID for the context, if one was specified. */
-+	if (size && str[0] && str[0] != '\n') {
-+		if (str[size-1] == '\n') {
-+			str[size-1] = 0;
-+			size--;
++	bool should_check_current = (likely(!strcmp(name, "current") &&
++								 current_uid().val >= 10000 &&
++								 ksu_selinux_hide_running));
++#endif // #ifdef CONFIG_KSU_SUSFS
+ 
+ 	/*
+ 	 * Basic control over ability to set these attributes at all.
+@@ -6487,6 +6496,15 @@ static int selinux_setprocattr(const char *name, void *value, size_t size)
+ 			str[size-1] = 0;
+ 			size--;
+ 		}
++#ifdef CONFIG_KSU_SUSFS
++		if (should_check_current) {
++			u32 tmp_sid = 0;
++			int fake_error = security_context_to_sid(&fake_state, value, size, &tmp_sid, GFP_KERNEL);
++			if (fake_error)
++				return fake_error;
 +		}
-+
-+		error = security_context_to_sid(&fake_state, value, size,
-+						&sid, GFP_KERNEL);
-+		if (error)
-+			return error;
-+	}
-+
-+	return selinux_setprocattr(name, value, size);
-+}
 +#endif // #ifdef CONFIG_KSU_SUSFS
 +
- static int selinux_ismaclabel(const char *name)
- {
- 	return (strcmp(name, XATTR_SELINUX_SUFFIX) == 0);
-@@ -7169,7 +7210,11 @@ static struct security_hook_list selinux_hooks[] __lsm_ro_after_init = {
- 	LSM_HOOK_INIT(d_instantiate, selinux_d_instantiate),
- 
- 	LSM_HOOK_INIT(getprocattr, selinux_getprocattr),
-+#ifdef CONFIG_KSU_SUSFS
-+	LSM_HOOK_INIT(setprocattr, my_setprocattr),
-+#else
- 	LSM_HOOK_INIT(setprocattr, selinux_setprocattr),
-+#endif // #ifdef CONFIG_KSU_SUSFS
- 
- 	LSM_HOOK_INIT(ismaclabel, selinux_ismaclabel),
- 	LSM_HOOK_INIT(secctx_to_secid, selinux_secctx_to_secid),
+ 		error = security_context_to_sid(&selinux_state, value, size,
+ 						&sid, GFP_KERNEL);
+ 		if (error == -EINVAL && !strcmp(name, "fscreate")) {
 diff --git a/security/selinux/selinuxfs.c b/security/selinux/selinuxfs.c
-index 7415f49a3..8de6852c4 100644
+index 7415f49a3..374cd2ce2 100644
 --- a/security/selinux/selinuxfs.c
 +++ b/security/selinux/selinuxfs.c
 @@ -42,6 +42,15 @@
@@ -2634,17 +2606,23 @@ index 7415f49a3..8de6852c4 100644
  enum sel_inos {
  	SEL_ROOT_INO = 2,
  	SEL_LOAD,	/* load policy */
-@@ -232,6 +241,29 @@ static int sel_open_handle_status(struct inode *inode, struct file *filp)
- 	return 0;
- }
- 
+@@ -223,6 +232,30 @@ static int sel_open_handle_status(struct inode *inode, struct file *filp)
+ {
+ 	struct selinux_fs_info *fsi = file_inode(filp)->i_sb->s_fs_info;
+ 	struct page    *status = selinux_kernel_status_page(fsi->state);
 +#ifdef CONFIG_KSU_SUSFS
-+static int my_sel_open_handle_status(struct inode *inode, struct file *filp)
-+{
 +	void *data;
-+	int ret;
++	bool should_check_current = (likely(current_uid().val >= 10000 && ksu_selinux_hide_running));
 +
-+	if (likely(current_uid().val >= 10000 && ksu_selinux_hide_enabled)) {
++	if (static_branch_unlikely(&fake_status_initialize_key)) {
++		if (!fake_status) {
++			initialize_fake_status();
++		} else {
++			goto orig_flow;
++		}
++	}
++
++	if (should_check_current) {
 +		mutex_lock(&selinux_state.status_lock);
 +		data = fake_status;
 +		mutex_unlock(&selinux_state.status_lock);
@@ -2654,161 +2632,111 @@ index 7415f49a3..8de6852c4 100644
 +		}
 +	}
 +
-+	ret = sel_open_handle_status(inode, filp);
-+	if (static_branch_unlikely(&fake_status_initialize_key) && !ret && !fake_status)
-+		initialize_fake_status();
-+	return ret;
-+}
++orig_flow:
 +#endif // #ifdef CONFIG_KSU_SUSFS
-+
- static ssize_t sel_read_handle_status(struct file *filp, char __user *buf,
- 				      size_t count, loff_t *ppos)
- {
-@@ -267,7 +299,11 @@ static int sel_mmap_handle_status(struct file *filp,
- }
  
- static const struct file_operations sel_handle_status_ops = {
+ 	if (!status)
+ 		return -ENOMEM;
+@@ -681,6 +714,9 @@ static ssize_t sel_write_context(struct file *file, char *buf, size_t size)
+ 	char *canon = NULL;
+ 	u32 sid, len;
+ 	ssize_t length;
 +#ifdef CONFIG_KSU_SUSFS
-+	.open		= my_sel_open_handle_status,
-+#else
- 	.open		= sel_open_handle_status,
++	bool should_check_current = (likely(current_uid().val >= 10000 && ksu_selinux_hide_running));
 +#endif // #ifdef CONFIG_KSU_SUSFS
- 	.read		= sel_read_handle_status,
- 	.mmap		= sel_mmap_handle_status,
- 	.llseek		= generic_file_llseek,
-@@ -710,6 +746,46 @@ static ssize_t sel_write_context(struct file *file, char *buf, size_t size)
- 	return length;
- }
+ 
+ 	length = avc_has_perm(&selinux_state,
+ 			      current_sid(), SECINITSID_SECURITY,
+@@ -688,14 +724,36 @@ static ssize_t sel_write_context(struct file *file, char *buf, size_t size)
+ 	if (length)
+ 		goto out;
  
 +#ifdef CONFIG_KSU_SUSFS
-+static ssize_t my_write_context(struct file *file, char *buf, size_t size)
-+{
-+	char *canon = NULL;
-+	u32 sid, len;
-+	ssize_t length;
-+
-+	// apply to all app uids
-+	if (likely(current_uid().val < 10000 || !ksu_selinux_hide_running))
-+		return sel_write_context(file, buf, size);
-+
-+	length = avc_has_perm(&selinux_state,
-+			      current_sid(), SECINITSID_SECURITY,
-+			      SECCLASS_SECURITY, SECURITY__CHECK_CONTEXT, NULL);
-+	if (length)
-+		goto out;
-+
-+	length = security_context_to_sid(&fake_state, buf, size, &sid, GFP_KERNEL);
-+	if (length)
-+		goto out;
-+
-+	length = security_sid_to_context(&fake_state, sid, &canon, &len);
-+	if (length)
-+		goto out;
-+
-+	length = -ERANGE;
-+	if (len > SIMPLE_TRANSACTION_LIMIT) {
-+		pr_err("SELinux: %s:  context size (%u) exceeds "
-+			"payload max\n", __func__, len);
-+		goto out;
++	if (should_check_current) {
++		length = security_context_to_sid(&fake_state, buf, size, &sid, GFP_KERNEL);
++		if (length)
++			goto out;
++		goto bypass_orig_flow1;
 +	}
-+
-+	memcpy(buf, canon, len);
-+	length = len;
-+out:
-+	kfree(canon);
-+	return length;
-+}
 +#endif // #ifdef CONFIG_KSU_SUSFS
 +
- static ssize_t sel_read_checkreqprot(struct file *filp, char __user *buf,
- 				     size_t count, loff_t *ppos)
- {
-@@ -859,14 +935,26 @@ static ssize_t sel_write_create(struct file *file, char *buf, size_t size);
- static ssize_t sel_write_relabel(struct file *file, char *buf, size_t size);
- static ssize_t sel_write_user(struct file *file, char *buf, size_t size);
- static ssize_t sel_write_member(struct file *file, char *buf, size_t size);
-+#ifdef CONFIG_KSU_SUSFS
-+static ssize_t my_write_access(struct file *file, char *buf, size_t size);
-+static ssize_t my_write_context(struct file *file, char *buf, size_t size);
-+#endif // #ifdef CONFIG_KSU_SUSFS
- 
- static ssize_t (*const write_op[])(struct file *, char *, size_t) = {
-+#ifdef CONFIG_KSU_SUSFS
-+	[SEL_ACCESS] = my_write_access,
-+#else
- 	[SEL_ACCESS] = sel_write_access,
-+#endif // #ifdef CONFIG_KSU_SUSFS
- 	[SEL_CREATE] = sel_write_create,
- 	[SEL_RELABEL] = sel_write_relabel,
- 	[SEL_USER] = sel_write_user,
- 	[SEL_MEMBER] = sel_write_member,
-+#ifdef CONFIG_KSU_SUSFS
-+	[SEL_CONTEXT] = my_write_context,
-+#else
- 	[SEL_CONTEXT] = sel_write_context,
-+#endif // #ifdef CONFIG_KSU_SUSFS
- };
- 
- static ssize_t selinux_transaction_write(struct file *file, const char __user *buf, size_t size, loff_t *pos)
-@@ -954,6 +1042,61 @@ static ssize_t sel_write_access(struct file *file, char *buf, size_t size)
- 	return length;
- }
+ 	length = security_context_to_sid(state, buf, size, &sid, GFP_KERNEL);
+ 	if (length)
+ 		goto out;
  
 +#ifdef CONFIG_KSU_SUSFS
-+static ssize_t my_write_access(struct file *file, char *buf, size_t size)
-+{
-+	char *scon = NULL, *tcon = NULL;
-+	u32 ssid, tsid;
-+	u16 tclass;
-+	struct av_decision avd;
-+	ssize_t length;
-+
-+	// apply to all app uids
-+	if (likely(current_uid().val < 10000 || !ksu_selinux_hide_running))
-+		return sel_write_access(file, buf, size);
-+
-+	length = avc_has_perm(&selinux_state,
-+			      current_sid(), SECINITSID_SECURITY,
-+			      SECCLASS_SECURITY, SECURITY__COMPUTE_AV, NULL);
-+	if (length)
-+		goto out;
-+
-+	length = -ENOMEM;
-+	scon = kzalloc(size + 1, GFP_KERNEL);
-+	if (!scon)
-+		goto out;
-+
-+	length = -ENOMEM;
-+	tcon = kzalloc(size + 1, GFP_KERNEL);
-+	if (!tcon)
-+		goto out;
-+
-+	length = -EINVAL;
-+	if (sscanf(buf, "%s %s %hu", scon, tcon, &tclass) != 3)
-+		goto out;
-+
-+	length = security_context_str_to_sid(&fake_state, scon, &ssid, GFP_KERNEL);
-+	if (length)
-+		goto out;
-+
-+	length = security_context_str_to_sid(&fake_state, tcon, &tsid, GFP_KERNEL);
-+	if (length)
-+		goto out;
-+
-+	security_compute_av_user(&fake_state, ssid, tsid, tclass, &avd);
-+
-+	length = scnprintf(buf, SIMPLE_TRANSACTION_LIMIT,
-+			  "%x %x %x %x %u %x",
-+			  avd.allowed, 0xffffffff,
-+			  avd.auditallow, avd.auditdeny,
-+			  avd.seqno, avd.flags);
-+out:
-+	kfree(tcon);
-+	kfree(scon);
-+	return length;
-+}
++bypass_orig_flow1:
++	if (should_check_current) {
++		length = security_sid_to_context(&fake_state, sid, &canon, &len);
++		if (length)
++			goto out;
++		goto bypass_orig_flow2;
++	}
 +#endif // #ifdef CONFIG_KSU_SUSFS
 +
- static ssize_t sel_write_create(struct file *file, char *buf, size_t size)
- {
- 	struct selinux_fs_info *fsi = file_inode(file)->i_sb->s_fs_info;
+ 	length = security_sid_to_context(state, sid, &canon, &len);
+ 	if (length)
+ 		goto out;
+ 
++#ifdef CONFIG_KSU_SUSFS
++bypass_orig_flow2:
++#endif // #ifdef CONFIG_KSU_SUSFS
+ 	length = -ERANGE;
+ 	if (len > SIMPLE_TRANSACTION_LIMIT) {
+ 		pr_err("SELinux: %s:  context size (%u) exceeds "
+@@ -912,6 +970,9 @@ static ssize_t sel_write_access(struct file *file, char *buf, size_t size)
+ 	u16 tclass;
+ 	struct av_decision avd;
+ 	ssize_t length;
++#ifdef CONFIG_KSU_SUSFS
++	bool should_check_current = (likely(current_uid().val >= 10000 && ksu_selinux_hide_running));
++#endif // #ifdef CONFIG_KSU_SUSFS
+ 
+ 	length = avc_has_perm(&selinux_state,
+ 			      current_sid(), SECINITSID_SECURITY,
+@@ -933,16 +994,45 @@ static ssize_t sel_write_access(struct file *file, char *buf, size_t size)
+ 	if (sscanf(buf, "%s %s %hu", scon, tcon, &tclass) != 3)
+ 		goto out;
+ 
++#ifdef CONFIG_KSU_SUSFS
++	if (should_check_current) {
++		length = security_context_str_to_sid(&fake_state, scon, &ssid, GFP_KERNEL);
++		if (length)
++			goto out;
++		goto bypass_orig_flow1;
++	}
++#endif // #ifdef CONFIG_KSU_SUSFS
+ 	length = security_context_str_to_sid(state, scon, &ssid, GFP_KERNEL);
+ 	if (length)
+ 		goto out;
+ 
++#ifdef CONFIG_KSU_SUSFS
++bypass_orig_flow1:
++	if (should_check_current) {
++		length = security_context_str_to_sid(&fake_state, tcon, &tsid, GFP_KERNEL);
++		if (length)
++			goto out;
++		goto bypass_orig_flow2;
++	}
++#endif // #ifdef CONFIG_KSU_SUSFS
++
+ 	length = security_context_str_to_sid(state, tcon, &tsid, GFP_KERNEL);
+ 	if (length)
+ 		goto out;
+ 
++#ifdef CONFIG_KSU_SUSFS
++bypass_orig_flow2:
++	if (should_check_current) {
++		security_compute_av_user(&fake_state, ssid, tsid, tclass, &avd);
++		goto bypass_orig_flow3;
++	}
++#endif // #ifdef CONFIG_KSU_SUSFS
++
+ 	security_compute_av_user(state, ssid, tsid, tclass, &avd);
+ 
++#ifdef CONFIG_KSU_SUSFS
++bypass_orig_flow3:
++#endif // #ifdef CONFIG_KSU_SUSFS
+ 	length = scnprintf(buf, SIMPLE_TRANSACTION_LIMIT,
+ 			  "%x %x %x %x %u %x",
+ 			  avd.allowed, 0xffffffff,
