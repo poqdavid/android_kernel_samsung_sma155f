@@ -10,11 +10,11 @@ for _arg in "$@"; do
     case "$_arg" in
         --ksu)      KSU_VARIANT="ksu";      KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
         --ksun)     KSU_VARIANT="ksun";     KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
-        --resukisu) KSU_VARIANT="resukisu"; KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
+        --bakasu) KSU_VARIANT="bakasu"; KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
     esac
 done
 if [[ $KSU_FLAG_COUNT -gt 1 ]]; then
-    echo "Error: --ksu, --ksun and --resukisu are mutually exclusive; pass only one." >&2
+    echo "Error: --ksu, --ksun and --bakasu are mutually exclusive; pass only one." >&2
     exit 2
 fi
 
@@ -36,16 +36,16 @@ if [[ "$KSU_VARIANT" == "ksun" ]]; then
     KSU_DISCORD_LABEL="KernelSU"
     SUSFS_KSU_INTERNAL_PATCH_DESC="upstream SUSFS patch (10_enable_susfs_for_ksu.patch)"
     SUSFS_BUILTIN=0
-    elif [[ "$KSU_VARIANT" == "resukisu" ]]; then
-    KERNELSU_SETUP_URL="https://raw.githubusercontent.com/poqdavid/ReSukiSU/main/kernel/setup.sh"
+    elif [[ "$KSU_VARIANT" == "bakasu" ]]; then
+    KERNELSU_SETUP_URL="https://raw.githubusercontent.com/poqdavid/BakaSU/main/kernel/setup.sh"
     KERNELSU_SETUP_BRANCH="main"
     # ReSukiSU's own setup.sh always clones into ./KernelSU (same name --ksu uses).
     # That's fine: the variants are mutually exclusive and the clean step wipes
     # ./KernelSU either way, but avoid --no-clean when switching --ksu <-> --resukisu.
     KSU_DIR="KernelSU"
-    KSU_LABEL="ReSukiSU"
-    KSU_DISCORD_LABEL="ReSukiSU"
-    SUSFS_KSU_INTERNAL_PATCH_DESC="built-in (ReSukiSU ships its own SUSFS hooks; no glue patch needed)"
+    KSU_LABEL="BakaSU"
+    KSU_DISCORD_LABEL="BakaSU"
+    SUSFS_KSU_INTERNAL_PATCH_DESC="built-in (BakaSU ships its own SUSFS hooks; no glue patch needed)"
     SUSFS_BUILTIN=1
 else
     KSU_DIR=""
@@ -247,7 +247,7 @@ while [[ $# -gt 0 ]]; do
         --out-dir) OUT_DIR="$2"; shift 2;;
         --ksu) shift;;       # already handled by the pre-scan; consume it here so parsing doesn't error
         --ksun) shift;;      # already handled by the pre-scan; consume it here so parsing doesn't error
-        --resukisu) shift;;  # already handled by the pre-scan; consume it here so parsing doesn't error
+        --bakasu) shift;;  # already handled by the pre-scan; consume it here so parsing doesn't error
         --no-clean) NO_CLEAN=1; shift;;
         --no-patch) NO_PATCH=1; shift;;
         --no-susfs) NO_SUSFS=1; shift;;
@@ -264,7 +264,7 @@ Options:
   --out-dir DIR        Output directory for build artifacts (default: ${DEFAULT_OUT})
   --ksu                Build against upstream KernelSU (main branch)
   --ksun               Build against KernelSU-Next (dev branch)
-  --resukisu           Build against ReSukiSU (main branch, built-in SUSFS hooks)
+  --bakasu             Build against BakaSU (main branch, built-in SUSFS hooks)
   --no-clean           Skip running clean_build.sh
   --no-patch           Skip patching steps / KernelSU setup
   --no-susfs           Skip SUSFS related config & patches
@@ -574,7 +574,8 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         --set-val IP6_NF_MATCH_HL y \
         --set-val IP6_NF_NAT y \
         --set-val NF_NAT_IPV6 y \
-        --set-val IP6_NF_TARGET_MASQUERADE y
+        --set-val IP6_NF_TARGET_MASQUERADE y \
+        --set-val MACVLAN y
         
         info "Adding CRYPTO_LZO Support..."
         $CONFIG_TOOL --file $DEFCONFIG \
@@ -607,7 +608,7 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
             --set-val TMPFS_XATTR y \
             --set-val TMPFS_POSIX_ACL y
             
-            if [[ "$KSU_VARIANT" == "resukisu" ]]; then
+            if [[ "$KSU_VARIANT" == "bakasu" ]]; then
                 $CONFIG_TOOL --file $DEFCONFIG \
                 --undefine KSU_TRACEPOINT_HOOK \
                 --undefine KSU_MANUAL_HOOK \
