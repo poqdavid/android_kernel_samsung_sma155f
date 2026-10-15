@@ -1,17 +1,16 @@
---- a/fs/namespace.c	2026-06-10 08:57:32.875552388 +0200
-+++ b/fs/namespace.c	2026-06-10 11:29:40.703951105 +0200
-@@ -30,6 +30,10 @@
+--- a/fs/namespace.c
++++ b/fs/namespace.c
+@@ -30,6 +30,9 @@
  #include <uapi/linux/mount.h>
  #include <linux/fs_context.h>
  #include <linux/shmem_fs.h>
-+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
++#ifdef CONFIG_KSU_SUSFS
 +#include <linux/susfs_def.h>
-+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
-+
++#endif // #ifdef CONFIG_KSU_SUSFS
  #include <linux/fslog.h>
  #ifdef CONFIG_KDP_NS
  #include <linux/kdp.h>
-@@ -38,6 +42,14 @@
+@@ -38,6 +41,14 @@
  #include "pnode.h"
  #include "internal.h"
  
@@ -26,7 +25,7 @@
  /* Maximum number of mounts in a mount namespace */
  unsigned int sysctl_mount_max __read_mostly = 100000;
  
-@@ -3910,6 +3922,9 @@
+@@ -3924,6 +3935,9 @@
  	copy_flags = CL_COPY_UNBINDABLE | CL_EXPIRE;
  	if (user_ns != ns->user_ns)
  		copy_flags |= CL_SHARED_TO_SLAVE;
