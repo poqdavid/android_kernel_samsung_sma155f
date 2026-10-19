@@ -6,7 +6,7 @@ name: Build and Release Kernel Image
 #   ksun   -> ksun
 
 env:
-  VARIANT: bakasu
+  VARIANT: stock
 
 on:
   push:
