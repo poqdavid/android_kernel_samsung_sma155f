@@ -85,3 +85,8 @@ cat <<EOF >/dev/null
 ksu_susfs hide_sus_mnts_for_non_su_procs 0
 EOF
 
+#### Hide the uids of user-selected apps from the getpriority() syscall ####
+## ksu_susfs set_getpriority_uid_filter <app_package_names_separated_by_comma> ##
+cat <<EOF >/dev/null
+ksu_susfs set_priority_uid_filter "com.termux,org.frknkrc44.hma_oss,io.github.vvb2060.keyattestation"
+EOF

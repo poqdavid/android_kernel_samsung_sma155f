@@ -14,6 +14,7 @@ static void print_help(void) {
 	sus_mount_print_help();
 	sus_kstat_print_help();
 	sus_map_print_help();
+	priority_uid_filter_print_help();
 	set_uname_print_help();
 	set_cmdline_or_bootconfig_print_help();
 	enable_log_print_help();
@@ -48,6 +49,8 @@ int main(int argc, char *argv[]) {
 		return hide_sus_mnts_for_non_su_procs(argc, argv);
 	if (!strcmp(argv[1], "add_sus_map"))
 		return add_sus_map(argc, argv);
+	if (!strcmp(argv[1], "set_priority_uid_filter"))
+		return set_priority_uid_filter(argc, argv);
 	if (!strcmp(argv[1], "add_open_redirect"))
 		return add_open_redirect(argc, argv);
 	if (!strcmp(argv[1], "add_sus_kstat_statically"))
