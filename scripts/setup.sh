@@ -11,6 +11,10 @@
 #   3. symlinks drivers/kernelsu -> <dir>/kernel
 #   4. hooks drivers/Makefile and drivers/Kconfig (only once; safe to re-run)
 #
+# With --no-hook only steps 1-2 run (and any hook left by an earlier run is
+# removed): the source is there to build kernelsu.ko as a loadable module
+# against the finished kernel, not to build KernelSU into it.
+#
 # Local repos: if the fork already exists next to the kernel repo, e.g.
 #     /home/david/sam/kernel          <- kernel repo (this script runs in it)
 #     /home/david/sam/BakaSU          <- used instead of downloading
@@ -138,6 +142,10 @@ Options:
       --no-upstream-tags only use the tags that exist in --repo
       --dir NAME         clone into ./NAME instead of the preset dir
   -k, --kernel-dir DIR   kernel source root (default: current directory)
+      --no-hook          clone / check out only: no drivers/kernelsu symlink and
+                         no drivers/Makefile + Kconfig lines (removes them if an
+                         earlier run left them). For building kernelsu.ko as an
+                         LKM against the finished kernel
       --no-fetch         reuse an existing clone without touching the network
       --local-dir DIR    look for local repos (KernelSU, KernelSU-Next, BakaSU)
                          in DIR (default: the folder above the kernel repo;
@@ -168,6 +176,7 @@ UPSTREAM_TAGS=1
 DIR=""
 KERNEL_DIR="."
 LATEST_TAG=0
+NO_HOOK=0
 NO_FETCH=0
 CLEANUP=0
 KEEP_SOURCE=0
@@ -189,6 +198,7 @@ while [[ $# -gt 0 ]]; do
         --dir)           need_arg "$@"; DIR="$2"; shift 2 ;;
         -k|--kernel-dir) need_arg "$@"; KERNEL_DIR="$2"; shift 2 ;;
         --latest-tag)    LATEST_TAG=1; shift ;;
+        --no-hook)       NO_HOOK=1; shift ;;
         --no-fetch)      NO_FETCH=1; shift ;;
         --local-dir)     need_arg "$@"; LOCAL_DIR="$2"; shift 2 ;;
         --no-local)      NO_LOCAL=1; shift ;;
@@ -339,9 +349,8 @@ clone_fresh() {
 }
 
 # ---------------------------------------------------------------- cleanup ---
-perform_cleanup() {
-    log "Cleaning up..."
-    
+# Undo link_driver + hook_build_files (only what this script adds)
+remove_hooks() {
     if [[ -L "$DRIVER_LINK" ]]; then
         rm -f -- "$DRIVER_LINK" && note "Symlink removed."
         elif [[ -e "$DRIVER_LINK" ]]; then
@@ -354,6 +363,12 @@ perform_cleanup() {
     if grep -Eq "$KC_RE" "$DRIVER_KCONFIG"; then
         sed -i -E "\#${KC_RE}#d" "$DRIVER_KCONFIG" && note "Kconfig reverted."
     fi
+}
+
+perform_cleanup() {
+    log "Cleaning up..."
+    
+    remove_hooks
     
     if [[ $KEEP_SOURCE -eq 1 ]]; then
         note "Keeping cloned sources (--keep-source)."
@@ -648,8 +663,17 @@ setup_kernelsu() {
         checkout_ref "${REF:-$defb}"
     fi
     
-    link_driver
-    hook_build_files
+    if [[ $NO_HOOK -eq 1 ]]; then
+        [[ -f "$SRC/kernel/Kconfig" && ( -f "$SRC/kernel/Kbuild" || -f "$SRC/kernel/Makefile" ) ]] \
+        || die "$REPO has no kernel/Kconfig + kernel/Kbuild; is it really a KernelSU fork?"
+        # A hook left by an earlier (--no-clean) run would build KernelSU into
+        # the kernel: CONFIG_KSU defaults to y as soon as its Kconfig is sourced
+        remove_hooks
+        note "Not hooking into the kernel tree (--no-hook)."
+    else
+        link_driver
+        hook_build_files
+    fi
     local_repo_notes
     print_summary
     log "Done."
