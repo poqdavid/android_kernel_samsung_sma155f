@@ -3,20 +3,25 @@
 set -euo pipefail
 
 # -------- KernelSU variant selection (must run before logging/config setup) --------
-# Default to no KernelSU variant if none of --ksu / --ksun / --resukisu is passed.
+# Default to no KernelSU variant if none of --ksu / --ksun / --ksun-lkm / --bakasu is passed.
 KSU_VARIANT="none"
 KSU_FLAG_COUNT=0
 for _arg in "$@"; do
     case "$_arg" in
         --ksu)      KSU_VARIANT="ksu";      KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
         --ksun)     KSU_VARIANT="ksun";     KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
+        --ksun-lkm) KSU_VARIANT="ksunlkm";  KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
         --bakasu) KSU_VARIANT="bakasu"; KSU_FLAG_COUNT=$((KSU_FLAG_COUNT + 1));;
     esac
 done
 if [[ $KSU_FLAG_COUNT -gt 1 ]]; then
-    echo "Error: --ksu, --ksun and --bakasu are mutually exclusive; pass only one." >&2
+    echo "Error: --ksu, --ksun, --ksun-lkm and --bakasu are mutually exclusive; pass only one." >&2
     exit 2
 fi
+
+# 1 = KernelSU is not built into the kernel; kernelsu.ko is built as a loadable
+# module against the finished kernel and injected into boot.img by scripts/repack.
+KSU_LKM=0
 
 if [[ "$KSU_VARIANT" == "ksun" ]]; then
     KERNELSU_SETUP_URL="https://raw.githubusercontent.com/poqdavid/KernelSU-Next/dev/kernel/setup.sh"
@@ -27,6 +32,21 @@ if [[ "$KSU_VARIANT" == "ksun" ]]; then
     KSU_DISCORD_LABEL="KernelSUNext"
     SUSFS_KSU_INTERNAL_PATCH_DESC="pershoot-fork SUSFS patch (10_pershoot_enable_susfs_for_ksun.patch)"
     SUSFS_BUILTIN=0
+    elif [[ "$KSU_VARIANT" == "ksunlkm" ]]; then
+    # KernelSU Next as an LKM: the kernel is the stock optimized one (neither
+    # KernelSU nor the SUSFS kernel patches are built in). kernelsu.ko is built
+    # from a KernelSU-Next *release tag* against this exact kernel tree, so it
+    # matches the manager release users install; SUSFS then comes from the
+    # manager's own SUSFS LKM (Settings -> Load SUSFS LKM / auto load).
+    # KSUN_LKM_REF=<tag> pins the tag; default is the newest upstream release.
+    KERNELSU_SETUP_BRANCH="${KSUN_LKM_REF:-}"
+    BASE_KSU_VERSION=30000
+    KSU_DIR="KernelSU-Next"
+    KSU_LABEL="KernelSU Next (LKM)"
+    KSU_DISCORD_LABEL="KernelSUNext LKM"
+    SUSFS_KSU_INTERNAL_PATCH_DESC="none (SUSFS is the manager's SUSFS LKM, not a kernel patch)"
+    SUSFS_BUILTIN=0
+    KSU_LKM=1
     elif [[ "$KSU_VARIANT" == "ksu" ]]; then
     KERNELSU_SETUP_URL="https://raw.githubusercontent.com/poqdavid/KernelSU/main/kernel/setup.sh"
     KERNELSU_SETUP_BRANCH="main"
@@ -247,6 +267,7 @@ while [[ $# -gt 0 ]]; do
         --out-dir) OUT_DIR="$2"; shift 2;;
         --ksu) shift;;       # already handled by the pre-scan; consume it here so parsing doesn't error
         --ksun) shift;;      # already handled by the pre-scan; consume it here so parsing doesn't error
+        --ksun-lkm) shift;;  # already handled by the pre-scan; consume it here so parsing doesn't error
         --bakasu) shift;;  # already handled by the pre-scan; consume it here so parsing doesn't error
         --no-clean) NO_CLEAN=1; shift;;
         --no-patch) NO_PATCH=1; shift;;
@@ -264,6 +285,9 @@ Options:
   --out-dir DIR        Output directory for build artifacts (default: ${DEFAULT_OUT})
   --ksu                Build against upstream KernelSU (main branch)
   --ksun               Build against KernelSU-Next (dev branch)
+  --ksun-lkm           Stock optimized kernel + KernelSU-Next kernelsu.ko built
+                       as an LKM against it (newest release tag; pin one with
+                       KSUN_LKM_REF=<tag>). SUSFS comes from the manager's SUSFS LKM
   --bakasu             Build against BakaSU (main branch, built-in SUSFS hooks)
   --no-clean           Skip running clean_build.sh
   --no-patch           Skip patching steps / KernelSU setup
@@ -455,6 +479,109 @@ gen_metadata(){
     
 }
 
+# -------- KernelSU-Next LKM helpers (--ksun-lkm) --------
+KSUN_UPSTREAM_URL="https://github.com/KernelSU-Next/KernelSU-Next"
+
+# Newest stable vX.Y.Z release tag upstream (skips -legacy / -rc style tags)
+latest_ksun_release_tag() {
+    git ls-remote --tags --refs "$KSUN_UPSTREAM_URL" 2>/dev/null | sed -n 's#.*refs/tags/##p' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1 || true
+}
+
+# The prebuilt clang bin dir the kernel itself is built with
+kernel_clang_bin() {
+    local bin
+    bin="$(grep -m1 '^CLANG_PREBUILT_BIN=' "$KERNEL_DIR/build.config.common" | cut -d= -f2-)"
+    realpath "$SCRIPT_DIR/kernel/$bin"
+}
+
+# $1 = .ko, $2 = sorted file of every name vmlinux defines. Prints the module's
+# undefined symbols that are missing from it: ksuinit (and ksud for the SUSFS
+# LKM) resolve them by name through kallsyms, so a missing name = cannot load.
+lkm_missing_symbols() {
+    LC_ALL=C comm -23 \
+    <("$(kernel_clang_bin)/llvm-nm" --undefined-only "$1" | awk '{print $NF}' | LC_ALL=C sort -u) "$2"
+}
+
+# Build kernelsu.ko against the kernel that was just built (same tree, config,
+# toolchain and flags), check it can load on it, and put it next to the Image
+# for scripts/repack --ksun-lkm.
+build_ksu_lkm() {
+    local src kobj vmlinux clang_bin kmi tag defined missing dest m f
+    src="$(realpath "$KERNEL_DIR/$KSU_DIR/kernel")"
+    kobj="$(cd "$SCRIPT_DIR/kernel" && readlink -m "$OUT_DIR")/$(basename "$KERNEL_DIR")"
+    vmlinux="$kobj/vmlinux"
+    clang_bin="$(kernel_clang_bin)"
+    kmi="${android_version}-${kernel_version}"
+    tag="$(git -C "$KERNEL_DIR/$KSU_DIR" describe --tags --abbrev=0 2>/dev/null || true)"
+    
+    if [[ ! -f "$src/Kbuild" ]]; then
+        err -n "$src/Kbuild not found; the $KSU_LABEL setup step has to run first."
+        exit 1
+    fi
+    if [[ ! -f "$vmlinux" ]]; then
+        err -n "$vmlinux not found; the kernel has to be built first."
+        exit 1
+    fi
+    
+    info -n "Building kernelsu.ko ($KSU_LABEL ${tag:-untagged}, KMI $kmi) against $kobj..."
+    rm -f "$src/kernelsu.ko"
+    (
+        cd "$SCRIPT_DIR/kernel"
+        # The environment build/build.sh gave the kernel: hermetic PATH, the
+        # prebuilt clang, build.config (LLVM, ARCH, KCFLAGS...) and OUT_DIR
+        # pointing at the kernel object tree
+        set +eu
+        source build/_setup_env.sh > /dev/null
+        set -eu
+        # kernelsu.ko calls unexported symbols that ksuinit resolves through
+        # kallsyms at boot, so modpost may only warn about them
+        make -C "$ROOT_DIR/$KERNEL_DIR" O="$OUT_DIR" M="$src" \
+        LLVM=1 LLVM_IAS=1 CONFIG_KSU=m KBUILD_MODPOST_WARN=1 modules
+    )
+    if [[ ! -f "$src/kernelsu.ko" ]]; then
+        err -n "kernelsu.ko was not produced; see the build output above."
+        exit 1
+    fi
+    
+    defined="$(mktemp)"
+    "$clang_bin/llvm-nm" --defined-only "$vmlinux" | awk '{print $NF}' | LC_ALL=C sort -u > "$defined"
+    
+    missing="$(lkm_missing_symbols "$src/kernelsu.ko" "$defined")"
+    if [[ -n "$missing" ]]; then
+        err -n "kernelsu.ko needs symbols this kernel does not have (it would not load):"
+        sed 's/^/    /' <<< "$missing"
+        rm -f "$defined"
+        exit 1
+    fi
+    info -n "kernelsu.ko: every undefined symbol resolves against vmlinux."
+    
+    # The manager later uses its own prebuilt modules on this kernel: kernelsu.ko
+    # for in-app LKM install/update, and the SUSFS LKM. Check those too (warn only;
+    # asset names as the KernelSU-Next release workflow publishes them).
+    if [[ -n "$tag" ]]; then
+        for m in "aarch64_${kmi}_kernelsu.ko" "${kmi}_susfs_guard_lkm.ko"; do
+            f="$(mktemp)"
+            if curl -fsSL --retry 3 -o "$f" "$KSUN_UPSTREAM_URL/releases/download/$tag/$m"; then
+                missing="$(lkm_missing_symbols "$f" "$defined")"
+                if [[ -n "$missing" ]]; then
+                    warn -n "Manager's $m ($tag) needs symbols this kernel lacks:"
+                    sed 's/^/    /' <<< "$missing"
+                else
+                    info -n "Manager's $m ($tag): every undefined symbol resolves."
+                fi
+            else
+                warn -n "Could not download $m from $tag; skipped its symbol check."
+            fi
+            rm -f "$f"
+        done
+    fi
+    rm -f "$defined"
+    
+    dest="$kobj/arch/arm64/boot/kernelsu.ko"
+    "$clang_bin/llvm-strip" -d -o "$dest" "$src/kernelsu.ko"
+    info -n "kernelsu.ko ready for scripts/repack --ksun-lkm: $dest ($(du -h "$dest" | cut -f1))"
+}
+
 # 2. Config Modifications (Samsung & Optimizations)
 if [[ $BUILD_ONLY -eq 0 ]]; then
     CONFIG_START=$(_ts)
@@ -581,7 +708,15 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
         $CONFIG_TOOL --file $DEFCONFIG \
         --set-val CRYPTO_LZO y
         
-        if [[ "$KSU_VARIANT" != "none" ]]; then
+        if [[ $KSU_LKM -eq 1 ]]; then
+            info -n "Setting $KSU_LABEL module-support configs (KernelSU & SUSFS stay out of the kernel)..."
+            # Same overlay/tmpfs support the built-in variants get (meta modules,
+            # Mountify); KernelSU itself is built as kernelsu.ko after the kernel
+            $CONFIG_TOOL --file $DEFCONFIG \
+            --set-val OVERLAY_FS y \
+            --set-val TMPFS_XATTR y \
+            --set-val TMPFS_POSIX_ACL y
+            elif [[ "$KSU_VARIANT" != "none" ]]; then
             info -n "Setting $KSU_LABEL & SUSFS configs..."
             # KernelSU & SUSFS
             $CONFIG_TOOL --file $DEFCONFIG \
@@ -647,7 +782,20 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
     # Only fetch and setup KernelSU/SUSFS if a variant was selected
     if [[ "$KSU_VARIANT" != "none" ]]; then
         info -n "Setting up $KSU_LABEL..."
-        bash "$SCRIPT_DIR/scripts/setup.sh" --variant "$KSU_VARIANT" --ref "$KERNELSU_SETUP_BRANCH" --dir "$KSU_DIR"
+        if [[ $KSU_LKM -eq 1 ]]; then
+            if [[ -z "$KERNELSU_SETUP_BRANCH" ]]; then
+                KERNELSU_SETUP_BRANCH="$(latest_ksun_release_tag)"
+                if [[ -z "$KERNELSU_SETUP_BRANCH" ]]; then
+                    err -n "Could not look up the newest KernelSU-Next release tag; set KSUN_LKM_REF=<tag>."
+                    exit 1
+                fi
+                info -n "Newest KernelSU-Next release: $KERNELSU_SETUP_BRANCH"
+            fi
+            # Source only: kernelsu.ko is built against the finished kernel (build_ksu_lkm)
+            bash "$SCRIPT_DIR/scripts/setup.sh" --variant ksun --ref "$KERNELSU_SETUP_BRANCH" --dir "$KSU_DIR" --no-hook
+        else
+            bash "$SCRIPT_DIR/scripts/setup.sh" --variant "$KSU_VARIANT" --ref "$KERNELSU_SETUP_BRANCH" --dir "$KSU_DIR"
+        fi
         
         if [[ -d "./$KSU_DIR" ]]; then
             # Version Detection
@@ -664,11 +812,16 @@ if [[ $NO_PATCH -eq 0 && $BUILD_ONLY -eq 0 ]]; then
             if [ -n "${GITHUB_ENV:-}" ]; then
                 info -n "Writing $KSU_LABEL version to GitHub Actions environment..."
                 echo "REL_KERNEL=$KSU_VERSION" >> "$GITHUB_ENV"
+                if [[ $KSU_LKM -eq 1 ]]; then
+                    echo "REL_KSU_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "$KERNELSU_SETUP_BRANCH")" >> "$GITHUB_ENV"
+                fi
             fi
             
             popd > /dev/null
             
-            if [[ $NO_SUSFS -eq 0 ]]; then
+            if [[ $KSU_LKM -eq 1 ]]; then
+                info -n "No SUSFS kernel patches for $KSU_LABEL: SUSFS is loaded as the manager's SUSFS LKM."
+                elif [[ $NO_SUSFS -eq 0 ]]; then
                 info -n "Copying SUSFS patches to kernel source..."
                 cp $SUSFS_PATCHES/kernel_patches/fs/* ./fs/
                 cp $SUSFS_PATCHES/kernel_patches/include/linux/* ./include/linux/
@@ -887,6 +1040,10 @@ pushd "$KERNEL_DIR" > /dev/null
 cd ../kernel
 ./build/build.sh
 popd > /dev/null
+
+if [[ $KSU_LKM -eq 1 ]]; then
+    build_ksu_lkm
+fi
 
 BUILD_END=$(_ts)
 info -n "Build completed successfully."

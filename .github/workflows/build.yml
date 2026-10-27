@@ -4,6 +4,7 @@ name: Build and Release Kernel Image
 #   main   -> stock
 #   ksu    -> ksu
 #   ksun   -> ksun
+#   ksunlkm -> ksunlkm (stock optimized kernel + KernelSU Next as an LKM)
 
 env:
   VARIANT: ksu
@@ -64,8 +65,15 @@ jobs:
               echo "RELEASE_TITLE=KernelSU Next" >> "$GITHUB_ENV"
               echo "LEGACY_LABEL=KernelSUNext" >> "$GITHUB_ENV"
               ;;
+            ksunlkm)
+              echo "BUILD_FLAG=--ksun-lkm" >> "$GITHUB_ENV"
+              echo "REPACK_FLAG=--ksun-lkm" >> "$GITHUB_ENV"
+              echo "ARTIFACT_NAME=kernelsunext-lkm-build-zips" >> "$GITHUB_ENV"
+              echo "RELEASE_TITLE=KernelSU Next LKM" >> "$GITHUB_ENV"
+              echo "LEGACY_LABEL=KernelSUNext LKM" >> "$GITHUB_ENV"
+              ;;
             *)
-              echo "::error::Unknown VARIANT '$VARIANT' - must be stock, ksu, or ksun"
+              echo "::error::Unknown VARIANT '$VARIANT' - must be stock, ksu, ksun, ksunlkm or bakasu"
               exit 1
               ;;
           esac
@@ -116,6 +124,9 @@ jobs:
           SHORT_SHA=${GITHUB_SHA::7}
           if [ "$VARIANT" = "stock" ]; then
             echo "RELEASE_NAME=$RELEASE_TITLE A155FXXS7CYG1 A155FXXS7CYG4" >> "$GITHUB_ENV"
+          elif [ "$VARIANT" = "ksunlkm" ]; then
+            # SUSFS isn't part of this kernel; it's the manager's SUSFS LKM
+            echo "RELEASE_NAME=$LEGACY_LABEL $REL_KERNEL ($REL_KSU_TAG) A155FXXS7CYG1 A155FXXS7CYG4" >> "$GITHUB_ENV"
           else
             echo "RELEASE_NAME=$LEGACY_LABEL $REL_KERNEL SUSFS $REL_SUSFS A155FXXS7CYG1 A155FXXS7CYG4" >> "$GITHUB_ENV"
           fi
