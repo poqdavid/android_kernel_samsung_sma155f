@@ -11,9 +11,9 @@
 
 ## Patch Instruction (For GKI Kernel only and building from official google artifacts) ##
 **- Prerequisite -**
-1. All susfs patches are mainly based on the **original official KernelSU (the one from weishu)** with **tag / release tag**, so you should clone his repo with **tag / release tag** and clone this susfs branch with a **tag / release tag** or up to a commit message containing **"Bump version to vX.X.X"** to get a better patching result.
-2. Since v2.0.0, SUSFS does not rely on kernel features like KPROBES, KRETPROBES and HAVE_SYSCALL_TRACEPOINTS, which means it will patch all the KernelSU code to use inline hooks now, even for the sucompat code.
-3. SUSFS patches may conflict with some patches like custom manual hooks for sucompat since SUSFS already includes its own sucompat patches in KernelSU and kernel code.
+1. All susfs patches are mainly based on the **original official KernelSU (the one from weishu)**, since KernelSU updates frequently and susfs needs to sync up with it, so it is now suggested to just clone the KernelSU and susfs repo without tag/release tag. If the applied susfs patches fails on KernelSU, you need to rollback KernelSU version to a specific commit and apply the patches again.
+2. Since v2.0.0, SUSFS does not rely on kernel features like KPROBES, KRETPROBES and HAVE_SYSCALL_TRACEPOINTS, which means it will patch all the sucompat code in KernelSU, fs/exec.c, fs/open.c, and fs/stat.c.
+3. Do NOT apply custom manual hooks for sucompat unless you implement your own one instead of the susfs one.
 
 
 **- Apply SUSFS patches -**
@@ -30,8 +30,7 @@
 11. For `gki kernel android14` or above, if you are building from google artifacts, it is necessary to delete the file `$KERNEL_REPO/common/android/abi_gki_protected_exports_aarch64` and `$KERNEL_REPO/common/android/abi_gki_protected_exports_x86_64`, otherwise some modules like WiFi will not work. Or you can just remove those files whenever they exist in your kernel repo.
 12. If you want to flash the fresh built gki boot.img, then before you build the kernel, first you need to fix or hardcode the `local spl_date` in function `build_gki_boot_images()` in `$KERNEL_REPO/build/kernel/build_utils.sh` to match the current boot security patch level of your phone. Or you can just use magiskboot to unpack and repack the built kernel for your stock boot.img.
 13. Build and flash the kernel.
-14. For some compilor error, please refer to the section **[Known Compilor Issues]** below.
-15. For other building tips, please refer to the section **[Other Building Tips]** below.
+14. For other building tips, please refer to the section **[Other Building Tips]** below.
 
 ## Build ksu_susfs userspace tool ##
 1. Run `./build_ksu_susfs_tool.sh` to build the userspace tool `ksu_susfs`, and the arm64 and arm binary will be copied to `ksu_module_susfs/tools/` as well.
@@ -61,18 +60,6 @@
    4. Open file `$KERNEL_ROOT/kernel/Makefile`.
    5. Look for line `$(obj)/config_data: $(KCONFIG_CONFIG) FORCE`, and replace it with `$(obj)/config_data: arch/arm64/configs/stock_defconfig FORCE`
 
-## Known Compiler Issues ##
-   1. error: no member named 'android_kabi_reservedx' in 'struct yyyyyyyy'
-
-      - Because normally the memeber `u64 android_kabi_reservedx;` doesn't exist in all structs with all kernel version below 4.19, and sometimes it is not guaranteed existed with kernel version >= 4.19 and <= 5.4, and even with GKI kernel, like some of the custom kernels has all of them disabled. So at this point if the susfs patches didn't have them patched for you, then what you need to do is to manually append the member to the end of the corresponding struct definition, it should be `u64 android_kabi_reservedx;` with the last `x` starting from `1`, like `u64 android_kabi_reserved1;`, `u64 android_kabi_reserved2;` and so on. You may also refer to patch from other branches like `kernel-4.14`, `kernel-4.9` of this repo for extra `diff` of the missing kabi members.
-
-## Other Known Issues ##
-- Some of the File Explorer Apps cannot display a files/directory properly when a specific sub path of '/sdcard' or '/storage/emulated/0' is added to sus_path
-    1. Make sure the file explorer app has root allowed by KSU manager, because sus_path is only effective on no root allowed process uid.
-    2. It is strongly NOT recommended adding sub path of '/sdcard' or '/storage/emulated/0' to sus_path, because file explorer app is likely using android API to retrieve the list of files/directory, which means the calling uid will be changed to other system media provider app such as the google provider to execute the file lookup operation, and makes sus_path think that it is not a root allowed process uid so as to prevent them from showing up, unless the app obtains the root access first then use root privilege to list the files/directories without using android API.
-
-- If your KernelSU manager is using magic mount, susfs may not be able to capture all the sus mounts mounted by KSU, in this situation, users are advised to inspect which mounts are leaking and then manually add them via `ksu_susfs add_try_umount <leaked_mount_path> 1`.
-
 ## Credits ##
 - KernelSU: https://github.com/tiann/KernelSU
 - KernelSU fork: https://github.com/5ec1cff/KernelSU
@@ -81,7 +68,3 @@
 ## Telegram ##
 - @simonpunk
 
-
-## Buy me a coffee ##
-- PayPal: kingjeffkimo@yahoo.com.tw
-- BTC: bc1qgkwvsfln02463zpjf7z6tds8xnpeykggtgk4kw
