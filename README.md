@@ -1,6 +1,6 @@
 <div align="center">
 
-# Samsung A15 4G Kernel
+# KernelSU Next LKM for Samsung A15 4G
 
 **SM-A155F** · MediaTek MT6789 (Helio G99) · Linux 5.10 (android12-5.10 GKI)
 

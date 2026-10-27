@@ -7,7 +7,7 @@ name: Build and Release Kernel Image
 #   ksunlkm -> ksunlkm (stock optimized kernel + KernelSU Next as an LKM)
 
 env:
-  VARIANT: stock
+  VARIANT: ksunlkm
 
 on:
   push:
