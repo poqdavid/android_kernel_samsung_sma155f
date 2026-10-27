@@ -30,6 +30,7 @@ By flashing this kernel, **YOU** are choosing to make these modifications. If so
 |---------|--------|-------------------------|--------|
 | 🔐 **KernelSU** + SUSFS | [`kernelsu`](https://github.com/poqdavid/android_kernel_samsung_sma155f/tree/kernelsu) | `KSU_` | ✅ Active |
 | 🔐 **KernelSU Next** + SUSFS | [`kernelsunext`](https://github.com/poqdavid/android_kernel_samsung_sma155f/tree/kernelsunext) | `KSUN_` | ✅ Active |
+| 🧩 **KernelSU Next LKM** + SUSFS LKM | [`kernelsunext-lkm`](https://github.com/poqdavid/android_kernel_samsung_sma155f/tree/kernelsunext-lkm) | `KSUN_LKM_` | 🧪 New |
 | 🔐 **ReSukiSU** + SUSFS | [`resukisu`](https://github.com/poqdavid/android_kernel_samsung_sma155f/tree/resukisu) | `RESUKISU_` | ✅ Active |
 | ⚡ **Stock optimized** (no root) | [`main`](https://github.com/poqdavid/android_kernel_samsung_sma155f/tree/main) | `STOCK_OPTIMIZED_` | ✅ Active |
 
@@ -41,6 +42,7 @@ By flashing this kernel, **YOU** are choosing to make these modifications. If so
 
 - 🔐 **KernelSU / KernelSU Next / ReSukiSU**: Kernel-based root solutions for Android GKI devices that grant root to userspace apps directly from kernel space (one per branch; `main` ships without root)
 - 🥷 **SUSFS**: An addon root hiding kernel patches and userspace module for KernelSU (ReSukiSU ships its own built-in SUSFS hooks)
+- 🧩 **KernelSU Next LKM**: the stock optimized kernel with KernelSU Next loaded as a module (`kernelsu.ko` built against this exact kernel and added to the boot image). Nothing root-related is built into the kernel; SUSFS comes from the manager's SUSFS LKM, so both update through the manager
 - 🛡️ **BBG**: LSM-based Baseband Guard security to protect critical device partitions
 - 🖧 **BBRv3**: Improved TCP congestion control
 - ⚡️ **TMPFS XATTR / POSIX ACL**: Extended TMPFS support for meta modules and Mountify
@@ -73,6 +75,7 @@ By flashing this kernel, **YOU** are choosing to make these modifications. If so
    - **Not rooted yet:** flash the `.tar` in Odin's **AP** slot (or extract `boot.img` and flash it with Heimdall).
    - **Already rooted:** extract `boot.img` from the `.tar` and flash it with [Kernel Flasher](https://github.com/fatalcoder524/KernelFlasher) (recommended).
 3. Reboot, then install the matching manager app (KernelSU, KernelSU Next or ReSukiSU).
+   - **KernelSU Next LKM:** use the KernelSU Next manager release named in the release title (or newer). For SUSFS, open the manager's **Settings**, tap **Load SUSFS LKM** and turn on **Enable auto load**.
 
 > ↩️ **Going back:** flash your stock `boot.img` the same way to return to the stock kernel.
 
@@ -97,7 +100,7 @@ pip3 install telethon   # optional: only needed for the Telegram release bot
 ### 2. Clone the branch you want to build
 
 ```bash
-# Pick ONE: kernelsu | kernelsunext | resukisu | main (stock optimized, no root)
+# Pick ONE: kernelsu | kernelsunext | kernelsunext-lkm | resukisu | main (stock optimized, no root)
 git clone --branch resukisu https://github.com/poqdavid/android_kernel_samsung_sma155f.git
 cd android_kernel_samsung_sma155f
 ```
@@ -114,6 +117,7 @@ chmod +x scripts/repack
 ```bash
 ./build.sh --ksu -j$(nproc)        # KernelSU
 ./build.sh --ksun -j$(nproc)       # KernelSU Next
+./build.sh --ksun-lkm -j$(nproc)   # KernelSU Next as LKM (stock optimized kernel + kernelsu.ko)
 ./build.sh --resukisu -j$(nproc)   # ReSukiSU
 ./build.sh -j$(nproc)              # no variant flag = stock optimized (no root)
 ```
@@ -126,6 +130,7 @@ chmod +x scripts/repack
 | `--kernel-dir DIR` | Path to kernel source (default: auto-detected `kernel-*` folder) |
 | `--out-dir DIR` | Output directory for build artifacts |
 | `--ksu` / `--ksun` / `--resukisu` | Pick the root backend (mutually exclusive; omit for a non-root stock optimized build) |
+| `--ksun-lkm` | Stock optimized kernel, then `kernelsu.ko` built against it from the newest KernelSU-Next release (`KSUN_LKM_REF=<tag>` pins one) |
 | `--no-clean` | Skip the clean step |
 | `--no-patch` | Skip patching / KernelSU setup |
 | `--no-susfs` | Skip SUSFS config & patches |
@@ -157,6 +162,8 @@ This unpacks the stock `boot.img`, swaps in the freshly built kernel `Image`, re
 
 **Output:** `release/<kernelsu|kernelsunext|resukisu>_<ksu_version>_susfs_<susfs_version>_A155FXXS7CYG4_A15_GKI.tar` (or `release/stock_optimized_<kernel_version>_A155FXXS7CYG4_A15_GKI.tar`) containing `boot.img`, plus `vbmeta.img.lz4` when `--vbm` is used.
 
+For `--ksun-lkm`, `scripts/repack --ksun-lkm` also adds `kernelsu.ko` and KernelSU Next's `ksuinit` to the ramdisk (using the `ksud` of the same release, downloaded once into `scripts/bin/ksud-lkm/`) before signing; the output is `release/kernelsunext_lkm_<ksu_version>_A155FXXS7CYG4_A15_GKI.tar`.
+
 > ℹ️ `lz4` and `python3` must be installed for this step — `magiskboot`, `ksud`, and `avbtool` are already bundled in `scripts/bin`.
 
 ### 6. Flash
@@ -166,7 +173,7 @@ Follow the **[📋 Installation Instructions](#-installation-instructions)** abo
 <details>
 <summary>☁️ Building in the cloud instead (GitHub Actions)</summary>
 
-Every branch ships the same workflow, `.github/workflows/build.yml`. The `VARIANT` value at the top of the file (`stock` on `main`, `ksu`, `ksun` or `resukisu`) decides what it builds, so it does everything above on GitHub's runners with no local toolchain needed:
+Every branch ships the same workflow, `.github/workflows/build.yml`. The `VARIANT` value at the top of the file (`stock` on `main`, `ksu`, `ksun`, `ksunlkm` or `resukisu`) decides what it builds, so it does everything above on GitHub's runners with no local toolchain needed:
 
 1. Fork the repo (on the branch you want).
 2. Push a tag, or trigger it manually via **Actions → Run workflow** (`workflow_dispatch`).

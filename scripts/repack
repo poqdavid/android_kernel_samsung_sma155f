@@ -11,6 +11,7 @@ AVBTOOL=$BINDIR/avb/avbtool.py
 KERNELPATH=$PARENTDIR/out/target/product/a15/obj/KERNEL_OBJ/kernel-5.10/arch/arm64/boot/
 WORKSPACE=$BINDIR/workspace
 CERTDIR=$BINDIR/certs
+KSUN_UPSTREAM_URL="https://github.com/KernelSU-Next/KernelSU-Next"
 
 # -------- Argument parsing --------
 KSU_VARIANT=""
@@ -49,9 +50,11 @@ print_msg "$RED" "       by poqdavid "
 print_msg "$RED" ""
 
 usage() {
-    info "Usage: $0 [--ksu | --ksun | --bakasu]"
+    info "Usage: $0 [--ksu | --ksun | --ksun-lkm | --bakasu]"
     info -n "  --ksu       Build/repack using KernelSU"
     info "  --ksun      Build/repack using KernelSU-Next"
+    info "  --ksun-lkm  Repack the stock optimized kernel and inject the kernelsu.ko"
+    info "              from build.sh --ksun-lkm (KernelSU-Next LKM mode)"
     info "  --bakasu  Build/repack using BakaSU"
     info "  --vbm       Include vbmeta.img.lz4 in the output tar (if present)"
     info "  (none)      Build/repack the stock kernel (no root, no KSU checks)"
@@ -66,6 +69,10 @@ while [[ $# -gt 0 ]]; do
         ;;
         --ksun|--ksu-next)
             KSU_VARIANT="ksun"
+            shift
+        ;;
+        --ksun-lkm|--ksunlkm)
+            KSU_VARIANT="ksunlkm"
             shift
         ;;
         --bakasu)
@@ -102,6 +109,16 @@ case "$KSU_VARIANT" in
         OUTPUT_PREFIX="kernelsunext"
         KSUDIR=$PARENTDIR/kernel-5.10/$KSU_DIR_NAME
         info -n "Selected KernelSU variant: ${KSU_DIR_NAME}"
+    ;;
+    ksunlkm)
+        # Stock optimized kernel + the kernelsu.ko build.sh --ksun-lkm built
+        # against it, injected with the ksud of the same KernelSU-Next release
+        KSU_DIR_NAME="KernelSU-Next"
+        OUTPUT_PREFIX="kernelsunext_lkm"
+        KSUDIR=$PARENTDIR/kernel-5.10/$KSU_DIR_NAME
+        LKM_MODULE="${KERNELPATH}kernelsu.ko"
+        LKM_KMI=$(grep -m1 '^BRANCH=' "$PARENTDIR/kernel-5.10/build.config.common" | cut -d= -f2)
+        info -n "Selected KernelSU variant: ${KSU_DIR_NAME} (LKM)"
     ;;
     bakasu)
         # BakaSU's own setup.sh always clones into ./KernelSU (same dir name
@@ -174,6 +191,10 @@ checks() {
         fi
     fi
     
+    if [[ "$KSU_VARIANT" == "ksunlkm" ]]; then
+        lkm_checks
+    fi
+    
     if [ ! -f "${MAGISKBOOT}" ]; then
         err -n "Magiskboot not found: ${MAGISKBOOT}"
         err -n "Aborting..."
@@ -221,6 +242,67 @@ checks() {
     info -n "Environment checks completed successfully."
 }
 
+# --ksun-lkm: the module from build.sh and a ksud from the same release
+lkm_checks() {
+    if [ ! -f "${LKM_MODULE}" ]; then
+        err -n "kernelsu.ko not found: ${LKM_MODULE}"
+        err -n "Build it with ./build.sh --ksun-lkm first. Aborting..."
+        exit 1
+    fi
+    info -n "Found kernelsu.ko at ${LKM_MODULE}."
+    
+    if [[ -z "$LKM_KMI" ]]; then
+        err -n "Could not read the KMI (BRANCH=) from kernel-5.10/build.config.common. Aborting..."
+        exit 1
+    fi
+    
+    KSU_TAG=$(git -C "${KSUDIR}" describe --tags --abbrev=0 2>/dev/null)
+    if [[ -z "$KSU_TAG" ]]; then
+        err -n "Cannot tell which KernelSU-Next release ${KSUDIR} is (no tag). Aborting..."
+        exit 1
+    fi
+    
+    # ksud puts its own ksuinit into the ramdisk as /init, so it has to come
+    # from the same release as kernelsu.ko. KSUD_LKM=/path/to/ksud overrides.
+    KSUD_LKM=${KSUD_LKM:-$BINDIR/ksud-lkm/$KSU_TAG/ksud-x86_64-unknown-linux-musl}
+    if [ ! -x "${KSUD_LKM}" ]; then
+        info -n "Downloading ksud ${KSU_TAG} (x86_64)..."
+        mkdir -p "$(dirname "${KSUD_LKM}")"
+        if ! curl -fsSL --retry 3 -o "${KSUD_LKM}.tmp" \
+        "${KSUN_UPSTREAM_URL}/releases/download/${KSU_TAG}/ksud-x86_64-unknown-linux-musl"; then
+            rm -f "${KSUD_LKM}.tmp"
+            err -n "Could not download ksud ${KSU_TAG}; put it at ${KSUD_LKM} or set KSUD_LKM. Aborting..."
+            exit 1
+        fi
+        chmod +x "${KSUD_LKM}.tmp" && mv -f "${KSUD_LKM}.tmp" "${KSUD_LKM}"
+    fi
+    
+    local ksud_version
+    ksud_version=$("${KSUD_LKM}" --version 2>/dev/null)
+    if [[ "$ksud_version" != "ksud ${KSU_TAG#v}" ]]; then
+        warn -n "${KSUD_LKM} reports '${ksud_version:-nothing}', expected 'ksud ${KSU_TAG#v}' (kernelsu.ko is ${KSU_TAG})."
+    else
+        info -n "Using ${ksud_version} at ${KSUD_LKM}."
+    fi
+}
+
+# --ksun-lkm: add ksuinit + kernelsu.ko to the repacked, still unsigned image,
+# the same way the manager's LKM install does, so the AVB footer comes after
+lkm_patch() {
+    local img="${WORKSPACE}/new-boot.img"
+    
+    info -n "Injecting kernelsu.ko (${KSU_TAG}, KMI ${LKM_KMI}) with ksud boot-patch..."
+    rm -f "${WORKSPACE}/lkm-boot.img"
+    "${KSUD_LKM}" boot-patch -b "${img}" -m "${LKM_MODULE}" --kmi "${LKM_KMI}" \
+    -o "${WORKSPACE}" --out-name lkm-boot.img
+    if [ ! -s "${WORKSPACE}/lkm-boot.img" ]; then
+        err -n "ksud boot-patch did not produce ${WORKSPACE}/lkm-boot.img. Aborting..."
+        return 1
+    fi
+    mv -f "${WORKSPACE}/lkm-boot.img" "${img}"
+    info -n "kernelsu.ko and ksuinit added to new-boot.img."
+}
+
 # Unpacking the boot.img
 unpack() {
     info -n "Generating a signing key (if not already present)..."
@@ -263,6 +345,10 @@ repack() {
         pushd "$PARENTDIR" > /dev/null
         info -n "Boot image repacked into new-boot.img."
         
+        if [[ "$KSU_VARIANT" == "ksunlkm" ]]; then
+            lkm_patch || exit 1
+        fi
+        
         cp -f $WORKSPACE/new-boot.img $WORKSPACE/new-boot-signed.img
         info -n "Boot image Copied to ${WORKSPACE}/new-boot-signed.img."
         
@@ -290,7 +376,9 @@ package_tar() {
     
     susfs_header="${PARENTDIR}/kernel-5.10/include/linux/susfs.h"
     
-    if [[ -f "$susfs_header" ]]; then
+    # (LKM builds carry no SUSFS kernel patches; a leftover header from an
+    # earlier --no-clean run must not end up in the name)
+    if [[ -f "$susfs_header" && "$KSU_VARIANT" != "ksunlkm" ]]; then
         susfs_version=$(grep -oP '#define\s+SUSFS_VERSION\s+"\K[^"]+' "$susfs_header")
     fi
     
