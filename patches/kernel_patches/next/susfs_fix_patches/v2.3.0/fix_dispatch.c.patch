@@ -1,0 +1,47 @@
+diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
+index 955a1df0..b958ff58 100644
+--- a/kernel/supercall/dispatch.c
++++ b/kernel/supercall/dispatch.c
+@@ -44,22 +44,12 @@ static int do_get_info(void __user *arg)
+ {
+     struct ksu_get_info_cmd cmd = { .version = KERNEL_SU_VERSION, .flags = 0 };
+ 
+-#ifdef MODULE
+-    cmd.flags |= KSU_GET_INFO_FLAG_LKM;
+-    if (ksu_bundled) {
+-        cmd.flags |= KSU_GET_INFO_FLAG_BUNDLED;
+-    }
+-#endif
+-
+     if (ksuver_override)
+         cmd.version = ksuver_override;
+ 
+     if (is_manager()) {
+         cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
+     }
+-    if (ksu_late_loaded) {
+-        cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;
+-    }
+     cmd.features = KSU_FEATURE_MAX;
+     cmd.uapi_version = KERNEL_SU_UAPI_VERSION;
+ 
+@@ -75,19 +65,9 @@ static int do_get_info_legacy(void __user *arg)
+ {
+     struct ksu_get_info_legacy_cmd cmd = { .version = KERNEL_SU_VERSION, .flags = 0 };
+ 
+-#ifdef MODULE
+-    cmd.flags |= KSU_GET_INFO_FLAG_LKM;
+-    if (ksu_bundled) {
+-        cmd.flags |= KSU_GET_INFO_FLAG_BUNDLED;
+-    }
+-#endif
+-
+     if (is_manager()) {
+         cmd.flags |= KSU_GET_INFO_FLAG_MANAGER;
+     }
+-    if (ksu_late_loaded) {
+-        cmd.flags |= KSU_GET_INFO_FLAG_LATE_LOAD;
+-    }
+     cmd.features = KSU_FEATURE_MAX;
+ 
+     if (copy_to_user(arg, &cmd, sizeof(cmd))) {
