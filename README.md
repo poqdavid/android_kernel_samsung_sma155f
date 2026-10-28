@@ -238,6 +238,7 @@ The kernel source is licensed under **GPL-2.0** (see [`COPYING`](COPYING) and [`
 | **Baseband Guard** | vc-teahouse | [![GitHub](https://img.shields.io/badge/GitHub-vc--teahouse-blue?style=flat-square&logo=github)](https://github.com/vc-teahouse/Baseband-guard.git) |
 | **Droidspaces** | ravindu644 | [![GitHub](https://img.shields.io/badge/GitHub-ravindu644-blue?style=flat-square&logo=github)](https://github.com/ravindu644/Droidspaces-OSS.git) |
 | **KKdemergencia** | KKdemergencia | [![GitHub](https://img.shields.io/badge/GitHub-KKdemergencia-blue?style=flat-square&logo=github)](https://github.com/kkdemergencia) |
+| **maxwell523452** | maxwell523452 | [![GitHub](https://img.shields.io/badge/GitHub-maxwell523452-blue?style=flat-square&logo=github)](https://github.com/maxwell523452) |
 
 🙏 Special thanks to the open-source community for their contributions!
 
