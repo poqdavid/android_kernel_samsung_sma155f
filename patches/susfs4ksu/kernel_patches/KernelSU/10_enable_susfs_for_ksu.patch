@@ -1844,7 +1844,7 @@ index e3936078..50d1891c 100644
  typedef int (*ksu_feature_get_t)(u64 *value);
  typedef int (*ksu_feature_set_t)(u64 value);
 diff --git a/kernel/preinit/preinit.c b/kernel/preinit/preinit.c
-index 5bf94f14..997783d5 100644
+index 5bf94f14..ca37cfb4 100644
 --- a/kernel/preinit/preinit.c
 +++ b/kernel/preinit/preinit.c
 @@ -12,7 +12,7 @@
@@ -1898,11 +1898,9 @@ index 5bf94f14..997783d5 100644
  
      if (likely(!READ_ONCE(ksu_preinit_file)))
 -        return false;
-+        return -EINVAL;
- 
+-
 -    if (!filename_user || !*filename_user)
 -        return false;
-+    if (strcmp((*filename_ptr)->name, INIT_PATH) || !is_selinux_setup(argv_user))
 +        return -EINVAL;
  
 -    memset(path, 0, sizeof(path));
@@ -1912,7 +1910,9 @@ index 5bf94f14..997783d5 100644
 -
 -    if (strcmp(path, INIT_PATH) || !is_selinux_setup(argv_user))
 -        return false;
--
++    if (strcmp((*filename_ptr)->name, INIT_PATH) || !is_selinux_setup(argv_user))
++        return -EINVAL;
+ 
 -    // One shot: the runner's own exec of the real init must pass through.
      file = xchg(&ksu_preinit_file, NULL);
      if (!file)
@@ -1934,9 +1934,8 @@ index 5bf94f14..997783d5 100644
 -    if (kern_path(fd_path, LOOKUP_FOLLOW, &p)) {
 +    if (kern_path(fd_path, LOOKUP_FOLLOW, &path)) {
          pr_err("preinit: %s not reachable, booting without preinit\n", fd_path);
--        ksu_close_fd(fd);
+         ksu_close_fd(fd);
 -        return false;
-+        close_fd(fd);
 +        return -EINVAL;
      }
 -    path_put(&p);
