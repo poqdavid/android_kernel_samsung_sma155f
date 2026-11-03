@@ -498,7 +498,8 @@ kernel_clang_bin() {
 # undefined symbols that are missing from it: ksuinit (and ksud for the SUSFS
 # LKM) resolve them by name through kallsyms, so a missing name = cannot load.
 lkm_missing_symbols() {
-    LC_ALL=C comm -23 <("$(kernel_clang_bin)/llvm-nm" --undefined-only "$1" | awk '{print $NF}' | LC_ALL=C sort -u) "$2"
+    LC_ALL=C comm -23 \
+    <("$(kernel_clang_bin)/llvm-nm" --undefined-only "$1" | awk '{print $NF}' | LC_ALL=C sort -u) "$2"
 }
 
 # Build kernelsu.ko against the kernel that was just built (same tree, config,
@@ -714,7 +715,7 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
             --set-val OVERLAY_FS y \
             --set-val TMPFS_XATTR y \
             --set-val TMPFS_POSIX_ACL y
-        elif [[ "$KSU_VARIANT" != "none" ]]; then
+            elif [[ "$KSU_VARIANT" != "none" ]]; then
             info -n "Setting $KSU_LABEL & SUSFS configs..."
             # KernelSU & SUSFS
             $CONFIG_TOOL --file $DEFCONFIG \
@@ -734,6 +735,7 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
             --set-val KSU_SUSFS_ENABLE_LOG y \
             --set-val KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y \
             --set-val KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y \
+            --set-val KSU_SUSFS_PRIORITY_UID_FILTER y \
             --set-val KSU_SUSFS_OPEN_REDIRECT y \
             --set-val KSU_SUSFS_SUS_MAP y \
             --set-val KSU_SUSFS_SUS_SU n \
