@@ -735,6 +735,7 @@ if [[ $BUILD_ONLY -eq 0 ]]; then
             --set-val KSU_SUSFS_ENABLE_LOG y \
             --set-val KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS y \
             --set-val KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG y \
+            --set-val KSU_SUSFS_PRIORITY_UID_FILTER y \
             --set-val KSU_SUSFS_OPEN_REDIRECT y \
             --set-val KSU_SUSFS_SUS_MAP y \
             --set-val KSU_SUSFS_SUS_SU n \
