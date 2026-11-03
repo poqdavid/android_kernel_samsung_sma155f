@@ -1,30 +1,30 @@
-From 0e59603f182312f0aacc06604eb5a4b7d0054dc6 Mon Sep 17 00:00:00 2001
+From c4c13f77a48ead30ea02ab7f8bb112a7035d3370 Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Tue, 27 Oct 2026 03:11:38 +0100
-Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
+Date: Tue, 3 Nov 2026 01:43:25 +0100
+Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
 
 ---
- kernel/Kbuild                      |  98 +++++--
- kernel/Kconfig                     | 154 +++++++++-
- kernel/compat/samsung_defex.c      | 116 ++++++++
+ kernel/Kbuild                      |  98 ++++--
+ kernel/Kconfig                     | 162 +++++++++-
+ kernel/compat/samsung_defex.c      | 116 +++++++
  kernel/compat/samsung_defex.h      |   8 +
  kernel/compat/samsung_kdp.c        | 209 +++++++++++++
- kernel/compat/samsung_rkp.c        | 288 ++++++++++++++++++
+ kernel/compat/samsung_rkp.c        | 288 +++++++++++++++++
  kernel/compat/samsung_rkp.h        |  10 +
- kernel/core/init.c                 |  68 ++++-
+ kernel/core/init.c                 |  73 ++++-
  kernel/extras.c                    |  22 +-
- kernel/feature/adb_root.c          | 163 ++++++++++-
+ kernel/feature/adb_root.c          | 163 +++++++++-
  kernel/feature/adb_root.h          |   4 +
  kernel/feature/kernel_umount.c     |   9 +-
- kernel/feature/module_blacklist.c  |  17 ++
+ kernel/feature/module_blacklist.c  |  17 +
  kernel/feature/module_blacklist.h  |   1 +
- kernel/feature/selinux_hide.c      | 452 +++++++++++++++++++++++------
+ kernel/feature/selinux_hide.c      | 477 +++++++++++++++++++++++------
  kernel/feature/selinux_hide.h      |  18 ++
- kernel/feature/sucompat.c          | 329 ++++++++++++++++++++-
+ kernel/feature/sucompat.c          | 329 +++++++++++++++++++-
  kernel/feature/sucompat.h          |  25 +-
- kernel/hook/arm64/patch_memory.c   |  12 +-
+ kernel/hook/arm64/patch_memory.c   |   8 +
  kernel/hook/arm64/syscall_hook.c   |  41 ++-
- kernel/hook/setuid_hook.c          | 169 ++++++++++-
+ kernel/hook/setuid_hook.c          | 169 +++++++++-
  kernel/hook/setuid_hook.h          |   4 +
  kernel/hook/syscall_event_bridge.c | 109 +++----
  kernel/hook/syscall_hook.h         |   6 +-
@@ -33,8 +33,8 @@ Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
  kernel/hook/x86_64/syscall_hook.c  |  37 ++-
  kernel/include/ksu_samsung_kdp.h   |  24 ++
  kernel/manager/apk_sign.c          |  22 +-
- kernel/manager/pkg_observer.c      |   7 +
- kernel/manager/throne_tracker.c    |  83 +++++-
+ kernel/manager/pkg_observer.c      |  18 ++
+ kernel/manager/throne_tracker.c    |  83 ++++-
  kernel/manager/throne_tracker.h    |  52 +++-
  kernel/policy/allowlist.c          |   2 +
  kernel/policy/app_profile.c        |  37 ++-
@@ -44,22 +44,25 @@ Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
  kernel/runtime/boot_event.c        |  21 +-
  kernel/runtime/ksud.h              |  44 +++
  kernel/runtime/ksud_integration.c  | 209 ++++++++++---
- kernel/selinux/rules.c             |  22 ++
+ kernel/selinux/rules.c             |  30 ++
  kernel/selinux/selinux.c           | 105 ++++++-
  kernel/selinux/selinux.h           |  11 +
+ kernel/selinux/sepolicy.c          |  12 +
  kernel/setup.sh                    |   2 +
- kernel/sulog/event.c               |  84 ++++++
+ kernel/sulog/event.c               |  84 +++++
  kernel/sulog/event.h               |   4 +
- kernel/supercall/dispatch.c        | 153 ++++++++++
+ kernel/supercall/dispatch.c        | 158 ++++++++++
  kernel/supercall/internal.h        |   2 +
- kernel/supercall/supercall.c       | 195 ++++++++-----
+ kernel/supercall/supercall.c       | 195 +++++++-----
  kernel/supercall/supercall.h       |   4 +
+ kernel/susfs/susfs_abi.h           |   8 +
+ kernel/susfs/susfs_supercall.c     |   3 +
  manager/app/build.gradle.kts       |   5 +
  manager/build.gradle.kts           |  69 ++++-
  userspace/ksud/build.rs            |  24 +-
  userspace/ksud/src/late_load.rs    |  11 +-
  userspace/ksud/src/utils.rs        |  42 ++-
- 55 files changed, 3377 insertions(+), 396 deletions(-)
+ 58 files changed, 3450 insertions(+), 404 deletions(-)
  create mode 100644 kernel/compat/samsung_defex.c
  create mode 100644 kernel/compat/samsung_defex.h
  create mode 100644 kernel/compat/samsung_kdp.c
@@ -68,7 +71,7 @@ Subject: [PATCH] 10_pershoot_enable_susfs_for_ksun
  create mode 100644 kernel/include/ksu_samsung_kdp.h
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index f8fc9a9cd..4a8647710 100644
+index a02fd1877..9f0e6dbd2 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
 @@ -1,25 +1,44 @@
@@ -135,7 +138,7 @@ index f8fc9a9cd..4a8647710 100644
  kernelsu-objs += manager/apk_sign.o
  kernelsu-objs += manager/pkg_observer.o
  kernelsu-objs += manager/throne_tracker.o
-@@ -58,18 +77,30 @@ kernelsu-objs += feature/selinux_hide.o
+@@ -60,18 +79,30 @@ kernelsu-objs += feature/selinux_hide.o
  kernelsu-objs += feature/shell_su_adb_only.o
  
  ifdef KBUILD_EXTMOD
@@ -169,7 +172,7 @@ index f8fc9a9cd..4a8647710 100644
  endif
  
  ccflags-y += -I$(srctree)/security/selinux -I$(srctree)/security/selinux/include
-@@ -88,7 +119,7 @@ else
+@@ -90,7 +121,7 @@ else
  KSU_KERNEL_DIR := $(src)
  endif
  
@@ -178,7 +181,7 @@ index f8fc9a9cd..4a8647710 100644
  
  # preinit runner: a static nolibc binary embedded into kernelsu, see preinit/.
  # It is built against the installed UAPI headers of the target kernel
-@@ -138,8 +169,12 @@ KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplev
+@@ -140,8 +171,12 @@ KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplev
  ifneq ($(GIT_ROOT),$(KERNEL_GIT_ROOT))
  # Only set version if it's a different repo from kernel
  $(shell cd $(GIT_ROOT) && [ -f .git/shallow ] && $(LPATH) git fetch --unshallow 2>/dev/null || true)
@@ -193,7 +196,7 @@ index f8fc9a9cd..4a8647710 100644
  KSU_GIT_VERSION_VALID := 1
  $(info -- KernelSU-Next Git repo detected at: $(GIT_ROOT))
  endif
-@@ -173,12 +208,9 @@ endif
+@@ -175,12 +210,9 @@ endif
  KSU_NEW_DCACHE_FLUSH := $(shell grep -q __flush_dcache_area $(srctree)/arch/arm64/include/asm/cacheflush.h ; echo $$?)
  $(info -- KernelSU-Next new DCACHE flush: $(KSU_NEW_DCACHE_FLUSH))
  
@@ -209,7 +212,7 @@ index f8fc9a9cd..4a8647710 100644
  endif
  
  ifdef KSU_MANAGER_PACKAGE
-@@ -186,15 +218,25 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
+@@ -188,15 +220,25 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
  $(info -- KernelSU-Next Manager package name: $(KSU_MANAGER_PACKAGE))
  endif
  
@@ -241,7 +244,7 @@ index f8fc9a9cd..4a8647710 100644
  # Keep a new line here!! Because someone may append config
 +
 diff --git a/kernel/Kconfig b/kernel/Kconfig
-index 88e228117..e58f4e1d4 100644
+index 88e228117..9e0ef5be2 100644
 --- a/kernel/Kconfig
 +++ b/kernel/Kconfig
 @@ -2,12 +2,11 @@ menu "KernelSU"
@@ -289,7 +292,7 @@ index 88e228117..e58f4e1d4 100644
  config KSU_DISABLE_MANAGER
  	bool "Disable KernelSU manager integration"
  	depends on KSU
-@@ -43,4 +65,130 @@ config KSU_X86_PATCH_SYSCALL_DISPATCHER
+@@ -43,4 +65,138 @@ config KSU_X86_PATCH_SYSCALL_DISPATCHER
  	  Dynamically patch x64's hardened syscall dispatcher to support syscall hooks. This is a
  	  replacement for a kernel source code patch, and is useful for x86_64 LKM mode.
  
@@ -416,6 +419,14 @@ index 88e228117..e58f4e1d4 100644
 +	  - It does NOT hide any inline hooks or plt hooks cause by the injected library itself.
 +	  - It may not be able to evade detections by apps that implement a good injection detection.
 +	  - Effective only on zygote spawned umounted user app process >= 10000.
++
++config KSU_SUSFS_PRIORITY_UID_FILTER
++	bool "Enable to allow adding user-defined uids that will be hidden from getpriority/setpriority/ioprio_get/ioprio_set syscall"
++	depends on KSU_SUSFS
++	default y
++	help
++	  - Allow hiding user-defined uids from syscalls like getpriority/setpriority/ioprio_get/ioprio_set.
++	  - Effective on all processes with uid >= 10000.
 +
 +endmenu
 +
@@ -1082,7 +1093,7 @@ index 000000000..01337e274
 +
 +#endif
 diff --git a/kernel/core/init.c b/kernel/core/init.c
-index a5e95e7cf..1ffa0311f 100644
+index a14faa545..7cd84c974 100644
 --- a/kernel/core/init.c
 +++ b/kernel/core/init.c
 @@ -6,6 +6,10 @@
@@ -1112,12 +1123,10 @@ index a5e95e7cf..1ffa0311f 100644
  
  #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
  #include <asm/cpufeature.h>
-@@ -99,6 +112,13 @@ int __init kernelsu_init(void)
+@@ -101,6 +114,11 @@ int __init kernelsu_init(void)
  #else
  	pr_info("welcome to KernelSU version " __stringify(KERNEL_SU_VERSION) "\n");
  #endif
-+
-+	int ret;
 +
 +#ifdef CONFIG_KSU_SUSFS
 +	susfs_init();
@@ -1126,10 +1135,11 @@ index a5e95e7cf..1ffa0311f 100644
  #if defined(__x86_64__) && !defined(CONFIG_KSU_X86_PATCH_SYSCALL_DISPATCHER)
      // If the kernel has the hardening patch, X86_FEATURE_INDIRECT_SAFE must be set
      if (!boot_cpu_has(X86_FEATURE_INDIRECT_SAFE)) {
-@@ -134,14 +154,28 @@ int __init kernelsu_init(void)
+@@ -136,23 +154,38 @@ int __init kernelsu_init(void)
  		pr_alert("shell is allowed at init!");
  	}
  
++	pr_info("initializing symbol resolver\n");
 +	ksu_init_symbol_resolver();
 +	ret = ksu_samsung_kdp_init();
 +	if (ret)
@@ -1142,21 +1152,33 @@ index a5e95e7cf..1ffa0311f 100644
  		return -ENOSYS;
  	}
  
+-	pr_info("initializing symbol resolver\n");
 -	ksu_init_symbol_resolver();
-+	ret = ksu_samsung_defex_init();
-+	if (ret) {
+-
+ 	ret = ksu_selinux_inode_init();
+ 	if (ret) {
+-		put_cred(ksu_cred);
 +		ksu_put_cred(ksu_cred);
++		ksu_cred = NULL;
 +		ksu_samsung_kdp_exit();
 +		return ret;
 +	}
 +
++	ret = ksu_samsung_defex_init();
++	if (ret) {
++		ksu_put_cred(ksu_cred);
+ 		ksu_cred = NULL;
++		ksu_samsung_kdp_exit();
+ 		return ret;
+ 	}
+ 
 +#if !defined(CONFIG_KSU_SUSFS) && defined(CONFIG_KPROBES)
  	ksu_syscall_hook_init();
 +#endif
  
  	// Block modules early, before vendor modules are loaded in second stage.
  	ksu_module_blacklist_init();
-@@ -149,13 +183,25 @@ int __init kernelsu_init(void)
+@@ -160,13 +193,25 @@ int __init kernelsu_init(void)
  	ksu_feature_init();
  	ksu_sulog_init();
  	ksu_adb_root_init();
@@ -1182,7 +1204,7 @@ index a5e95e7cf..1ffa0311f 100644
  	if (ksu_late_loaded) {
  		pr_info("late load mode, skipping kprobe hooks\n");
  
-@@ -171,7 +217,9 @@ int __init kernelsu_init(void)
+@@ -182,7 +227,9 @@ int __init kernelsu_init(void)
  		ksu_allowlist_init();
  		ksu_load_allow_list();
  
@@ -1192,7 +1214,7 @@ index a5e95e7cf..1ffa0311f 100644
  
  		ksu_throne_tracker_init();
  		ksu_observer_init();
-@@ -188,7 +236,9 @@ int __init kernelsu_init(void)
+@@ -199,7 +246,9 @@ int __init kernelsu_init(void)
  		}
  
  	} else {
@@ -1202,7 +1224,7 @@ index a5e95e7cf..1ffa0311f 100644
  
  		ksu_allowlist_init();
  
-@@ -212,7 +262,9 @@ int __init kernelsu_init(void)
+@@ -223,7 +272,9 @@ int __init kernelsu_init(void)
  void __exit kernelsu_exit(void)
  {
  	// Phase 1: Stop all hooks first to prevent new callbacks
@@ -1212,7 +1234,7 @@ index a5e95e7cf..1ffa0311f 100644
  
  	ksu_supercalls_exit();
  
-@@ -231,15 +283,27 @@ void __exit kernelsu_exit(void)
+@@ -242,15 +293,27 @@ void __exit kernelsu_exit(void)
  
  	ksu_allowlist_exit();
  
@@ -1653,7 +1675,7 @@ index 177a8b9c4..183986bf3 100644
  // Teardown hook. Intentionally keeps the merged list installed; see the
  // implementation for why the pointer is not restored.
 diff --git a/kernel/feature/selinux_hide.c b/kernel/feature/selinux_hide.c
-index 459f99f92..a3e7e9dd3 100644
+index 2a41b8056..57a2a7ea7 100644
 --- a/kernel/feature/selinux_hide.c
 +++ b/kernel/feature/selinux_hide.c
 @@ -12,10 +12,18 @@
@@ -1839,16 +1861,42 @@ index 459f99f92..a3e7e9dd3 100644
  
      struct ksu_task_security_struct *tsec;
      struct cred *new;
-@@ -255,7 +286,7 @@ static int __nocfi my_setprocattr(const char *name, void *value, size_t size)
-             str[size - 1] = 0;
-             size--;
+@@ -250,15 +281,26 @@ static int __nocfi my_setprocattr(const char *name, void *value, size_t size)
+         return error;
+ 
+     /* Obtain a SID for the context, if one was specified. */
+-    if (size && str[0] && str[0] != '\n') {
+-        if (str[size - 1] == '\n') {
+-            str[size - 1] = 0;
+-            size--;
++    if (size && str[0]) {
++        bool newline_prefix = (str[0] == '\n');
++
++        if (newline_prefix && size > 1) {
++            str[0] = 'u';
++        }
++        if (str[0] != '\n') {
++            if (str[size - 1] == '\n') {
++                str[size - 1] = 0;
++                size--;
++            }
++            error2 = __security_context_to_sid_with_policy(backup_sepolicy, value, size, &tmp_sid, SECSID_NULL,
++                                                           GFP_KERNEL, &sid, &error);
++            if (newline_prefix) {
++                str[0] = '\n';
++                return -EINVAL;
++            }
++            if (error2 || error)
++                return error2 ?: error;
          }
 -        error2 = security_context_to_sid_with_policy(backup_sepolicy, value, size, &tmp_sid, SECSID_NULL, GFP_KERNEL,
-+        error2 = __security_context_to_sid_with_policy(backup_sepolicy, value, size, &tmp_sid, SECSID_NULL, GFP_KERNEL,
-                                                      &sid, &error);
-         if (error2 || error)
-             return error2 ?: error;
-@@ -305,14 +336,17 @@ abort_change:
+-                                                     &sid, &error);
+-        if (error2 || error)
+-            return error2 ?: error;
+     }
+ 
+     new = prepare_creds();
+@@ -305,14 +347,17 @@ abort_change:
      abort_creds(new);
      return error;
  
@@ -1869,7 +1917,7 @@ index 459f99f92..a3e7e9dd3 100644
  {
      mutex_lock(&selinux_state.status_lock);
      if (fake_status)
-@@ -383,68 +417,152 @@ static int my_sel_open_handle_status(struct inode *inode, struct file *filp)
+@@ -380,68 +425,152 @@ static int my_sel_open_handle_status(struct inode *inode, struct file *filp)
      return ret;
  }
  
@@ -2071,7 +2119,7 @@ index 459f99f92..a3e7e9dd3 100644
      if (orig_context_write) {
          ret =
              ksu_patch_text(context_write, &orig_context_write, sizeof(orig_context_write), KSU_PATCH_TEXT_FLUSH_DCACHE);
-@@ -460,6 +578,9 @@ static void ksu_selinux_hide_unhook()
+@@ -457,6 +586,9 @@ static void ksu_selinux_hide_unhook()
              pr_err("selinux_hide: exit: patch_text access_write err: %d\n", ret);
          }
      }
@@ -2081,7 +2129,7 @@ index 459f99f92..a3e7e9dd3 100644
      if (sel_open_handle_status_slot && orig_sel_open_handle_status) {
          ret = ksu_patch_text(sel_open_handle_status_slot, &orig_sel_open_handle_status,
                               sizeof(orig_sel_open_handle_status), KSU_PATCH_TEXT_FLUSH_DCACHE);
-@@ -468,7 +589,6 @@ static void ksu_selinux_hide_unhook()
+@@ -465,7 +597,6 @@ static void ksu_selinux_hide_unhook()
              pr_err("selinux_hide: exit: patch_text sel_open_handle_status err: %d\n", ret);
          }
      }
@@ -2089,7 +2137,7 @@ index 459f99f92..a3e7e9dd3 100644
  }
  
  static void ksu_selinux_hide_disable()
-@@ -477,6 +597,116 @@ static void ksu_selinux_hide_disable()
+@@ -474,6 +605,116 @@ static void ksu_selinux_hide_disable()
      ksu_selinux_hide_unhook();
  }
  
@@ -2206,7 +2254,7 @@ index 459f99f92..a3e7e9dd3 100644
  static int selinux_hide_feature_get(u64 *value)
  {
      *value = ksu_selinux_hide_enabled ? 1 : 0;
-@@ -503,6 +733,8 @@ static int selinux_hide_feature_set(u64 value)
+@@ -500,6 +741,8 @@ static int selinux_hide_feature_set(u64 value)
              ksu_selinux_hide_running = false;
          }
      }
@@ -2215,7 +2263,7 @@ index 459f99f92..a3e7e9dd3 100644
      mutex_unlock(&selinux_hide_mutex);
      return ret;
  }
-@@ -545,13 +777,33 @@ static void hook_selinux_status_open()
+@@ -542,13 +785,33 @@ static void hook_selinux_status_open()
          }
          sel_open_handle_status_slot = &ops->open;
      }
@@ -2255,7 +2303,7 @@ index 459f99f92..a3e7e9dd3 100644
      }
  }
  
-@@ -565,7 +817,9 @@ void __init ksu_selinux_hide_init()
+@@ -562,7 +825,9 @@ void __init ksu_selinux_hide_init()
      } else {
          static_key_enable(&fake_status_initialize_key.key);
      }
@@ -2265,7 +2313,7 @@ index 459f99f92..a3e7e9dd3 100644
  }
  
  void __exit ksu_selinux_hide_exit()
-@@ -706,8 +960,22 @@ out:
+@@ -703,8 +968,22 @@ out:
      return rc;
  }
  
@@ -2289,7 +2337,7 @@ index 459f99f92..a3e7e9dd3 100644
  {
      struct selinux_policy *orig_policy;
      struct policydb *policydb, *orig_policydb;
-@@ -835,7 +1103,7 @@ static int sidtab_entry_to_string(struct policydb *p, struct sidtab *sidtab, str
+@@ -846,7 +1125,7 @@ static int sidtab_entry_to_string(struct policydb *p, struct sidtab *sidtab, str
      return rc;
  }
  
@@ -2298,7 +2346,7 @@ index 459f99f92..a3e7e9dd3 100644
                                                 u32 *scontext_len)
  {
      struct policydb *policydb;
-@@ -1022,7 +1290,7 @@ static int constraint_expr_eval(struct policydb *policydb, struct context *scont
+@@ -1033,7 +1312,7 @@ static int constraint_expr_eval(struct policydb *policydb, struct context *scont
                  l2 = &(scontext->range.level[1]);
                  goto mls_ops;
              case CEXPR_L2H2:
@@ -2307,7 +2355,7 @@ index 459f99f92..a3e7e9dd3 100644
                  l2 = &(tcontext->range.level[1]);
                  goto mls_ops;
              mls_ops:
-@@ -1208,7 +1476,7 @@ static void context_struct_compute_av(struct policydb *policydb, struct context
+@@ -1219,7 +1498,7 @@ static void context_struct_compute_av(struct policydb *policydb, struct context
      type_attribute_bounds_av(policydb, scontext, tcontext, tclass, avd);
  }
  
@@ -2810,7 +2858,7 @@ index 5e2cfe11b..3e0b27fa1 100644
  
  #endif
 diff --git a/kernel/hook/arm64/patch_memory.c b/kernel/hook/arm64/patch_memory.c
-index d58f2e45c..07229382b 100644
+index 016d16f75..3d401b7db 100644
 --- a/kernel/hook/arm64/patch_memory.c
 +++ b/kernel/hook/arm64/patch_memory.c
 @@ -5,6 +5,7 @@
@@ -2821,31 +2869,20 @@ index d58f2e45c..07229382b 100644
  #include "klog.h" // IWYU pragma: keep
  #include "linux/cpumask.h"
  #include "linux/gfp.h" // IWYU pragma: keep
-@@ -192,7 +193,14 @@ static int ksu_patch_text_cb(void *arg)
+@@ -175,6 +176,13 @@ static int ksu_patch_text_cb(void *arg)
  
  int ksu_patch_text(void *dst, void *src, size_t len, int flags)
  {
--    struct patch_text_info info = {
 +#ifdef CONFIG_KSU_SAMSUNG_NO_PATCH_TEXT
 +    if (ksu_samsung_device_detected()) {
 +        pr_warn("live patching disabled on Samsung EL2: dst=0x%lx len=%zu flags=0x%x\n",
-+            (unsigned long)dst, len, flags);
++                (unsigned long)dst, len, flags);
 +        return -EOPNOTSUPP;
 +    }
 +#endif
-+	struct patch_text_info info = {
+     int ret;
+     struct patch_text_info info = {
          .dst = dst,
-         .src = src,
-         .len = len,
-@@ -200,7 +208,7 @@ int ksu_patch_text(void *dst, void *src, size_t len, int flags)
-         .flags = flags,
-     };
- 
--    return stop_machine(ksu_patch_text_cb, &info, cpu_online_mask);
-+	return stop_machine(ksu_patch_text_cb, &info, cpu_online_mask);
- }
- 
- /*
 diff --git a/kernel/hook/arm64/syscall_hook.c b/kernel/hook/arm64/syscall_hook.c
 index 7bd6df06d..04b1b6670 100644
 --- a/kernel/hook/arm64/syscall_hook.c
@@ -2946,7 +2983,7 @@ index 7bd6df06d..04b1b6670 100644
      pr_info("all syscall hooks restored\n");
  }
 diff --git a/kernel/hook/setuid_hook.c b/kernel/hook/setuid_hook.c
-index 3cccc7800..424d7f105 100644
+index 214f8cbb4..64f79d405 100644
 --- a/kernel/hook/setuid_hook.c
 +++ b/kernel/hook/setuid_hook.c
 @@ -3,6 +3,7 @@
@@ -2969,7 +3006,7 @@ index 3cccc7800..424d7f105 100644
  #include "policy/allowlist.h"
  #include "hook/setuid_hook.h"
  #include "klog.h" // IWYU pragma: keep
-@@ -21,6 +27,157 @@
+@@ -21,27 +27,171 @@
  #include "hook/tp_marker.h"
  #include "feature/kernel_umount.h"
  
@@ -3127,8 +3164,6 @@ index 3cccc7800..424d7f105 100644
  int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
  {
      // we rely on the fact that zygote always call setresuid(3) with same uids
-@@ -28,10 +185,8 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
-     pr_info("handle_setresuid from %d to %d\n", old_uid, new_uid);
  
      if (unlikely(is_uid_manager(new_uid))) {
 -        spin_lock_irq(&current->sighand->siglock);
@@ -3137,9 +3172,8 @@ index 3cccc7800..424d7f105 100644
          ksu_set_task_tracepoint_flag(current);
 -        spin_unlock_irq(&current->sighand->siglock);
  
-         pr_info("install fd for manager: %d\n", new_uid);
          ksu_install_fd();
-@@ -39,12 +194,7 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
+         return 0;
      }
  
      if (ksu_is_allow_uid_for_current(new_uid)) {
@@ -3153,7 +3187,7 @@ index 3cccc7800..424d7f105 100644
          ksu_set_task_tracepoint_flag(current);
      } else {
          ksu_clear_task_tracepoint_flag_if_needed(current);
-@@ -55,6 +205,7 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
+@@ -52,6 +202,7 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
  
      return 0;
  }
@@ -3177,10 +3211,10 @@ index 3a3dfea8e..d5ab04236 100644
  
  #endif
 diff --git a/kernel/hook/syscall_event_bridge.c b/kernel/hook/syscall_event_bridge.c
-index cfa583715..db5b84428 100644
+index 50dd0bdae..6e94d5079 100644
 --- a/kernel/hook/syscall_event_bridge.c
 +++ b/kernel/hook/syscall_event_bridge.c
-@@ -47,79 +47,78 @@ static int ksu_handle_init_mark_tracker(const char __user **filename_user)
+@@ -45,79 +45,78 @@ static int ksu_handle_init_mark_tracker(const char __user **filename_user)
          ksu_clear_task_tracepoint_flag_if_needed(current);
      }
  
@@ -3312,7 +3346,7 @@ index cfa583715..db5b84428 100644
  }
  
  long __nocfi ksu_hook_execve(int orig_nr, const struct pt_regs *regs)
-@@ -140,6 +139,10 @@ long __nocfi ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs)
+@@ -138,6 +137,10 @@ long __nocfi ksu_hook_setresuid(int orig_nr, const struct pt_regs *regs)
      if (ret < 0)
          return ret;
  
@@ -3410,7 +3444,7 @@ index cf21fed88..93bf1d1e5 100644
      unregister_trace_sys_enter(ksu_sys_enter_handler, NULL);
      tracepoint_synchronize_unregister();
 diff --git a/kernel/hook/tp_marker.c b/kernel/hook/tp_marker.c
-index 489a0d7ba..1bbcd9f8b 100644
+index 85f388b5b..97c2ca97f 100644
 --- a/kernel/hook/tp_marker.c
 +++ b/kernel/hook/tp_marker.c
 @@ -7,6 +7,7 @@
@@ -3418,12 +3452,12 @@ index 489a0d7ba..1bbcd9f8b 100644
  
  #include "policy/allowlist.h"
 +#include "ksu_samsung_kdp.h"
- #include "klog.h" // IWYU pragma: keep
  #include "selinux/selinux.h"
  
-@@ -103,7 +104,7 @@ void ksu_mark_running_process_locked(void)
-             pr_info("tp_marker: unmark process: pid:%d, uid: %d, comm:%s\n",
-                     t->pid, uid, t->comm);
+ // Tracepoint registration count management
+@@ -96,7 +97,7 @@ void ksu_mark_running_process_locked(void)
+         } else {
+             ksu_clear_task_tracepoint_flag(t);
          }
 -        put_cred(cred);
 +		ksu_put_cred(cred);
@@ -3566,10 +3600,20 @@ index edec5bba5..327b32699 100644
 +	return false;
  }
 diff --git a/kernel/manager/pkg_observer.c b/kernel/manager/pkg_observer.c
-index bee25c125..e6ab75adb 100644
+index bee25c125..5d7f75059 100644
 --- a/kernel/manager/pkg_observer.c
 +++ b/kernel/manager/pkg_observer.c
-@@ -23,6 +23,7 @@ struct watch_dir {
+@@ -8,6 +8,9 @@
+ #include <linux/rculist.h>
+ #include <linux/task_work.h>
+ #include <linux/version.h>
++#ifdef CONFIG_KSU_SUSFS
++#include <linux/susfs.h>
++#endif
+ #include "klog.h" // IWYU pragma: keep
+ #include "manager/throne_tracker.h"
+ 
+@@ -23,6 +26,7 @@ struct watch_dir {
  
  static struct fsnotify_group *g;
  
@@ -3577,16 +3621,32 @@ index bee25c125..e6ab75adb 100644
  static void ksu_track_throne_tw_func(struct callback_head *cb)
  {
      kfree(cb);
-@@ -53,6 +54,8 @@ static void ksu_defer_track_throne(void)
+@@ -30,6 +34,10 @@ static void ksu_track_throne_tw_func(struct callback_head *cb)
+     if (current->flags & PF_EXITING)
+         return;
+     track_throne(false);
++#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
++    // Renew the priority uid bitmap filter
++    susfs_parse_priority_app_strings();
++#endif
+ }
+ 
+ // Never scan from the fsnotify handler: fsnotify_mark_srcu and the rename's dir
+@@ -52,7 +60,13 @@ static void ksu_defer_track_throne(void)
+     }
      pr_warn("defer track_throne failed, run it inline\n");
      track_throne(false);
++#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
++    // Renew the priority uid bitmap filter
++    susfs_parse_priority_app_strings();
++#endif
  }
 +#endif
 +
  
  static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
                                    struct inode *inode, struct inode *dir,
-@@ -64,7 +67,11 @@ static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
+@@ -64,7 +78,11 @@ static int ksu_handle_inode_event(struct fsnotify_mark *mark, u32 mask,
          return 0;
      if (file_name->len == 13 && !memcmp(file_name->name, "packages.list", 13)) {
          pr_info("packages.list detected: %d\n", mask);
@@ -3795,10 +3855,10 @@ index 3ca346c12..616ba87a7 100644
  
  #endif
 diff --git a/kernel/policy/allowlist.c b/kernel/policy/allowlist.c
-index fbb32376e..4cdb3024a 100644
+index fe487ea47..c54bcf7c3 100644
 --- a/kernel/policy/allowlist.c
 +++ b/kernel/policy/allowlist.c
-@@ -306,10 +306,12 @@ bool ksu_uid_should_umount(uid_t uid)
+@@ -294,10 +294,12 @@ bool ksu_uid_should_umount(uid_t uid)
  {
      struct app_profile *profile;
      bool res;
@@ -4245,7 +4305,7 @@ index 09384deff..25e07ac51 100644
 +
  #endif
 diff --git a/kernel/runtime/ksud_integration.c b/kernel/runtime/ksud_integration.c
-index 1a7ba9ffa..0a80e4d26 100644
+index a4fb4138f..37de54575 100644
 --- a/kernel/runtime/ksud_integration.c
 +++ b/kernel/runtime/ksud_integration.c
 @@ -31,6 +31,16 @@
@@ -4509,7 +4569,7 @@ index 1a7ba9ffa..0a80e4d26 100644
  static unsigned int volumedown_pressed_count = 0;
  
  static bool is_volumedown_enough(unsigned int count)
-@@ -486,15 +574,29 @@ static bool is_volumedown_enough(unsigned int count)
+@@ -486,14 +574,28 @@ static bool is_volumedown_enough(unsigned int count)
  
  int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value)
  {
@@ -4520,7 +4580,6 @@ index 1a7ba9ffa..0a80e4d26 100644
 +
      if (*type == EV_KEY && *code == KEY_VOLUMEDOWN) {
          int val = *value;
-         pr_info("KEY_VOLUMEDOWN val: %d\n", val);
          if (val) {
 +#ifdef CONFIG_KSU_SUSFS
 +            // - We cannot call static_branch_disable() here as we are within the
@@ -4539,7 +4598,7 @@ index 1a7ba9ffa..0a80e4d26 100644
          }
      }
  
-@@ -514,7 +616,14 @@ bool ksu_is_safe_mode()
+@@ -513,7 +615,14 @@ bool ksu_is_safe_mode()
      }
  
      // stop hook first!
@@ -4554,7 +4613,7 @@ index 1a7ba9ffa..0a80e4d26 100644
  
      pr_info("volumedown_pressed_count: %d\n", volumedown_pressed_count);
      if (is_volumedown_enough(volumedown_pressed_count)) {
-@@ -548,7 +657,11 @@ static void ksu_execve_hook_ksud_common(const char __user *filename_user, const
+@@ -547,7 +656,11 @@ static void ksu_execve_hook_ksud_common(const char __user *filename_user, const
          return;
      }
  
@@ -4566,7 +4625,7 @@ index 1a7ba9ffa..0a80e4d26 100644
  }
  
  void ksu_execve_hook_ksud(const struct pt_regs *regs)
-@@ -567,14 +680,13 @@ void ksu_execveat_hook_ksud(const struct pt_regs *regs)
+@@ -566,14 +679,13 @@ void ksu_execveat_hook_ksud(const struct pt_regs *regs)
      ksu_execve_hook_ksud_common(filename_user, argv_user);
  }
  
@@ -4583,9 +4642,9 @@ index 1a7ba9ffa..0a80e4d26 100644
      return orig_sys_read(regs);
  }
  
-@@ -653,10 +765,12 @@ void ksu_stop_input_hook_runtime(void)
-     bool ret = schedule_work(&stop_input_hook_work);
-     pr_info("unregister input kprobe: %d!\n", ret);
+@@ -651,10 +763,12 @@ void ksu_stop_input_hook_runtime(void)
+     input_hook_stopped = true;
+     schedule_work(&stop_input_hook_work);
  }
 +#endif
  
@@ -4596,7 +4655,7 @@ index 1a7ba9ffa..0a80e4d26 100644
      int ret;
  
      ksu_syscall_table_hook(__NR_read, ksu_sys_read, &orig_sys_read);
-@@ -666,14 +780,17 @@ void __init ksu_ksud_init()
+@@ -664,14 +778,17 @@ void __init ksu_ksud_init()
      pr_info("ksud: input_event_kp: %d\n", ret);
  
      INIT_WORK(&stop_input_hook_work, do_stop_input_hook);
@@ -4615,7 +4674,7 @@ index 1a7ba9ffa..0a80e4d26 100644
      if (module_rc_buf) {
          free_module_rc();
 diff --git a/kernel/selinux/rules.c b/kernel/selinux/rules.c
-index 5b5c170c5..bd5f4a2b7 100644
+index a9c67283c..d88b4bb4d 100644
 --- a/kernel/selinux/rules.c
 +++ b/kernel/selinux/rules.c
 @@ -104,6 +104,12 @@ void apply_kernelsu_rules()
@@ -4631,7 +4690,7 @@ index 5b5c170c5..bd5f4a2b7 100644
      // allow us do any ioctl
      if (db->policyvers >= POLICYDB_VERSION_XPERMS_IOCTL) {
          ksu_allowxperm(db, KERNEL_SU_DOMAIN, ALL, "blk_file", ALL);
-@@ -162,6 +168,17 @@ void apply_kernelsu_rules()
+@@ -162,14 +168,32 @@ void apply_kernelsu_rules()
      ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
      ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
  
@@ -4648,19 +4707,41 @@ index 5b5c170c5..bd5f4a2b7 100644
 +
      // Return value ignored: the policy is published either way.
      ksu_policydb_fixup_len(db, "apply_kernelsu_rules");
++#ifndef CONFIG_KSU_SUSFS
+     pol->latest_granting = old_pol->latest_granting + 1;
++#endif
      rcu_assign_pointer(selinux_state.policy, pol);
-@@ -169,6 +186,11 @@ void apply_kernelsu_rules()
+     synchronize_rcu();
      ksu_destroy_sepolicy(old_pol);
  
-     reset_avc_cache();
-+
-+#ifdef CONFIG_KSU_SUSFS
++#ifndef CONFIG_KSU_SUSFS
+     reset_avc_cache(pol->latest_granting);
++#else
++    reset_avc_cache(0);
 +    susfs_set_batch_sid();
 +#endif
-+
  out_unlock:
      mutex_unlock(&selinux_state.policy_mutex);
  }
+@@ -541,12 +565,18 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
+ 
+     // Return value ignored: the policy is published either way.
+     ksu_policydb_fixup_len(db, "handle_sepolicy");
++#ifndef CONFIG_KSU_SUSFS
+     pol->latest_granting = old_pol->latest_granting + 1;
++#endif
+     rcu_assign_pointer(selinux_state.policy, pol);
+     synchronize_rcu();
+     ksu_destroy_sepolicy(old_pol);
+ 
++#ifndef CONFIG_KSU_SUSFS
+     reset_avc_cache(pol->latest_granting);
++#else
++    reset_avc_cache(0);
++#endif
+     ret = success_cmd_count;
+     goto out_unlock;
+ 
 diff --git a/kernel/selinux/selinux.c b/kernel/selinux/selinux.c
 index 1a76dbd78..9b56f096b 100644
 --- a/kernel/selinux/selinux.c
@@ -4808,10 +4889,10 @@ index 1a76dbd78..9b56f096b 100644
 +}
 +#endif
 diff --git a/kernel/selinux/selinux.h b/kernel/selinux/selinux.h
-index 158f94555..ce8d60ac2 100644
+index b1918a426..f6dc416a1 100644
 --- a/kernel/selinux/selinux.h
 +++ b/kernel/selinux/selinux.h
-@@ -42,4 +42,15 @@ void escape_to_root_for_adb_root();
+@@ -55,4 +55,15 @@ static inline int ksu_selinux_inode_init(void)
  
  extern u32 ksu_file_sid;
  
@@ -4827,6 +4908,43 @@ index 158f94555..ce8d60ac2 100644
 +#endif
 +
  #endif
+diff --git a/kernel/selinux/sepolicy.c b/kernel/selinux/sepolicy.c
+index 1e8ebb39d..f4e258b29 100644
+--- a/kernel/selinux/sepolicy.c
++++ b/kernel/selinux/sepolicy.c
+@@ -15,6 +15,11 @@
+ #include "klog.h" // IWYU pragma: keep
+ #include "ss/symtab.h"
+ 
++#ifdef CONFIG_KSU_SUSFS
++extern int susfs_add_sus_avd_allowed_by_type(u32 s_type, u32 t_type, u16 type, u32 orig_avd_allowed);
++extern int susfs_add_sus_type(const char *secctx, u32 type_value);
++#endif // #ifdef CONFIG_KSU_SUSFS
++
+ #define KSU_SUPPORT_ADD_TYPE
+ 
+ //////////////////////////////////////////////////////
+@@ -321,6 +326,10 @@ static bool add_rule_raw(struct policydb *db, struct type_datum *src, struct typ
+                 return false;
+         }
+ 
++#ifdef CONFIG_KSU_SUSFS
++        susfs_add_sus_avd_allowed_by_type(src->value, tgt->value, cls->value, node->datum.u.data);
++#endif // #ifdef CONFIG_KSU_SUSFS
++
+         if (invert) {
+             if (perm)
+                 node->datum.u.data &= ~(1U << (perm->value - 1));
+@@ -756,6 +765,9 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
+         ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1, 1);
+     }
+ 
++#ifdef CONFIG_KSU_SUSFS
++    susfs_add_sus_type(type_name, type->value);
++#endif // #ifdef CONFIG_KSU_SUSFS
+     return true;
+ }
+ 
 diff --git a/kernel/setup.sh b/kernel/setup.sh
 index 292e2c022..d9f120873 100755
 --- a/kernel/setup.sh
@@ -4965,10 +5083,10 @@ index 866fb6ad9..5f4c50e11 100644
  int ksu_sulog_emit_grant_root(int retval, __u32 uid, __u32 euid, gfp_t gfp);
  
 diff --git a/kernel/supercall/dispatch.c b/kernel/supercall/dispatch.c
-index a109293d6..16ceab17d 100644
+index 48a82e1b4..7c12657ff 100644
 --- a/kernel/supercall/dispatch.c
 +++ b/kernel/supercall/dispatch.c
-@@ -7,6 +7,13 @@
+@@ -8,6 +8,13 @@
  #include <linux/uaccess.h>
  #include <linux/version.h>
  #include <linux/thread_info.h>
@@ -4982,7 +5100,7 @@ index a109293d6..16ceab17d 100644
  #include "uapi/supercall.h"
  #include "supercall/internal.h"
  #include "arch.h" // IWYU pragma: keep
-@@ -141,12 +148,25 @@ static int do_report_event(void __user *arg)
+@@ -142,12 +149,25 @@ static int do_report_event(void __user *arg)
                  pr_info("boot_complete triggered\n");
                  on_boot_completed();
              }
@@ -5008,7 +5126,7 @@ index a109293d6..16ceab17d 100644
          break;
      }
      case EVENT_SERVICES: {
-@@ -394,7 +414,9 @@ static int do_set_app_profile(void __user *arg)
+@@ -395,7 +415,9 @@ static int do_set_app_profile(void __user *arg)
      ret = ksu_set_app_profile(&cmd.profile);
      if (!ret) {
          ksu_persistent_allow_list();
@@ -5018,7 +5136,7 @@ index a109293d6..16ceab17d 100644
      }
      return ret;
  }
-@@ -479,15 +501,27 @@ static int do_manage_mark(void __user *arg)
+@@ -480,15 +502,27 @@ static int do_manage_mark(void __user *arg)
      switch (cmd.operation) {
      case KSU_MARK_GET: {
          // Get task mark status
@@ -5046,7 +5164,7 @@ index a109293d6..16ceab17d 100644
          if (cmd.pid == 0) {
              ksu_mark_all_process();
          } else {
-@@ -497,9 +531,14 @@ static int do_manage_mark(void __user *arg)
+@@ -498,9 +532,14 @@ static int do_manage_mark(void __user *arg)
                  return ret;
              }
          }
@@ -5061,7 +5179,7 @@ index a109293d6..16ceab17d 100644
          if (cmd.pid == 0) {
              ksu_unmark_all_process();
          } else {
-@@ -509,11 +548,14 @@ static int do_manage_mark(void __user *arg)
+@@ -510,11 +549,14 @@ static int do_manage_mark(void __user *arg)
                  return ret;
              }
          }
@@ -5076,7 +5194,7 @@ index a109293d6..16ceab17d 100644
          break;
      }
      default: {
-@@ -721,11 +763,17 @@ static int do_get_hook_mode(void __user *arg)
+@@ -722,11 +764,17 @@ static int do_get_hook_mode(void __user *arg)
  {
      struct ksu_get_hook_mode_cmd cmd = {0};
  
@@ -5094,7 +5212,7 @@ index a109293d6..16ceab17d 100644
  
      if (copy_to_user(arg, &cmd, sizeof(cmd))) {
          pr_err("get_hook_mode: copy_to_user failed\n");
-@@ -1107,3 +1155,108 @@ void ksu_supercall_cleanup_state(void)
+@@ -1108,3 +1156,113 @@ void ksu_supercall_cleanup_state(void)
      }
      up_write(&mount_list_lock);
  }
@@ -5171,6 +5289,11 @@ index a109293d6..16ceab17d 100644
 +            susfs_add_sus_map(arg);
 +            return 0;
 +#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
++#ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
++        case CMD_SUSFS_SET_PRIORITY_UID_FILTER:
++            susfs_set_priority_uid_filter(arg);
++            return 0;
++#endif // #ifdef CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
 +        case CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING: {
 +            struct st_susfs_avc_log_spoofing info;
 +            if (!copy_from_user(&info, (struct st_susfs_avc_log_spoofing __user *)*arg, sizeof(info))) {
@@ -5556,6 +5679,53 @@ index 4728b17a1..7ddcc34f6 100644
  void ksu_supercalls_init(void);
  void ksu_supercalls_exit(void);
  #endif // __KSU_H_SUPERCALL
+diff --git a/kernel/susfs/susfs_abi.h b/kernel/susfs/susfs_abi.h
+index c64ac9ae2..2cb9b708c 100644
+--- a/kernel/susfs/susfs_abi.h
++++ b/kernel/susfs/susfs_abi.h
+@@ -41,6 +41,7 @@
+ #define CMD_SUSFS_SUS_SU                        0x60000 /* deprecated */
+ #define CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING       0x60010
+ #define CMD_SUSFS_ADD_SUS_MAP                   0x60020
++#define CMD_SUSFS_SET_PRIORITY_UID_FILTER       0x60030
+ 
+ /* 126 is a USERSPACE-side sentinel the kernel never produces: the ksu_susfs C tool pre-seeds payload.err with it and
+  * prints "SUSFS operation not supported, please enable it in kernel" when the field is STILL 126 after the syscall,
+@@ -58,6 +59,7 @@
+ #define SUSFS_ENABLED_FEATURES_SIZE             8192
+ #define SUSFS_MAX_VERSION_BUFSIZE               16
+ #define SUSFS_MAX_VARIANT_BUFSIZE               16
++#define SUSFS_APP_STR_BUF_SIZE                  65535
+ 
+ #define SUSFS_VERSION_STR "v2.3.0"
+ #define SUSFS_VARIANT_STR "GKI-LKM"
+@@ -84,6 +86,12 @@ struct st_susfs_sus_map {
+ 	int err;
+ };
+ 
++/* getpriority uid filter */
++struct st_susfs_priority_uid_filter {
++	char app_strings[SUSFS_APP_STR_BUF_SIZE];
++	int err;
++};
++
+ /* KSTAT_SPOOF_* bits of struct st_susfs_sus_kstat's `flags` field (upstream declares these in
+  * susfs.h right above that struct).  Intentional deviation from upstream, correcting an earlier
+  * note here that got this wrong:
+diff --git a/kernel/susfs/susfs_supercall.c b/kernel/susfs/susfs_supercall.c
+index c64b76f70..87ba5bf1a 100644
+--- a/kernel/susfs/susfs_supercall.c
++++ b/kernel/susfs/susfs_supercall.c
+@@ -431,6 +431,9 @@ static void __init susfs_abi_layout_check(void)
+ 	BUILD_BUG_ON(sizeof(struct st_susfs_sus_map) != 260);
+ 	BUILD_BUG_ON(offsetof(struct st_susfs_sus_map, err) != 256);
+ 
++	BUILD_BUG_ON(sizeof(struct st_susfs_priority_uid_filter) != 65540);
++	BUILD_BUG_ON(offsetof(struct st_susfs_priority_uid_filter, err) != 65536);
++
+ 	BUILD_BUG_ON(sizeof(struct st_susfs_sus_kstat) != 376);
+ 	BUILD_BUG_ON(offsetof(struct st_susfs_sus_kstat, err) != 372);
+ 
 diff --git a/manager/app/build.gradle.kts b/manager/app/build.gradle.kts
 index adacb481d..6a345fb80 100644
 --- a/manager/app/build.gradle.kts
