@@ -1,5 +1,5 @@
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index 83dca399..f707344a 100644
+index 85e85c1b..9acfcb6e 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
 @@ -5,21 +5,7 @@ kernelsu-objs += feature/module_blacklist.o
@@ -24,7 +24,7 @@ index 83dca399..f707344a 100644
  kernelsu-objs += extras.o
  
  kernelsu-objs += infra/file_wrapper.o
-@@ -159,4 +145,14 @@ ccflags-y += -DKSU_NEW_DCACHE_FLUSH=$(KSU_NEW_DCACHE_FLUSH)
+@@ -194,4 +180,14 @@ ccflags-y += -DKSU_NEW_DCACHE_FLUSH=$(KSU_NEW_DCACHE_FLUSH)
  ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes -Wno-missing-declarations
  ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable
  
@@ -40,12 +40,12 @@ index 83dca399..f707344a 100644
 +
  # Keep a new line here!! Because someone may append config
 diff --git a/kernel/Makefile b/kernel/Makefile
-index 14a40b61..f3485588 100644
+index 208e7f0e..05888d7b 100644
 --- a/kernel/Makefile
 +++ b/kernel/Makefile
-@@ -33,14 +33,4 @@ format:
+@@ -36,14 +36,4 @@ format:
  check-format:
- 	find . \( -name "*.c" -o -name "*.h" \) -print0 | xargs -0 clang-format --dry-run --Werror
+ 	$(FORMAT_FILES) | xargs -0 clang-format --dry-run --Werror
  
 -## For susfs stuff ##
 -ifeq ($(shell test -e $(srctree)/fs/susfs.c; echo $$?),0)
@@ -58,6 +58,19 @@ index 14a40b61..f3485588 100644
 -endif
 -
  # Keep a new line here!! Because someone may append config
+diff --git a/kernel/preinit/preinit.c b/kernel/preinit/preinit.c
+index 997783d5..ca37cfb4 100644
+--- a/kernel/preinit/preinit.c
++++ b/kernel/preinit/preinit.c
+@@ -127,7 +127,7 @@ int ksu_setup_preinit_file(struct filename **filename_ptr, struct user_arg_ptr *
+     len = snprintf(fd_path, sizeof(fd_path), "/proc/self/fd/%d", fd);
+     if (kern_path(fd_path, LOOKUP_FOLLOW, &path)) {
+         pr_err("preinit: %s not reachable, booting without preinit\n", fd_path);
+-        close_fd(fd);
++        ksu_close_fd(fd);
+         return -EINVAL;
+     }
+     path_put(&path);
 diff --git a/kernel/runtime/boot_event.c b/kernel/runtime/boot_event.c
 index 76ed4f31..d469c213 100644
 --- a/kernel/runtime/boot_event.c
