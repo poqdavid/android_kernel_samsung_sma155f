@@ -58,7 +58,7 @@ if [[ "$KSU_VARIANT" == "ksun" ]]; then
     SUSFS_BUILTIN=0
     elif [[ "$KSU_VARIANT" == "bakasu" ]]; then
     KERNELSU_SETUP_URL="https://raw.githubusercontent.com/poqdavid/BakaSU/main/kernel/setup.sh"
-    KERNELSU_SETUP_BRANCH="main"
+    KERNELSU_SETUP_BRANCH="sync-up"
     # ReSukiSU's own setup.sh always clones into ./KernelSU (same name --ksu uses).
     # That's fine: the variants are mutually exclusive and the clean step wipes
     # ./KernelSU either way, but avoid --no-clean when switching --ksu <-> --resukisu.
