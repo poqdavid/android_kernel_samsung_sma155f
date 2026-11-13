@@ -1,30 +1,30 @@
-From c4c13f77a48ead30ea02ab7f8bb112a7035d3370 Mon Sep 17 00:00:00 2001
+From bb4f611ee675753e466ef90e893024f9b2a47dcc Mon Sep 17 00:00:00 2001
 From: poqdavid <poq-david@live.com>
-Date: Tue, 3 Nov 2026 01:43:25 +0100
+Date: Fri, 13 Nov 2026 02:24:18 +0100
 Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
 
 ---
- kernel/Kbuild                      |  98 ++++--
+ kernel/Kbuild                      |  98 +++++--
  kernel/Kconfig                     | 162 +++++++++-
- kernel/compat/samsung_defex.c      | 116 +++++++
+ kernel/compat/samsung_defex.c      | 116 ++++++++
  kernel/compat/samsung_defex.h      |   8 +
  kernel/compat/samsung_kdp.c        | 209 +++++++++++++
- kernel/compat/samsung_rkp.c        | 288 +++++++++++++++++
+ kernel/compat/samsung_rkp.c        | 288 ++++++++++++++++++
  kernel/compat/samsung_rkp.h        |  10 +
  kernel/core/init.c                 |  73 ++++-
  kernel/extras.c                    |  22 +-
- kernel/feature/adb_root.c          | 163 +++++++++-
+ kernel/feature/adb_root.c          | 163 ++++++++++-
  kernel/feature/adb_root.h          |   4 +
  kernel/feature/kernel_umount.c     |   9 +-
- kernel/feature/module_blacklist.c  |  17 +
+ kernel/feature/module_blacklist.c  |  17 ++
  kernel/feature/module_blacklist.h  |   1 +
- kernel/feature/selinux_hide.c      | 477 +++++++++++++++++++++++------
+ kernel/feature/selinux_hide.c      | 454 +++++++++++++++++++++++------
  kernel/feature/selinux_hide.h      |  18 ++
- kernel/feature/sucompat.c          | 329 +++++++++++++++++++-
+ kernel/feature/sucompat.c          | 329 ++++++++++++++++++++-
  kernel/feature/sucompat.h          |  25 +-
  kernel/hook/arm64/patch_memory.c   |   8 +
  kernel/hook/arm64/syscall_hook.c   |  41 ++-
- kernel/hook/setuid_hook.c          | 169 +++++++++-
+ kernel/hook/setuid_hook.c          | 169 ++++++++++-
  kernel/hook/setuid_hook.h          |   4 +
  kernel/hook/syscall_event_bridge.c | 109 +++----
  kernel/hook/syscall_hook.h         |   6 +-
@@ -34,7 +34,7 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  kernel/include/ksu_samsung_kdp.h   |  24 ++
  kernel/manager/apk_sign.c          |  22 +-
  kernel/manager/pkg_observer.c      |  18 ++
- kernel/manager/throne_tracker.c    |  83 ++++-
+ kernel/manager/throne_tracker.c    |  83 +++++-
  kernel/manager/throne_tracker.h    |  52 +++-
  kernel/policy/allowlist.c          |   2 +
  kernel/policy/app_profile.c        |  37 ++-
@@ -49,11 +49,11 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  kernel/selinux/selinux.h           |  11 +
  kernel/selinux/sepolicy.c          |  12 +
  kernel/setup.sh                    |   2 +
- kernel/sulog/event.c               |  84 +++++
+ kernel/sulog/event.c               |  84 ++++++
  kernel/sulog/event.h               |   4 +
  kernel/supercall/dispatch.c        | 158 ++++++++++
  kernel/supercall/internal.h        |   2 +
- kernel/supercall/supercall.c       | 195 +++++++-----
+ kernel/supercall/supercall.c       | 195 ++++++++-----
  kernel/supercall/supercall.h       |   4 +
  kernel/susfs/susfs_abi.h           |   8 +
  kernel/susfs/susfs_supercall.c     |   3 +
@@ -62,7 +62,7 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  userspace/ksud/build.rs            |  24 +-
  userspace/ksud/src/late_load.rs    |  11 +-
  userspace/ksud/src/utils.rs        |  42 ++-
- 58 files changed, 3450 insertions(+), 404 deletions(-)
+ 58 files changed, 3433 insertions(+), 398 deletions(-)
  create mode 100644 kernel/compat/samsung_defex.c
  create mode 100644 kernel/compat/samsung_defex.h
  create mode 100644 kernel/compat/samsung_kdp.c
@@ -71,7 +71,7 @@ Subject: [PATCH] Pershoot's susfs patch for KernelSUNext
  create mode 100644 kernel/include/ksu_samsung_kdp.h
 
 diff --git a/kernel/Kbuild b/kernel/Kbuild
-index a02fd1877..9f0e6dbd2 100644
+index eef9f70a3..cf962401c 100644
 --- a/kernel/Kbuild
 +++ b/kernel/Kbuild
 @@ -1,25 +1,44 @@
@@ -181,7 +181,7 @@ index a02fd1877..9f0e6dbd2 100644
  
  # preinit runner: a static nolibc binary embedded into kernelsu, see preinit/.
  # It is built against the installed UAPI headers of the target kernel
-@@ -140,8 +171,12 @@ KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplev
+@@ -149,8 +180,12 @@ KERNEL_GIT_ROOT := $(shell cd $(srctree) && $(LPATH) git rev-parse --show-toplev
  ifneq ($(GIT_ROOT),$(KERNEL_GIT_ROOT))
  # Only set version if it's a different repo from kernel
  $(shell cd $(GIT_ROOT) && [ -f .git/shallow ] && $(LPATH) git fetch --unshallow 2>/dev/null || true)
@@ -196,7 +196,7 @@ index a02fd1877..9f0e6dbd2 100644
  KSU_GIT_VERSION_VALID := 1
  $(info -- KernelSU-Next Git repo detected at: $(GIT_ROOT))
  endif
-@@ -175,12 +210,9 @@ endif
+@@ -184,12 +219,9 @@ endif
  KSU_NEW_DCACHE_FLUSH := $(shell grep -q __flush_dcache_area $(srctree)/arch/arm64/include/asm/cacheflush.h ; echo $$?)
  $(info -- KernelSU-Next new DCACHE flush: $(KSU_NEW_DCACHE_FLUSH))
  
@@ -212,7 +212,7 @@ index a02fd1877..9f0e6dbd2 100644
  endif
  
  ifdef KSU_MANAGER_PACKAGE
-@@ -188,15 +220,25 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
+@@ -197,15 +229,25 @@ ccflags-y += -DKSU_MANAGER_PACKAGE=\"$(KSU_MANAGER_PACKAGE)\"
  $(info -- KernelSU-Next Manager package name: $(KSU_MANAGER_PACKAGE))
  endif
  
@@ -1675,7 +1675,7 @@ index 177a8b9c4..183986bf3 100644
  // Teardown hook. Intentionally keeps the merged list installed; see the
  // implementation for why the pointer is not restored.
 diff --git a/kernel/feature/selinux_hide.c b/kernel/feature/selinux_hide.c
-index 2a41b8056..57a2a7ea7 100644
+index 67c866d6c..f8d82e7be 100644
 --- a/kernel/feature/selinux_hide.c
 +++ b/kernel/feature/selinux_hide.c
 @@ -12,10 +12,18 @@
@@ -1697,7 +1697,7 @@ index 2a41b8056..57a2a7ea7 100644
  // security/selinux/include/security.h
  #include <security.h>
  #include <ss/context.h>
-@@ -24,16 +32,45 @@
+@@ -24,16 +32,46 @@
  #include <ss/conditional.h>
  #include "avc.h"
  #include "klog.h" // IWYU pragma: keep
@@ -1737,6 +1737,7 @@ index 2a41b8056..57a2a7ea7 100644
 +#endif
 +SUSFS_EXPORT int security_sid_to_context_with_policy(struct selinux_policy *policy, u32 sid, char **scontext,
 +                                               u32 *scontext_len);
++static int security_context_to_sid_live(const char *scontext, u32 scontext_len, u32 *sid);
 +SUSFS_EXPORT void security_compute_av_user_with_policy(struct selinux_policy *policy, u32 ssid, u32 tsid, u16 tclass,
 +                                                 struct av_decision *avd);
 +static void (*security_dump_masked_av_fn)(struct policydb *policydb, struct context *scontext, struct context *tcontext,
@@ -1747,7 +1748,7 @@ index 2a41b8056..57a2a7ea7 100644
  
  enum sel_inos {
      SEL_ROOT_INO = 2,
-@@ -62,19 +99,6 @@ enum sel_inos {
+@@ -62,20 +100,6 @@ enum sel_inos {
  typedef ssize_t (*write_op_fn)(struct file *, char *, size_t);
  
  static write_op_fn *selinux_write_op;
@@ -1756,6 +1757,7 @@ index 2a41b8056..57a2a7ea7 100644
 -                                               u32 *sid, u32 def_sid, gfp_t gfp_flags, u32 *orig_sid_p, int *orig_rc_p);
 -static int security_sid_to_context_with_policy(struct selinux_policy *policy, u32 sid, char **scontext,
 -                                               u32 *scontext_len);
+-static int security_context_to_sid_live(const char *scontext, u32 scontext_len, u32 *sid);
 -static void security_compute_av_user_with_policy(struct selinux_policy *policy, u32 ssid, u32 tsid, u16 tclass,
 -                                                 struct av_decision *avd);
 -static void (*security_dump_masked_av_fn)(struct policydb *policydb, struct context *scontext, struct context *tcontext,
@@ -1767,7 +1769,7 @@ index 2a41b8056..57a2a7ea7 100644
  static write_op_fn *context_write, *access_write;
  static write_op_fn orig_context_write, orig_access_write;
  
-@@ -92,12 +116,20 @@ static write_op_fn orig_context_write, orig_access_write;
+@@ -93,12 +117,20 @@ static write_op_fn orig_context_write, orig_access_write;
  #define ksu_task_security_struct cred_security_struct
  #endif
  
@@ -1789,7 +1791,7 @@ index 2a41b8056..57a2a7ea7 100644
      char *canon = NULL;
      u32 sid, len;
      ssize_t length;
-@@ -106,7 +138,7 @@ static ssize_t my_write_context(struct file *file, char *buf, size_t size)
+@@ -107,7 +139,7 @@ static ssize_t my_write_context(struct file *file, char *buf, size_t size)
          ksu_avc_has_perm_compat(current_sid(), SECINITSID_SECURITY, SECCLASS_SECURITY, SECURITY__CHECK_CONTEXT, NULL);
      if (length)
          goto out;
@@ -1798,7 +1800,7 @@ index 2a41b8056..57a2a7ea7 100644
      if (length) {
          goto out;
      }
-@@ -130,12 +162,14 @@ out:
+@@ -131,12 +163,14 @@ out:
      return length;
  }
  
@@ -1814,7 +1816,7 @@ index 2a41b8056..57a2a7ea7 100644
      char *scon = NULL, *tcon = NULL;
      u32 ssid, tsid, sconlen, tconlen;
      u16 tclass;
-@@ -164,13 +198,13 @@ static ssize_t my_write_access(struct file *file, char *buf, size_t size)
+@@ -165,13 +199,13 @@ static ssize_t my_write_access(struct file *file, char *buf, size_t size)
      tconlen = strlen(tcon);
  
      length =
@@ -1830,7 +1832,7 @@ index 2a41b8056..57a2a7ea7 100644
      if (length) {
          goto out;
      }
-@@ -187,9 +221,6 @@ out:
+@@ -188,9 +222,6 @@ out:
      return length;
  }
  
@@ -1840,7 +1842,7 @@ index 2a41b8056..57a2a7ea7 100644
  /*
   * get the security ID of a set of credentials
   */
-@@ -227,10 +258,9 @@ static u32 ptrace_parent_sid(void)
+@@ -228,10 +259,9 @@ static u32 ptrace_parent_sid(void)
  
      return sid;
  }
@@ -1853,7 +1855,7 @@ index 2a41b8056..57a2a7ea7 100644
      if (likely(current_uid().val < 10000)) {
          goto call_orig;
      }
-@@ -238,6 +268,7 @@ static int __nocfi my_setprocattr(const char *name, void *value, size_t size)
+@@ -239,6 +269,7 @@ static int __nocfi my_setprocattr(const char *name, void *value, size_t size)
      if (strcmp(name, "current")) {
          goto call_orig;
      }
@@ -1861,42 +1863,16 @@ index 2a41b8056..57a2a7ea7 100644
  
      struct ksu_task_security_struct *tsec;
      struct cred *new;
-@@ -250,15 +281,26 @@ static int __nocfi my_setprocattr(const char *name, void *value, size_t size)
-         return error;
- 
-     /* Obtain a SID for the context, if one was specified. */
--    if (size && str[0] && str[0] != '\n') {
--        if (str[size - 1] == '\n') {
--            str[size - 1] = 0;
--            size--;
-+    if (size && str[0]) {
-+        bool newline_prefix = (str[0] == '\n');
-+
-+        if (newline_prefix && size > 1) {
-+            str[0] = 'u';
-+        }
-+        if (str[0] != '\n') {
-+            if (str[size - 1] == '\n') {
-+                str[size - 1] = 0;
-+                size--;
-+            }
+@@ -259,7 +290,7 @@ static int __nocfi my_setprocattr(const char *name, void *value, size_t size)
+         error = security_context_to_sid_live(value, size, &sid);
+         if (error == -EAGAIN) {
+             // stale type mark, use the dual parse
+-            error2 = security_context_to_sid_with_policy(backup_sepolicy, value, size, &tmp_sid, SECSID_NULL,
 +            error2 = __security_context_to_sid_with_policy(backup_sepolicy, value, size, &tmp_sid, SECSID_NULL,
-+                                                           GFP_KERNEL, &sid, &error);
-+            if (newline_prefix) {
-+                str[0] = '\n';
-+                return -EINVAL;
-+            }
-+            if (error2 || error)
-+                return error2 ?: error;
-         }
--        error2 = security_context_to_sid_with_policy(backup_sepolicy, value, size, &tmp_sid, SECSID_NULL, GFP_KERNEL,
--                                                     &sid, &error);
--        if (error2 || error)
--            return error2 ?: error;
-     }
- 
-     new = prepare_creds();
-@@ -305,14 +347,17 @@ abort_change:
+                                                          GFP_KERNEL, &sid, &error);
+             if (error2 || error)
+                 return error2 ?: error;
+@@ -312,14 +343,17 @@ abort_change:
      abort_creds(new);
      return error;
  
@@ -1917,7 +1893,7 @@ index 2a41b8056..57a2a7ea7 100644
  {
      mutex_lock(&selinux_state.status_lock);
      if (fake_status)
-@@ -380,68 +425,152 @@ static int my_sel_open_handle_status(struct inode *inode, struct file *filp)
+@@ -387,68 +421,152 @@ static int my_sel_open_handle_status(struct inode *inode, struct file *filp)
      return ret;
  }
  
@@ -2119,7 +2095,7 @@ index 2a41b8056..57a2a7ea7 100644
      if (orig_context_write) {
          ret =
              ksu_patch_text(context_write, &orig_context_write, sizeof(orig_context_write), KSU_PATCH_TEXT_FLUSH_DCACHE);
-@@ -457,6 +586,9 @@ static void ksu_selinux_hide_unhook()
+@@ -464,6 +582,9 @@ static void ksu_selinux_hide_unhook()
              pr_err("selinux_hide: exit: patch_text access_write err: %d\n", ret);
          }
      }
@@ -2129,7 +2105,7 @@ index 2a41b8056..57a2a7ea7 100644
      if (sel_open_handle_status_slot && orig_sel_open_handle_status) {
          ret = ksu_patch_text(sel_open_handle_status_slot, &orig_sel_open_handle_status,
                               sizeof(orig_sel_open_handle_status), KSU_PATCH_TEXT_FLUSH_DCACHE);
-@@ -465,7 +597,6 @@ static void ksu_selinux_hide_unhook()
+@@ -472,7 +593,6 @@ static void ksu_selinux_hide_unhook()
              pr_err("selinux_hide: exit: patch_text sel_open_handle_status err: %d\n", ret);
          }
      }
@@ -2137,7 +2113,7 @@ index 2a41b8056..57a2a7ea7 100644
  }
  
  static void ksu_selinux_hide_disable()
-@@ -474,6 +605,116 @@ static void ksu_selinux_hide_disable()
+@@ -481,6 +601,116 @@ static void ksu_selinux_hide_disable()
      ksu_selinux_hide_unhook();
  }
  
@@ -2254,7 +2230,7 @@ index 2a41b8056..57a2a7ea7 100644
  static int selinux_hide_feature_get(u64 *value)
  {
      *value = ksu_selinux_hide_enabled ? 1 : 0;
-@@ -500,6 +741,8 @@ static int selinux_hide_feature_set(u64 value)
+@@ -507,6 +737,8 @@ static int selinux_hide_feature_set(u64 value)
              ksu_selinux_hide_running = false;
          }
      }
@@ -2263,7 +2239,7 @@ index 2a41b8056..57a2a7ea7 100644
      mutex_unlock(&selinux_hide_mutex);
      return ret;
  }
-@@ -542,13 +785,33 @@ static void hook_selinux_status_open()
+@@ -549,13 +781,33 @@ static void hook_selinux_status_open()
          }
          sel_open_handle_status_slot = &ops->open;
      }
@@ -2303,7 +2279,7 @@ index 2a41b8056..57a2a7ea7 100644
      }
  }
  
-@@ -562,7 +825,9 @@ void __init ksu_selinux_hide_init()
+@@ -569,7 +821,9 @@ void __init ksu_selinux_hide_init()
      } else {
          static_key_enable(&fake_status_initialize_key.key);
      }
@@ -2313,7 +2289,7 @@ index 2a41b8056..57a2a7ea7 100644
  }
  
  void __exit ksu_selinux_hide_exit()
-@@ -703,8 +968,22 @@ out:
+@@ -726,8 +980,22 @@ out:
      return rc;
  }
  
@@ -2337,7 +2313,7 @@ index 2a41b8056..57a2a7ea7 100644
  {
      struct selinux_policy *orig_policy;
      struct policydb *policydb, *orig_policydb;
-@@ -846,7 +1125,7 @@ static int sidtab_entry_to_string(struct policydb *p, struct sidtab *sidtab, str
+@@ -1000,7 +1268,7 @@ static int sidtab_entry_to_string(struct policydb *p, struct sidtab *sidtab, str
      return rc;
  }
  
@@ -2346,7 +2322,7 @@ index 2a41b8056..57a2a7ea7 100644
                                                 u32 *scontext_len)
  {
      struct policydb *policydb;
-@@ -1033,7 +1312,7 @@ static int constraint_expr_eval(struct policydb *policydb, struct context *scont
+@@ -1187,7 +1455,7 @@ static int constraint_expr_eval(struct policydb *policydb, struct context *scont
                  l2 = &(scontext->range.level[1]);
                  goto mls_ops;
              case CEXPR_L2H2:
@@ -2355,7 +2331,7 @@ index 2a41b8056..57a2a7ea7 100644
                  l2 = &(tcontext->range.level[1]);
                  goto mls_ops;
              mls_ops:
-@@ -1219,7 +1498,7 @@ static void context_struct_compute_av(struct policydb *policydb, struct context
+@@ -1373,7 +1641,7 @@ static void context_struct_compute_av(struct policydb *policydb, struct context
      type_attribute_bounds_av(policydb, scontext, tcontext, tclass, avd);
  }
  
@@ -3465,7 +3441,7 @@ index 85f388b5b..97c2ca97f 100644
      read_unlock(&tasklist_lock);
  }
 diff --git a/kernel/hook/x86_64/syscall_hook.c b/kernel/hook/x86_64/syscall_hook.c
-index 9c63983b9..bcbb78a09 100644
+index 48529fd87..511592895 100644
 --- a/kernel/hook/x86_64/syscall_hook.c
 +++ b/kernel/hook/x86_64/syscall_hook.c
 @@ -54,13 +54,15 @@ static int patch_syscall_table(int nr, sys_call_ptr_t fn)
@@ -3523,7 +3499,7 @@ index 9c63983b9..bcbb78a09 100644
  }
  
  // Restore syscall_table[nr] to its original value and remove from tracking list.
-@@ -326,9 +334,12 @@ void __init __nocfi ksu_syscall_hook_init(void)
+@@ -337,9 +345,12 @@ void __init __nocfi ksu_syscall_hook_init(void)
          return;
      }
  
@@ -4674,10 +4650,20 @@ index a4fb4138f..37de54575 100644
      if (module_rc_buf) {
          free_module_rc();
 diff --git a/kernel/selinux/rules.c b/kernel/selinux/rules.c
-index a9c67283c..d88b4bb4d 100644
+index 515245f4d..e772668ca 100644
 --- a/kernel/selinux/rules.c
 +++ b/kernel/selinux/rules.c
-@@ -104,6 +104,12 @@ void apply_kernelsu_rules()
+@@ -90,7 +90,9 @@ void apply_kernelsu_rules()
+ 
+     db = &pol->policydb;
+ 
++#ifndef CONFIG_KSU_SUSFS
+     pol->latest_granting = old_pol->latest_granting + 1;
++#endif
+     if (!ksu_set_original_types(db, &old_pol->policydb, pol->latest_granting))
+         pr_warn("failed to save original type metadata, use backup lookups\n");
+ 
+@@ -108,6 +110,12 @@ void apply_kernelsu_rules()
      // allow all!
      ksu_allow(db, KERNEL_SU_DOMAIN, ALL, ALL, ALL);
  
@@ -4690,7 +4676,7 @@ index a9c67283c..d88b4bb4d 100644
      // allow us do any ioctl
      if (db->policyvers >= POLICYDB_VERSION_XPERMS_IOCTL) {
          ksu_allowxperm(db, KERNEL_SU_DOMAIN, ALL, "blk_file", ALL);
-@@ -162,14 +168,32 @@ void apply_kernelsu_rules()
+@@ -166,13 +174,29 @@ void apply_kernelsu_rules()
      ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
      ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
  
@@ -4707,9 +4693,6 @@ index a9c67283c..d88b4bb4d 100644
 +
      // Return value ignored: the policy is published either way.
      ksu_policydb_fixup_len(db, "apply_kernelsu_rules");
-+#ifndef CONFIG_KSU_SUSFS
-     pol->latest_granting = old_pol->latest_granting + 1;
-+#endif
      rcu_assign_pointer(selinux_state.policy, pol);
      synchronize_rcu();
      ksu_destroy_sepolicy(old_pol);
@@ -4723,14 +4706,17 @@ index a9c67283c..d88b4bb4d 100644
  out_unlock:
      mutex_unlock(&selinux_state.policy_mutex);
  }
-@@ -541,12 +565,18 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
+@@ -544,7 +568,9 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
  
      // Return value ignored: the policy is published either way.
      ksu_policydb_fixup_len(db, "handle_sepolicy");
 +#ifndef CONFIG_KSU_SUSFS
      pol->latest_granting = old_pol->latest_granting + 1;
 +#endif
-     rcu_assign_pointer(selinux_state.policy, pol);
+     if (!ksu_advance_original_types(db, &old_pol->policydb, old_pol->latest_granting, pol->latest_granting))
+         pr_warn("failed to carry original type metadata, use backup lookups\n");
+ 
+@@ -552,7 +578,11 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
      synchronize_rcu();
      ksu_destroy_sepolicy(old_pol);
  
@@ -4909,7 +4895,7 @@ index b1918a426..f6dc416a1 100644
 +
  #endif
 diff --git a/kernel/selinux/sepolicy.c b/kernel/selinux/sepolicy.c
-index 1e8ebb39d..f4e258b29 100644
+index fa02f0fb9..c9096ac55 100644
 --- a/kernel/selinux/sepolicy.c
 +++ b/kernel/selinux/sepolicy.c
 @@ -15,6 +15,11 @@
@@ -4924,7 +4910,7 @@ index 1e8ebb39d..f4e258b29 100644
  #define KSU_SUPPORT_ADD_TYPE
  
  //////////////////////////////////////////////////////
-@@ -321,6 +326,10 @@ static bool add_rule_raw(struct policydb *db, struct type_datum *src, struct typ
+@@ -325,6 +330,10 @@ static bool add_rule_raw(struct policydb *db, struct type_datum *src, struct typ
                  return false;
          }
  
@@ -4935,7 +4921,7 @@ index 1e8ebb39d..f4e258b29 100644
          if (invert) {
              if (perm)
                  node->datum.u.data &= ~(1U << (perm->value - 1));
-@@ -756,6 +765,9 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
+@@ -760,6 +769,9 @@ static bool add_type(struct policydb *db, const char *type_name, bool attr)
          ebitmap_set_bit(&db->role_val_to_struct[i]->types, value - 1, 1);
      }
  
