@@ -39,7 +39,8 @@ if [[ "$KSU_VARIANT" == "ksun" ]]; then
     # matches the manager release users install; SUSFS then comes from the
     # manager's own SUSFS LKM (Settings -> Load SUSFS LKM / auto load).
     # KSUN_LKM_REF=<tag> pins the tag; default is the newest upstream release.
-    KERNELSU_SETUP_BRANCH="${KSUN_LKM_REF:-}"
+    # KERNELSU_SETUP_BRANCH="${KSUN_LKM_REF:-}"
+    KERNELSU_SETUP_BRANCH="dev"
     BASE_KSU_VERSION=30000
     KSU_DIR="KernelSU-Next"
     KSU_LABEL="KernelSU Next (LKM)"
